@@ -1,6 +1,6 @@
-# Personal bank statements
+# Personal bank statements + generated info
 bank_statements/*
-
+cached_data/*
 
 
 # Byte-compiled / optimized / DLL files
