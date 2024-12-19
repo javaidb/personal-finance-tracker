@@ -27,7 +27,7 @@ def grab_pdf_name_attributes(pdf_name):
 
 def __process_export_cache_path(pdf_file, parent_account_name):
     pdf_atts = grab_pdf_name_attributes(pdf_file)
-    full_path = "../../bank_statements/cached_data/" + parent_account_name + pdf_atts["month"] + "_" + pdf_atts['year'] + ".csv"
+    full_path = "../../cached_data/" + parent_account_name + "/" + pdf_atts["month"] + "_" + pdf_atts['year'] + ".csv"
     return full_path
 
 def process_import_path(pdf_file, parent_account_name):
