@@ -1,6 +1,7 @@
 # personal-finance-tracker
 
 This repository interprets bank statements from Scotiabank. It extracts data, bins them into categories based on extracted metadata, and then produces insights and visualizations.It is intended to be used as a means of insights into spending, long-term growth and ways to improve financial health overall.
+**Note**: Parameters are tuned for bank statement PDFs generated as of December 2024, any changes to the statement's file standards from Scotiabank may/may not be reflected here.
 
 ## Getting started
 
