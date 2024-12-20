@@ -7,6 +7,8 @@ This repository interprets bank statements from Scotiabank. It extracts data, bi
 ### Prerequisites
 In order to interpret bank statements from Scotiabank, you will need to follow these steps:
 - Navigate to Mobile Banking Account
-- Download statements into one of predefined statement types: Credit or Chequing.
+- Download statements into one of predefined folders in 'bank_statements', organized by statement types: 'Credit' or 'Chequing'.
 
 Once prior steps are completed, simply navigate to finance-tracker notebook and hit 'run all'.
+
+## Repository Structure
