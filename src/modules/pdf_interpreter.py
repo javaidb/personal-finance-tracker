@@ -8,7 +8,7 @@ from src.modules.helper_fns import *
 def extract_features_from_pdf(pdf_file, x_tolerance=2, init_y_top=440, reg_y_top=210):
 
     parent_dir = os.path.dirname(pdf_file)
-    dir_before_file = os.path.basename(parent_dir)
+    dir_before_file = parent_dir.split("/")[-2]
     if dir_before_file == "Chequing":
         x_right = 600
         x_left = 750
@@ -102,23 +102,26 @@ def __calculate_transaction_year(row):
     else:
         return int(row['Statement Year'])
 
-def generate_fin_df(account_names=None):
+def generate_fin_df(account_types=None):
     overall_df = pd.DataFrame()
-    if account_names is None:
-        # account_names = read_all_account_folder_names()
-        account_names = ['Chequing', 'Credit']
-    for account_name in account_names:
-        pdf_files = read_all_files(account_name)
-        for pdf_file in tqdm_notebook(pdf_files, desc=f"Reading PDFs from '{account_name}' bucket"):
-            pdf_file_atts = grab_pdf_name_attributes(pdf_file)
-            pdf_file_path = process_import_path(pdf_file, account_name)
-            lines = extract_features_from_pdf(pdf_file_path, x_tolerance=2, init_y_top=440, reg_y_top=210)
-            transactions= process_transactions_from_lines(lines, account_name)
-            temp_df = pd.DataFrame(transactions)
-            temp_df[['Statement Year']] = pdf_file_atts['year']
-            temp_df[['Statement Month']] = pdf_file_atts['month']
-            temp_df[['Account']] = account_name
-            overall_df = pd.concat([temp_df, overall_df], ignore_index=True)
+    if account_types is None:
+        # account_names = read_all_account_type_folder_names()
+        account_types = ['Chequing', 'Credit']
+    for account_type in account_types:
+        account_names = read_all_account_folder_names(account_type)
+        for account_name in account_names:
+            pdf_files = read_all_files(account_type, account_name)
+            for pdf_file in tqdm_notebook(pdf_files, desc=f"Reading PDFs from '{account_name}' bucket"):
+                pdf_file_atts = grab_pdf_name_attributes(pdf_file)
+                pdf_file_path = process_import_path(pdf_file, account_type, account_name)
+                lines = extract_features_from_pdf(pdf_file_path, x_tolerance=2, init_y_top=440, reg_y_top=210)
+                transactions= process_transactions_from_lines(lines, account_type)
+                temp_df = pd.DataFrame(transactions)
+                temp_df[['Statement Year']] = pdf_file_atts['year']
+                temp_df[['Statement Month']] = pdf_file_atts['month']
+                temp_df[['Account Type']] = account_type
+                temp_df[['Account Name']] = account_name
+                overall_df = pd.concat([temp_df, overall_df], ignore_index=True)
 
     overall_df['Transaction Year'] = overall_df.apply(__calculate_transaction_year, axis=1)
     overall_df['DateTime'] = overall_df['Transaction Date'] + ' ' + overall_df['Transaction Year'].astype(str)
