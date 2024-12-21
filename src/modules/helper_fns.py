@@ -27,15 +27,20 @@ def grab_pdf_name_attributes(pdf_name):
 
 def __process_export_cache_path(pdf_file, parent_account_name):
     pdf_atts = grab_pdf_name_attributes(pdf_file)
-    full_path = "../../cached_data/" + parent_account_name + "/" + pdf_atts["month"] + "_" + pdf_atts['year'] + ".csv"
+    full_path = f"../../cached_data/{parent_account_name}/{pdf_atts['month']}_{pdf_atts['year']}.csv"
     return full_path
 
-def process_import_path(pdf_file, parent_account_name):
-    return "../../bank_statements/" + parent_account_name + "/" + pdf_file
+def process_import_path(pdf_file, parent_account_type, parent_account_name):
+    return f"../../bank_statements/{parent_account_type}/{parent_account_name}/{pdf_file}"
 
-def read_all_account_folder_names():
-    return os.listdir("../../bank_statements/")
+def read_all_account_type_folder_names():
+    directory = f"../../bank_statements/"
+    return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
 
-def read_all_files(account_name):
-    pdf_files = os.listdir(f"../../bank_statements/{account_name}/")
+def read_all_account_folder_names(account_type):
+    directory = f"../../bank_statements/{account_type}/"
+    return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
+
+def read_all_files(account_type, account_name):
+    pdf_files = os.listdir(f"../../bank_statements/{account_type}/{account_name}/")
     return [f for f in pdf_files if f.endswith('.pdf')]
