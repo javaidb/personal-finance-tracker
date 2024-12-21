@@ -1,7 +1,7 @@
 # Personal bank statements + generated info
-bank_statements/*
 cached_data/*
-
+# Ignore all .pdf files in sdf/ and its subfolders
+bank_statements/**/*.pdf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
