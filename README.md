@@ -1,5 +1,7 @@
 # personal-finance-tracker
 
+<img src="https://github.com/user-attachments/assets/b9d234cc-f426-4833-b7fd-93ae682f0176" alt="Scotiabank Logo" width="200">
+
 This repository interprets bank statements from Scotiabank. It extracts data, bins them into categories based on extracted metadata, and then produces insights and visualizations.It is intended to be used as a means of insights into spending, long-term growth and ways to improve financial health overall.
 **Note**: Parameters are tuned for bank statement PDFs generated as of December 2024, any changes to the statement's file standards from Scotiabank may/may not be reflected here.
 
