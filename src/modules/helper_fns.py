@@ -44,3 +44,7 @@ def read_all_account_folder_names(account_type):
 def read_all_files(account_type, account_name):
     pdf_files = os.listdir(f"../../bank_statements/{account_type}/{account_name}/")
     return [f for f in pdf_files if f.endswith('.pdf')]
+
+def sort_df(df):
+    df = df.sort_values(by='DateTime')
+    return df.groupby('DateTime', group_keys=False).apply(lambda x: x.sort_index(), include_groups=True)
