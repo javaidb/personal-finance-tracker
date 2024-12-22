@@ -71,7 +71,7 @@ def process_transactions_from_lines(pdf_lines, account_type):
                     'Post Date': post_date,
                     'Details': details,
                     'Amount': amount,
-                    'Transaction Type': pdf_lines[i+1],
+                    'Transaction Type': '',
                 }
             elif account_type in ["Chequing", "Savings"]:
                 date = match_groups[0]
@@ -146,16 +146,16 @@ def df_preprocessing(df_in):
     return df
 
 def __process_transaction_details(df):
-    def process_row(row):
-        # Function to process each string element
+    def process_row(details_row, transaction_type_row):
+        concat_row = details_row + " " + transaction_type_row
         def process_string(s):
             return re.sub(r'[^a-z\s&]', '', s.lower())
         
         # Split the string by space and process each element
-        return [process_string(elem) for elem in row.split() if process_string(elem)]
+        return [process_string(elem) for elem in concat_row.split() if process_string(elem)]
 
     # Apply the function to a DataFrame column
-    df['Processed Details'] = df['Details'].apply(process_row)
+    df['Processed Details'] = df.apply(lambda row: process_row(row['Details'], row['Transaction Type']), axis=1)
 
     def filter_df(df, column, substrings):
         def check_row(row):
@@ -239,11 +239,14 @@ def recalibrate_amounts(df_in):
                 if account_type in ['Chequing', 'Savings']:
                     df['balance_diff'] = df['Balance'].diff().fillna(0)
                     df['Amount'] = df.apply(
-                        lambda row: -1*row['Amount'] if row['balance_diff'] < 0 and abs(row['balance_diff']) - abs(row['Amount']) < 0.1 else row['Amount'],
+                        lambda row: -1*row['Amount'] if row['balance_diff'] < 0 else row['Amount'],
                         axis=1
                     )
+                    # df['Amount'] = df.apply(
+                    #     lambda row: -1*row['Amount'] if row['balance_diff'] < 0 and abs(row['balance_diff']) - abs(row['Amount']) < 0.1 else row['Amount'],
+                    #     axis=1
+                    # )
                     df.drop(columns=['balance_diff'], inplace=True)
-                    # print(df.head(5))
                 elif account_type == 'Credit':
                     df['Amount'] = df['Amount'] * -1
                 return df
@@ -275,11 +278,57 @@ def tabulate_gap_balances(df_in):
             df.loc[df.index[i], 'Balance'] = new_balance
     return df
 
-def df_postprocessing(df_in):
+def df_postprocessing(df_in, rent_ranges):
     df = df_in.copy()
-    substrings_to_avoid = ['MB', 'Tax', 'Opening Balance']
-    columns_to_filter = ['Details', 'Transaction Type']
-    pattern = '|'.join(substrings_to_avoid)
-    mask = df[columns_to_filter].apply(lambda x: x.str.contains(pattern, na=False)).any(axis=1)
-    df = df[~mask]
-    return sort_df(df)
+
+    df = __identify_rent_payments(df, rent_ranges)
+
+    substring_exclusion_list = ['mb credit', 'mb transfer', 'opening balance', 'closing balance']
+    fullstring_exclusion_list = ['from']
+    # mask = ~df['Processed Details'].apply(
+    #     lambda x: any(any(substring in item for item in x) for substring in substrings_to_remove)
+    # )
+    
+    df['details_str'] = df['Processed Details'].apply(lambda x: ' '.join(x).lower())
+
+    def exclude_rows(details_str, substring_exclusion_list):
+        for excl in substring_exclusion_list:
+            # Check for exact match (space-separated or concatenated without spaces)
+            if excl in details_str or excl.replace(' ', '') in details_str:
+                return False
+        for excl in fullstring_exclusion_list:
+            if details_str == excl:
+                return False
+        return True
+
+    df_filtered = df[df['details_str'].apply(lambda x: exclude_rows(x, substring_exclusion_list))]
+    df_filtered = df_filtered.drop(columns=['details_str'])
+    return sort_df(df_filtered)
+
+def __identify_rent_payments(df_in, rent_ranges):
+    df = df_in.copy()
+
+    # df = df[df['Details'].apply(
+    # lambda x: any('transfer' in word for word in x.lower().split())
+    # )]
+    df = df.sort_values('DateTime')
+
+    df['day_of_month'] = df['DateTime'].dt.day
+    # print(df.head(4))
+    rent_mask = ((df['day_of_month'] <= 5) | (df['day_of_month'] >= 25) & 
+        (df['Details'].apply(lambda x: any('transfer' in word for word in x.lower().split())))
+    )
+    
+    amount_mask = pd.Series(False, index=df.index)
+    for min_rent, max_rent in rent_ranges:
+        amount_mask |= df['Amount'].abs().between(min_rent, max_rent)
+    
+    rent_mask &= amount_mask
+    
+    # Update classification to 'rent' for these rows
+    df.loc[rent_mask, 'Classification'] = 'Rent'
+    
+    # Drop the helper column
+    df = df.drop(columns=['day_of_month'])
+    
+    return df
