@@ -1,6 +1,7 @@
 import re
 import calendar
 import os
+import plotly.graph_objects as go
 
 def __extract_month(input_string):
     months = '|'.join(f'.*{m}.*' for m in calendar.month_abbr[1:])
@@ -48,3 +49,14 @@ def read_all_files(account_type, account_name):
 def sort_df(df):
     df = df.sort_values(by='DateTime')
     return df.groupby('DateTime', group_keys=False).apply(lambda x: x.sort_index(), include_groups=True)
+
+def plot_attribute_against_datetime(df, df_col='Balance'):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df['DateTime'], y=df[df_col], mode='markers', name=df_col))
+    fig.update_layout(
+        title=f'{df_col} Over Time',
+        xaxis_title='Date',
+        yaxis_title=df_col,
+    )
+    fig.show()
+    return
