@@ -2,6 +2,7 @@ import re
 import calendar
 import os
 import pandas as pd
+import numpy as np
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -9,6 +10,8 @@ import plotly.express as px
 from plotly.colors import qualitative
 
 from scipy.ndimage import gaussian_filter1d
+from scipy.signal import find_peaks
+from scipy.signal import savgol_filter
 
 def __extract_month(input_string):
     months = '|'.join(f'.*{m}.*' for m in calendar.month_abbr[1:])
@@ -58,34 +61,93 @@ def sort_df(df):
     return df.groupby('DateTime', group_keys=False).apply(lambda x: x.sort_index(), include_groups=True)
 
 def plot_attribute_against_datetime(
-        df_in, 
-        df_col='Balance',
-        day_span={
-            'moving_average': 7,
-            'rate_of_change': 7
-        }):
+        df_in,
+        data_filtering_settings={
+            'moving_average': {
+                'day_span': 1,
+                'gaussian_sigma': 1
+            },
+            'smoothed_median': {
+                'window_size': 5,
+            },
+            'savgol_filter': {
+                'window_length': 5,
+                'poly_order': 2
+            },
+            'rate_of_change': {
+                'day_span': 7,
+                'gaussian_sigma': 20
+            },
+        },
+        include_filters = False):
+    
+    df_col='Balance'
 
-    moving_avg_col = f"moving_average_{day_span['moving_average']}D"
-    rate_of_change_col = f"rate_of_change_{day_span['rate_of_change']}D"
+    moving_avg_col = f"moving_average_{data_filtering_settings['moving_average']['day_span']}D"
+    median_col = f"smoothed_median_{data_filtering_settings['smoothed_median']['window_size']}W"
+    savgol_col = f"smoothed_savgol_{data_filtering_settings['savgol_filter']['window_length']}W"
+    rate_of_change_col = f"rate_of_change_{data_filtering_settings['rate_of_change']['day_span']}D"
 
+    active_filter_for_raw_data = median_col
 
     df = df_in.copy()
     df = df[df[[df_col]].notnull().all(axis=1)]
     df['DateTime'] = pd.to_datetime(df['DateTime'])
     df = df.sort_values(by='DateTime')
     df.set_index('DateTime', inplace=True)
-    df[moving_avg_col] = df[df_col].rolling(window=f"{day_span['moving_average']}D", min_periods=1).mean()
-    df[f"smoothed_{moving_avg_col}"] = gaussian_filter1d(df[moving_avg_col], sigma=10)
 
-    df[rate_of_change_col] = df[f"smoothed_{moving_avg_col}"].rolling(f"{day_span['rate_of_change']}D").apply(lambda x: x.iloc[-1] - x.iloc[0], raw=False)
+    # df[moving_avg_col] = df[df_col].rolling(window=f"{day_span['moving_average']}D", min_periods=1).mean()
+    df[moving_avg_col] = gaussian_filter1d(df[df_col], sigma=1)
+
+    window_size = data_filtering_settings['smoothed_median']['window_size']
+    df[median_col] = df[df_col].rolling(window=window_size, center=True).median()
+
+    window_length = data_filtering_settings['savgol_filter']['window_length']
+    poly_order = data_filtering_settings['savgol_filter']['poly_order']
+    df[savgol_col] = savgol_filter(df[df_col], window_length, poly_order)
+
+
+    df[rate_of_change_col] = df[active_filter_for_raw_data].rolling(f"{data_filtering_settings['rate_of_change']['day_span']}D").apply(lambda x: x.iloc[-1] - x.iloc[0], raw=False)
     df[rate_of_change_col] = gaussian_filter1d(df[rate_of_change_col], sigma=20)
+
     df.reset_index(inplace=True)
 
-    fig = make_subplots(rows=2, cols=1, subplot_titles=('Original Data', f"{day_span['rate_of_change']}-day Rate of Change"),vertical_spacing=0.1,
+    mean = np.mean(df[rate_of_change_col])
+    std_dev = np.std(df[rate_of_change_col])
+    threshold_value = mean + 1.5 * std_dev
+    print(threshold_value)
+    peaks, _ = find_peaks(df[rate_of_change_col], height=0.1*threshold_value, distance=7)
+    troughs, _ = find_peaks(-df[rate_of_change_col], height=-threshold_value, distance=7)
+    zero_crossings = np.where(np.diff(np.sign(df[rate_of_change_col])))[0]
+
+    fig = make_subplots(rows=2, cols=1, subplot_titles=('Original Data', f"{data_filtering_settings['rate_of_change']['day_span']}-day Rate of Change"),vertical_spacing=0.1,
                         shared_xaxes=True)
     fig.add_trace(go.Scatter(x=df['DateTime'], y=df[df_col], mode='markers', name=df_col), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df['DateTime'], y=df[f"smoothed_{moving_avg_col}"], mode='lines', name=f"{day_span['moving_average']}-day Moving Avg"), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df['DateTime'], y=df[rate_of_change_col], mode='lines', name=f"{day_span['rate_of_change']}-day Rate of Change"), row=2, col=1)
+    if include_filters:
+        fig.add_trace(go.Scatter(x=df['DateTime'], y=df[moving_avg_col], mode='lines', name=f"smoothed_{moving_avg_col}"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df['DateTime'], y=df[median_col], mode='lines', name=median_col), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df['DateTime'], y=df[savgol_col], mode='lines', name=savgol_col), row=1, col=1)
+
+        fig.add_trace(go.Scatter(
+            x=df['DateTime'].iloc[peaks],
+            y=df[rate_of_change_col].iloc[peaks], 
+            mode='markers', 
+            name='Detected Peaks', 
+            marker=dict(color='green', size=10)), row=2, col=1)
+        fig.add_trace(go.Scatter(
+            x=df['DateTime'].iloc[troughs],
+            y=df[rate_of_change_col].iloc[troughs],
+            mode='markers', 
+            name='Detected Troughs', 
+            marker=dict(color='red', size=10)), row=2, col=1)
+        fig.add_trace(go.Scatter(
+            x=df['DateTime'].iloc[zero_crossings],
+            y=df[rate_of_change_col].iloc[zero_crossings],
+            mode='markers',
+            name='X-Axis Crossings',
+            marker=dict(color='blue', size=10, symbol='circle')), row=2, col=1)
+
+    fig.add_trace(go.Scatter(x=df['DateTime'], y=df[rate_of_change_col], mode='lines', name=f"{data_filtering_settings['rate_of_change']['day_span']}-day Rate of Change"), row=2, col=1)
 
     fig.add_trace(go.Scatter(
         x=df['DateTime'],
