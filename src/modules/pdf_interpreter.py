@@ -42,7 +42,7 @@ def extract_features_from_pdf(pdf_file, x_tolerance=2, init_y_top=440, reg_y_top
 
 def __grab_pattern(account_type):
     if account_type == "Credit":
-        return r'(\d{3})\s+(\w{3}\s+\d{1,2})\s+(\w{3}\s+\d{1,2})\s+(.+)\s+(\d+.\d{2})'
+        return r'(\d{3})\s+(\w{3}\s+\d{1,2})\s+(\w{3}\s+\d{1,2})\s+(.+)\s+(\d+\.\d{2})(-)?'
     elif account_type in ["Chequing", "Savings"]:
         return r'(\w+ \d+)\s+(.*?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
 
@@ -59,11 +59,14 @@ def process_transactions_from_lines(pdf_lines, account_type):
         if match:
             match_groups = list(match.groups())
             if account_type == "Credit":
-                ref_num = match.group(1)
-                transaction_date = match.group(2)
-                post_date = match.group(3)
-                details = match.group(4)
-                amount = match.group(5)
+                ref_num = match_groups[0]
+                transaction_date = match_groups[1]
+                post_date = match_groups[2]
+                details = match_groups[3]
+                amount = match_groups[4]
+                # Condition where credit statement indicates this was a deposit, so we see a "-" at end of amount
+                if match_groups[5] == "-":
+                    amount = str(float(amount) * -1)
                 # Create a dictionary for the transaction and add it to the list
                 transaction = {
                     'Reference #': ref_num,
@@ -282,6 +285,7 @@ def df_postprocessing(df_in, rent_ranges):
     df = df_in.copy()
 
     df = __identify_rent_payments(df, rent_ranges)
+    df = __apply_custom_conditinos(df)
 
     substring_exclusion_list = ['mb credit', 'mb transfer', 'opening balance', 'closing balance']
     fullstring_exclusion_list = ['from']
@@ -331,4 +335,23 @@ def __identify_rent_payments(df_in, rent_ranges):
     # Drop the helper column
     df = df.drop(columns=['day_of_month'])
     
+    return df
+
+def __apply_custom_conditinos(df):
+    
+    """
+    Adjusts the 'Amount' column in the DataFrame based on the 'Transaction Type' column.
+    
+    If 'Transaction Type' is 'Withdrawal', the corresponding 'Amount' is multiplied by -1.
+    
+    Parameters:
+    df (pd.DataFrame): Input DataFrame with 'Transaction Type' and 'Amount' columns.
+    
+    Returns:
+    pd.DataFrame: Modified DataFrame with adjusted Amounts.
+    """
+    # if 'Transaction Type' not in df.columns or 'Amount' not in df.columns:
+    #     raise ValueError("DataFrame must contain 'type' and 'amount' columns.")
+    df['Amount'] = df['Amount'].where(df['Transaction Type'] != 'Withdrawal', df['Amount'].abs() * -1)
+    df['Amount'] = df['Amount'].where(df['Transaction Type'] != 'Deposit', df['Amount'].abs())
     return df
