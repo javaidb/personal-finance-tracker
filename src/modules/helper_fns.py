@@ -60,6 +60,32 @@ def sort_df(df):
     df = df.sort_values(by='DateTime')
     return df.groupby('DateTime', group_keys=False).apply(lambda x: x.sort_index(), include_groups=True)
 
+def __find_regions(values, peaks, troughs, zero_crossings):
+    # Combine all indices and sort them
+    all_indices = sorted(list(peaks) + list(troughs) + list(zero_crossings))
+    
+    regions = []
+    
+    for i, idx in enumerate(all_indices):
+        if idx in peaks and values[idx] > 0:
+            left = max([x for x in all_indices[:i] if x in zero_crossings or x in troughs] or [0])
+            
+            right = min([x for x in all_indices[i+1:] if x in zero_crossings or x in troughs] or [len(values)-1])
+            
+            regions.append((left, right))
+        
+        elif idx in troughs and values[idx] < 0:
+            left = max([x for x in all_indices[:i] if x in zero_crossings or x in peaks] or [0])
+            
+            right = min([x for x in all_indices[i+1:] if x in zero_crossings or x in peaks] or [len(values)-1])
+            
+            regions.append((left, right))
+    if 0 not in regions[0]:
+        regions.insert(0, [0,regions[0][0]])
+    if len(values)-1 not in regions[-1]:
+        regions.insert(len(regions), [regions[-1][-1], len(values)-1])
+    return regions
+
 def plot_attribute_against_datetime(
         df_in,
         data_filtering_settings={
@@ -81,52 +107,115 @@ def plot_attribute_against_datetime(
         },
         include_filters = False):
     
-    df_col='Balance'
+    # ============================== INITIALIZATIONS FOR PLOTTING ==============================
+
+    df_col_for_balance='Balance'
+    rate_of_change_col = f"rate_of_change_{data_filtering_settings['rate_of_change']['day_span']}D"
 
     moving_avg_col = f"moving_average_{data_filtering_settings['moving_average']['day_span']}D"
     median_col = f"smoothed_median_{data_filtering_settings['smoothed_median']['window_size']}W"
     savgol_col = f"smoothed_savgol_{data_filtering_settings['savgol_filter']['window_length']}W"
-    rate_of_change_col = f"rate_of_change_{data_filtering_settings['rate_of_change']['day_span']}D"
 
-    active_filter_for_raw_data = median_col
+    filters_to_apply_form = [moving_avg_col, median_col, savgol_col]
+
+    active_filter_for_raw_data = moving_avg_col
+
+    # ==========================================================================================
 
     df = df_in.copy()
-    df = df[df[[df_col]].notnull().all(axis=1)]
+    df = df[df[[df_col_for_balance]].notnull().all(axis=1)]
     df['DateTime'] = pd.to_datetime(df['DateTime'])
     df = df.sort_values(by='DateTime')
     df.set_index('DateTime', inplace=True)
 
-    # df[moving_avg_col] = df[df_col].rolling(window=f"{day_span['moving_average']}D", min_periods=1).mean()
-    df[moving_avg_col] = gaussian_filter1d(df[df_col], sigma=1)
+    df[f"{moving_avg_col}_for_regions"] = df[df_col_for_balance].rolling(window=f"7D", min_periods=1).mean()
+    df[moving_avg_col] = gaussian_filter1d(df[df_col_for_balance], sigma=data_filtering_settings['moving_average']['gaussian_sigma'])
 
     window_size = data_filtering_settings['smoothed_median']['window_size']
-    df[median_col] = df[df_col].rolling(window=window_size, center=True).median()
+    df[median_col] = df[df_col_for_balance].rolling(window=window_size, center=True).median()
 
     window_length = data_filtering_settings['savgol_filter']['window_length']
     poly_order = data_filtering_settings['savgol_filter']['poly_order']
-    df[savgol_col] = savgol_filter(df[df_col], window_length, poly_order)
+    df[savgol_col] = savgol_filter(df[moving_avg_col], window_length, poly_order)
 
 
     df[rate_of_change_col] = df[active_filter_for_raw_data].rolling(f"{data_filtering_settings['rate_of_change']['day_span']}D").apply(lambda x: x.iloc[-1] - x.iloc[0], raw=False)
-    df[rate_of_change_col] = gaussian_filter1d(df[rate_of_change_col], sigma=20)
+    df[rate_of_change_col] = gaussian_filter1d(df[rate_of_change_col], sigma=data_filtering_settings['rate_of_change']['gaussian_sigma'])
 
     df.reset_index(inplace=True)
+
+    # ============================== REGION IDENTIFICATION/ISOLATION ==============================
 
     mean = np.mean(df[rate_of_change_col])
     std_dev = np.std(df[rate_of_change_col])
     threshold_value = mean + 1.5 * std_dev
-    print(threshold_value)
     peaks, _ = find_peaks(df[rate_of_change_col], height=0.1*threshold_value, distance=7)
     troughs, _ = find_peaks(-df[rate_of_change_col], height=-threshold_value, distance=7)
     zero_crossings = np.where(np.diff(np.sign(df[rate_of_change_col])))[0]
 
-    fig = make_subplots(rows=2, cols=1, subplot_titles=('Original Data', f"{data_filtering_settings['rate_of_change']['day_span']}-day Rate of Change"),vertical_spacing=0.1,
+    region_inds= __find_regions(df[active_filter_for_raw_data], peaks, troughs, zero_crossings)
+
+    regions = [
+        (
+            float(df[f"{moving_avg_col}_for_regions"][tup[0]]),
+            float(df[f"{moving_avg_col}_for_regions"][tup[1]])
+        ) 
+            for tup in region_inds
+    ]
+
+    
+    x_values = []
+    y_values = []
+
+    prev_ind_lower, prev_ind_upper = None, None
+    for (lower_bound_index, upper_bound_index), (y_lower, y_upper) in zip(region_inds, regions):
+
+        if lower_bound_index not in (prev_ind_lower, prev_ind_upper):
+            x_values.extend([lower_bound_index])
+            y_values.extend([y_lower])
+
+        if upper_bound_index not in (prev_ind_lower, prev_ind_upper):
+            x_values.extend([upper_bound_index])
+            y_values.extend([y_upper])
+
+        prev_ind_lower = lower_bound_index
+        prev_ind_upper = upper_bound_index
+        
+    # ==========================================================================================
+
+    fig = make_subplots(rows=2, cols=1, subplot_titles=('Accumulated Balance across Datetimes', f"{data_filtering_settings['rate_of_change']['day_span']}-day Rate of Change"),vertical_spacing=0.1,
                         shared_xaxes=True)
-    fig.add_trace(go.Scatter(x=df['DateTime'], y=df[df_col], mode='markers', name=df_col), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['DateTime'], 
+        y=df[df_col_for_balance], 
+        mode='markers', 
+        marker=dict(color='#BB2525', size=6),
+        name=df_col_for_balance), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['DateTime'], 
+        y=df[rate_of_change_col],
+        mode='lines',
+        line=dict(color='#0C0C54', width=2),
+        name=rate_of_change_col), row=2, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['DateTime'], 
+        y=df[active_filter_for_raw_data], 
+        mode='lines', 
+        line=dict(color='#BCBF07', width=2),
+        name=active_filter_for_raw_data), row=1, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=df['DateTime'].iloc[x_values],
+        y=y_values,
+        mode='markers+lines',
+        name='Region Bounds',
+        line=dict(color='blue', width=2)
+    ))
+
     if include_filters:
-        fig.add_trace(go.Scatter(x=df['DateTime'], y=df[moving_avg_col], mode='lines', name=f"smoothed_{moving_avg_col}"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df['DateTime'], y=df[median_col], mode='lines', name=median_col), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df['DateTime'], y=df[savgol_col], mode='lines', name=savgol_col), row=1, col=1)
+        for filter_col_name in filters_to_apply_form:
+            if filter_col_name != active_filter_for_raw_data: 
+                fig.add_trace(go.Scatter(x=df['DateTime'], y=df[filter_col_name], mode='lines', name=filter_col_name), row=1, col=1)
 
         fig.add_trace(go.Scatter(
             x=df['DateTime'].iloc[peaks],
@@ -147,7 +236,6 @@ def plot_attribute_against_datetime(
             name='X-Axis Crossings',
             marker=dict(color='blue', size=10, symbol='circle')), row=2, col=1)
 
-    fig.add_trace(go.Scatter(x=df['DateTime'], y=df[rate_of_change_col], mode='lines', name=f"{data_filtering_settings['rate_of_change']['day_span']}-day Rate of Change"), row=2, col=1)
 
     fig.add_trace(go.Scatter(
         x=df['DateTime'],
@@ -158,7 +246,6 @@ def plot_attribute_against_datetime(
         showlegend=False
     ), row=2, col=1)
 
-    # Add shaded area for negative values (not in legend)
     fig.add_trace(go.Scatter(
         x=df['DateTime'],
         y=[min(0, y) for y in df[rate_of_change_col]],
@@ -169,9 +256,9 @@ def plot_attribute_against_datetime(
     ), row=2, col=1)
 
     fig.update_layout(
-        title=f'{df_col} Over Time',
+        title=f'{df_col_for_balance} Over Time',
         xaxis_title='Date',
-        yaxis_title=df_col,
+        yaxis_title=df_col_for_balance,
         height=800,
     )
     fig.show()
