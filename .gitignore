@@ -82,6 +82,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+src/notebooks/archive/*
 
 # IPython
 profile_default/
@@ -134,6 +135,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.venv_word_encoding
 
 # Spyder project settings
 .spyderproject
