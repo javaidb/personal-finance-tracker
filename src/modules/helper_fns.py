@@ -3,6 +3,7 @@ import calendar
 import os
 import pandas as pd
 import numpy as np
+import ruptures as rpt
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -10,8 +11,6 @@ import plotly.express as px
 from plotly.colors import qualitative
 
 from scipy.ndimage import gaussian_filter1d
-from scipy.signal import find_peaks
-from scipy.signal import savgol_filter
 
 def __extract_month(input_string):
     months = '|'.join(f'.*{m}.*' for m in calendar.month_abbr[1:])
@@ -86,40 +85,44 @@ def __find_regions(values, peaks, troughs, zero_crossings):
         regions.insert(len(regions), [regions[-1][-1], len(values)-1])
     return regions
 
+def __detect_change_points(y, penalty=10, min_size=10, jump=5, model="rbf"):
+    # Convert y to a numpy array if it's not already
+    y_array = np.array(y).reshape(-1, 1)  # reshape to 2D array
+    algo = rpt.Pelt(model=model, jump=jump, min_size=min_size).fit(y_array)
+    change_points = algo.predict(pen=penalty)
+    return change_points
+
+def __linearize_segments(numeric_time, y, change_points, min_segment_size=2):
+    numeric_time = np.array(numeric_time)
+    y = np.array(y)
+    segments = []
+    change_points = [0] + change_points + [len(y)]
+    for start, end in zip(change_points, change_points[1:]):
+        if end - start >= min_segment_size:
+            coeffs = np.polyfit(numeric_time[start:end], y[start:end], 1)
+            segments.append((start, end, coeffs))
+    return segments
+
 def plot_attribute_against_datetime(
-        df_in,
-        data_filtering_settings={
-            'moving_average': {
-                'day_span': 1,
-                'gaussian_sigma': 1
-            },
-            'smoothed_median': {
-                'window_size': 5,
-            },
-            'savgol_filter': {
-                'window_length': 5,
-                'poly_order': 2
-            },
-            'rate_of_change': {
-                'day_span': 7,
-                'gaussian_sigma': 20
-            },
-        },
-        include_filters = False):
+    df_in,
+    rate_of_chng_settings={
+        'day_span': 7,
+        'gaussian_sigma': 20
+    },
+    segment_settings={
+        'penalty': 0.8,
+        'min_size': 55,
+        'jump': 50,
+        'model': "l2"
+    },
+    view_segments = False):
     
     # ============================== INITIALIZATIONS FOR PLOTTING ==============================
 
     df_col_for_balance='Balance'
-    rate_of_change_col = f"rate_of_change_{data_filtering_settings['rate_of_change']['day_span']}D"
-
-    moving_avg_col = f"moving_average_{data_filtering_settings['moving_average']['day_span']}D"
-    median_col = f"smoothed_median_{data_filtering_settings['smoothed_median']['window_size']}W"
-    savgol_col = f"smoothed_savgol_{data_filtering_settings['savgol_filter']['window_length']}W"
-
-    filters_to_apply_form = [moving_avg_col, median_col, savgol_col]
-
-    active_filter_for_raw_data = moving_avg_col
-
+    rate_of_change_col = f"rate_of_change_{rate_of_chng_settings['day_span']}D"
+    segmented_col = "Linear Region Segmentations (PELT)"
+    
     # ==========================================================================================
 
     df = df_in.copy()
@@ -128,63 +131,30 @@ def plot_attribute_against_datetime(
     df = df.sort_values(by='DateTime')
     df.set_index('DateTime', inplace=True)
 
-    df[f"{moving_avg_col}_for_regions"] = df[df_col_for_balance].rolling(window=f"7D", min_periods=1).mean()
-    df[moving_avg_col] = gaussian_filter1d(df[df_col_for_balance], sigma=data_filtering_settings['moving_average']['gaussian_sigma'])
 
-    window_size = data_filtering_settings['smoothed_median']['window_size']
-    df[median_col] = df[df_col_for_balance].rolling(window=window_size, center=True).median()
-
-    window_length = data_filtering_settings['savgol_filter']['window_length']
-    poly_order = data_filtering_settings['savgol_filter']['poly_order']
-    df[savgol_col] = savgol_filter(df[moving_avg_col], window_length, poly_order)
-
-
-    df[rate_of_change_col] = df[active_filter_for_raw_data].rolling(f"{data_filtering_settings['rate_of_change']['day_span']}D").apply(lambda x: x.iloc[-1] - x.iloc[0], raw=False)
-    df[rate_of_change_col] = gaussian_filter1d(df[rate_of_change_col], sigma=data_filtering_settings['rate_of_change']['gaussian_sigma'])
+    df[rate_of_change_col] = df[df_col_for_balance].rolling(f"{rate_of_chng_settings['day_span']}D").apply(lambda x: x.iloc[-1] - x.iloc[0], raw=False)
+    df[rate_of_change_col] = gaussian_filter1d(df[rate_of_change_col], sigma=rate_of_chng_settings['gaussian_sigma'])
 
     df.reset_index(inplace=True)
 
     # ============================== REGION IDENTIFICATION/ISOLATION ==============================
 
-    mean = np.mean(df[rate_of_change_col])
-    std_dev = np.std(df[rate_of_change_col])
-    threshold_value = mean + 1.5 * std_dev
-    peaks, _ = find_peaks(df[rate_of_change_col], height=0.1*threshold_value, distance=7)
-    troughs, _ = find_peaks(-df[rate_of_change_col], height=-threshold_value, distance=7)
-    zero_crossings = np.where(np.diff(np.sign(df[rate_of_change_col])))[0]
+    df['numeric_time'] = (df['DateTime'] - df['DateTime'].min()).dt.total_seconds()
 
-    region_inds= __find_regions(df[active_filter_for_raw_data], peaks, troughs, zero_crossings)
+    change_points = __detect_change_points(
+        df['Balance'].values,
+        penalty = segment_settings['penalty'],
+        min_size = segment_settings['min_size'],
+        jump = segment_settings['jump'],
+        model = segment_settings['model']
+    )
+    segments = __linearize_segments(df['numeric_time'].values, df['Balance'].values, change_points)
 
-    regions = [
-        (
-            float(df[f"{moving_avg_col}_for_regions"][tup[0]]),
-            float(df[f"{moving_avg_col}_for_regions"][tup[1]])
-        ) 
-            for tup in region_inds
-    ]
-
-    
-    x_values = []
-    y_values = []
-
-    prev_ind_lower, prev_ind_upper = None, None
-    for (lower_bound_index, upper_bound_index), (y_lower, y_upper) in zip(region_inds, regions):
-
-        if lower_bound_index not in (prev_ind_lower, prev_ind_upper):
-            x_values.extend([lower_bound_index])
-            y_values.extend([y_lower])
-
-        if upper_bound_index not in (prev_ind_lower, prev_ind_upper):
-            x_values.extend([upper_bound_index])
-            y_values.extend([y_upper])
-
-        prev_ind_lower = lower_bound_index
-        prev_ind_upper = upper_bound_index
-        
     # ==========================================================================================
 
-    fig = make_subplots(rows=2, cols=1, subplot_titles=('Accumulated Balance across Datetimes', f"{data_filtering_settings['rate_of_change']['day_span']}-day Rate of Change"),vertical_spacing=0.1,
+    fig = make_subplots(rows=2, cols=1, subplot_titles=('Accumulated Balance across Datetimes', f"{rate_of_chng_settings['day_span']}-day Rate of Change"),vertical_spacing=0.1,
                         shared_xaxes=True)
+
     fig.add_trace(go.Scatter(
         x=df['DateTime'], 
         y=df[df_col_for_balance], 
@@ -197,44 +167,22 @@ def plot_attribute_against_datetime(
         mode='lines',
         line=dict(color='#0C0C54', width=2),
         name=rate_of_change_col), row=2, col=1)
-    fig.add_trace(go.Scatter(
-        x=df['DateTime'], 
-        y=df[active_filter_for_raw_data], 
-        mode='lines', 
-        line=dict(color='#BCBF07', width=2),
-        name=active_filter_for_raw_data), row=1, col=1)
 
-    fig.add_trace(go.Scatter(
-        x=df['DateTime'].iloc[x_values],
-        y=y_values,
-        mode='markers+lines',
-        name='Region Bounds',
-        line=dict(color='blue', width=2)
-    ))
+    if view_segments:
+        y_tot = []
+        for start, end, coeffs in segments:
+            y_tot.extend(list(np.polyval(coeffs, df['numeric_time'][start:end])))
+        fig.add_trace(go.Scatter(
+            x=df['DateTime'],
+            y=y_tot,
+            mode='lines',
+            name=segmented_col,
+            line=dict(color='#BCBF07', width=3)
+        ), row=1, col=1)
 
-    if include_filters:
-        for filter_col_name in filters_to_apply_form:
-            if filter_col_name != active_filter_for_raw_data: 
-                fig.add_trace(go.Scatter(x=df['DateTime'], y=df[filter_col_name], mode='lines', name=filter_col_name), row=1, col=1)
-
-        fig.add_trace(go.Scatter(
-            x=df['DateTime'].iloc[peaks],
-            y=df[rate_of_change_col].iloc[peaks], 
-            mode='markers', 
-            name='Detected Peaks', 
-            marker=dict(color='green', size=10)), row=2, col=1)
-        fig.add_trace(go.Scatter(
-            x=df['DateTime'].iloc[troughs],
-            y=df[rate_of_change_col].iloc[troughs],
-            mode='markers', 
-            name='Detected Troughs', 
-            marker=dict(color='red', size=10)), row=2, col=1)
-        fig.add_trace(go.Scatter(
-            x=df['DateTime'].iloc[zero_crossings],
-            y=df[rate_of_change_col].iloc[zero_crossings],
-            mode='markers',
-            name='X-Axis Crossings',
-            marker=dict(color='blue', size=10, symbol='circle')), row=2, col=1)
+        for cp in change_points:
+            if cp < len(df):
+                fig.add_vline(x=df['DateTime'].iloc[cp], line_dash="dash", line_color="green", row=1, col=1)
 
 
     fig.add_trace(go.Scatter(
