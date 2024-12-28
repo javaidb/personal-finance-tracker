@@ -1,3 +1,8 @@
 pdfplumber
 pandas==2.2.3
 scipy
+plotly
+ipykernel
+jupyter
+tqdm
+ruptures
