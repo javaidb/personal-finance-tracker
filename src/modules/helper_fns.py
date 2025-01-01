@@ -99,7 +99,7 @@ def __linearize_segments(numeric_time, y, change_points, min_segment_size=2):
 def update_json(imported_json, candidate_word_updates, debug=False):
     for candidate_pattern in candidate_word_updates:
         update_category = candidate_pattern["category"]
-        current_category_patterns = imported_json['categories'][update_category]['patterns']
+        current_category_patterns = imported_json[update_category]['patterns']
         current_keyword_list = [x['terms'] for x in current_category_patterns]
         
         if debug:
@@ -109,19 +109,20 @@ def update_json(imported_json, candidate_word_updates, debug=False):
             # print("found!")
             filtered_keyword_term = {k: v for k, v in candidate_pattern.items() if k not in ['index', 'category']}
             current_category_patterns.append(filtered_keyword_term)
-        if debug: print(f"new: {imported_json['categories'][update_category]['patterns']}")
+        if debug: print(f"new: {imported_json[update_category]['patterns']}")
     return imported_json
 
-def export_json(updated_json):
+def export_json(updated_json, print_statement=False):
     json_file_path = '../../cached_data/databank.json'
     with open(json_file_path, 'w') as json_file:
         json.dump(updated_json, json_file, indent=2)
+    if print_statement: print(f"Exported updated JSON to '{json_file_path}'.")
 
 def reset_json_matches(imported_json):
-    for category, keyword_patterns in imported_json.get('categories').items():
-        imported_json['categories'][category]['totalMatches'] = 0
+    for category, keyword_patterns in imported_json.items():
+        imported_json[category]['totalMatches'] = 0
         for pattern_ind, _ in enumerate(keyword_patterns.get('patterns')):
-            imported_json['categories'][category]['patterns'][pattern_ind]['matchCount'] = 0
+            imported_json[category]['patterns'][pattern_ind]['matchCount'] = 0
     return imported_json
 
 def import_json():
@@ -146,7 +147,8 @@ def add_entry_to_json(index_classifier:int, entry:list, category:str, candidate_
                     "dateAdded": iso_time,
                     "lastUpdated": iso_time,
                     "index": index_classifier,
-                    "category": category
+                    "category": category,
+                    "matchCount": 1
                 })
             return
         candidate_cache.append({
@@ -154,7 +156,8 @@ def add_entry_to_json(index_classifier:int, entry:list, category:str, candidate_
             "dateAdded": iso_time,
             "lastUpdated": iso_time,
             "index": index_classifier,
-            "category": category
+            "category": category,
+            "matchCount": 1
         })
         return
     else:
@@ -304,10 +307,11 @@ class CategoryUpdater:
         self.current_row = 0
         self.filtered_df = self.df.copy()
         self.candidate_cache_for_updates = []
-        self.local_match_entry = None
+        self.update_pie_chart(setup=True)
         self.setup_widgets()
         
     def setup_widgets(self):
+        # print(self.categories)
         self.keyword_options_from_json = widgets.SelectMultiple(
             options=[],
             description='Words:',
@@ -340,18 +344,44 @@ class CategoryUpdater:
         self.next_button = widgets.Button(description="Next")
         self.next_button.on_click(self.next_row)
         
-        self.save_button_local = widgets.Button(description="Save changes to local")
+        self.save_button_local = widgets.Button(
+            description=" (local)",
+            icon='save',
+            layout=widgets.Layout(width='auto', height='auto'),
+            style=dict(
+                button_color='#E0E0E0',
+                font_weight='normal'
+        ))
         self.save_button_local.on_click(self.update_local_df)
         
-        self.push_to_json_button = widgets.Button(description="Push changes to json")
+        self.push_to_json_button = widgets.Button(
+            description=" (JSON)",
+            icon='arrow-up',
+            layout=widgets.Layout(width='auto', height='auto'),
+            style=dict(
+                button_color='#E0E0E0',
+                font_weight='normal'
+        ))
         self.push_to_json_button.on_click(self.push_to_json)
         
         self.status_label = widgets.Label(value="")
         
-        display(self.filter_select, self.keyword_options_from_json, self.category_select, self.matched_words_text, widgets.HBox([self.save_button_local, self.push_to_json_button]),
-                widgets.HBox([self.prev_button, self.next_button]), self.status_label)
+        # self.pie_output = widgets.Output()
+
+        # widgets.HBox([widgets.VBox([update_button, output]), info_widget])
+
+        user_entry_content = widgets.VBox([
+            self.filter_select, self.keyword_options_from_json, self.category_select, self.matched_words_text,
+            widgets.HBox([self.prev_button, self.next_button, self.save_button_local]), 
+            widgets.HBox([self.push_to_json_button]),
+            self.status_label
+        ])
+
+        all_content = widgets.HBox([user_entry_content, self.fig])
+        
+        display(all_content)
         self.load_current_row()
-    
+
     def update_local_df(self, b):
         """Save the edited matched words to a JSON file."""
 
@@ -377,11 +407,41 @@ class CategoryUpdater:
                 self.status_label.value = f"{match_words_entered_textbox} is an invalid entry, cannot be empty, please try another entry."
         else:
             self.status_label.value = f"{match_words_entered_textbox} is an invalid entry, unable to locate substring for match in above word associations, please try another entry."
+    
+    def update_pie_chart(self, setup=False):
+        
+        status_counts = self.df['Classification'].value_counts(dropna=False)
+        none_count = status_counts.get('uncharacterized', 0)
+        other_count = len(self.df) - none_count
+        
+        labels = ['Uncharacterized', 'Characterized']
+        values = [none_count, other_count]
 
+        if setup:
+            self.fig = go.FigureWidget(data=[
+                go.Pie(
+                    labels=labels,
+                    values=values,
+                    textinfo='label+percent+text',
+                    # textposition='inside',
+                    insidetextorientation='radial',
+                    marker=dict(colors=["#2F3136", "DCDDDE"]),
+                    showlegend=False,
+                    hole=0.3
+            )])
+            self.fig.update_layout(
+                # title='Status Distribution',
+                height=300,
+                width=600,
+                margin=dict(l=20, r=20, t=40, b=20),
+                xaxis_title='Count',
+                yaxis_title='Status'
+            )
+
+        with self.fig.batch_update():
+            self.fig.data[0].values = values
 
     def load_current_row(self, retain_word_entry=False):
-        # if not retain_word_entry:
-        #     self.local_match_entry = None
         if 0 <= self.current_row < len(self.filtered_df):
             words = self.filtered_df.iloc[self.current_row][self.words_col]
             category = self.filtered_df.iloc[self.current_row][self.categories_col]
@@ -401,7 +461,9 @@ class CategoryUpdater:
             self.status_label.value = "No rows to display"
             self.prev_button.disabled = True
             self.next_button.disabled = True
-        
+
+        self.update_pie_chart()
+            
     def on_category_change(self, change):
         if change['type'] == 'change' and change['name'] == 'value':
             new_category = change['new']
@@ -412,22 +474,12 @@ class CategoryUpdater:
                 self.df.at[original_index, self.categories_col] = new_category
                 self.filtered_df.at[original_index, self.categories_col] = new_category
                 
-                # Update JSON file
-                words = self.df.iloc[original_index][self.words_col]
+                ## Update JSON file
+                # words = self.df.iloc[original_index][self.words_col]
                 # self.update_json_category(words, old_category, new_category)
                 
                 print(f"Updated row {original_index + 1} to category: {new_category}")
-                self.load_current_row(retain_word_entry=True)  # Refresh the display
-        
-    # def update_json_category(self, words, old_category, new_category):
-    #     # Remove words from old category
-    #     if old_category in self.categories:
-    #         self.categories[old_category] = [word for word in self.categories[old_category] if word not in words]
-        
-    #     # Add words to new category
-    #     if new_category not in self.categories:
-    #         self.categories[new_category] = []
-    #     self.categories[new_category].extend([word for word in words if word not in self.categories[new_category]])
+                self.load_current_row(retain_word_entry=True)
         
     def push_to_json(self, new_updates):
 
@@ -440,7 +492,8 @@ class CategoryUpdater:
             print(f"updated_json: {updated_json}")
 
         # Save updated categories to JSON file
-        export_json(updated_json)
+        updated_json_with_outcol = {'categories': updated_json}
+        export_json(updated_json_with_outcol, print_statement=True)
         
     def on_filter_change(self, change):
         if change['type'] == 'change' and change['name'] == 'value':
