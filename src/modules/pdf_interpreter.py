@@ -5,6 +5,7 @@ from tqdm.notebook import tqdm_notebook
 import json
 
 from src.modules.helper_fns import *
+from src.config import config
 
 def extract_features_from_pdf(pdf_file, x_tolerance=2, init_y_top=440, reg_y_top=210):
 
@@ -302,13 +303,13 @@ def tabulate_gap_balances(df_in):
             df.loc[df.index[i], 'Balance'] = new_balance
     return df
 
-def df_postprocessing(df_in, rent_ranges):
+def df_postprocessing(df_in):
 
     print(f"Post-processing bank statements.")
 
     df = df_in.copy()
 
-    df = __identify_rent_payments(df, rent_ranges)
+    df = __identify_rent_payments(df, config.rent_ranges)
     df = __apply_custom_conditinos(df)
 
     substring_exclusion_list = ['mb credit', 'mb transfer', 'opening balance', 'closing balance']
@@ -348,8 +349,8 @@ def __identify_rent_payments(df_in, rent_ranges):
     )
     
     amount_mask = pd.Series(False, index=df.index)
-    for min_rent, max_rent in rent_ranges:
-        amount_mask |= df['Amount'].abs().between(min_rent, max_rent)
+    for rent_per_property in rent_ranges:
+        amount_mask |= df['Amount'].abs().between(rent_per_property["min"], rent_per_property["max"])
     
     rent_mask &= amount_mask
     
