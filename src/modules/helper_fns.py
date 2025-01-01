@@ -96,18 +96,20 @@ def __linearize_segments(numeric_time, y, change_points, min_segment_size=2):
             segments.append((start, end, coeffs, r2))
     return segments
 
-def update_json(imported_json, candidate_word_updates):
+def update_json(imported_json, candidate_word_updates, debug=False):
     for candidate_pattern in candidate_word_updates:
         update_category = candidate_pattern["category"]
         current_category_patterns = imported_json['categories'][update_category]['patterns']
         current_keyword_list = [x['terms'] for x in current_category_patterns]
-        print(f"update_keyword_term: {candidate_pattern}")
-        print(f"current_keyword_list: {current_keyword_list}")
+        
+        if debug:
+            print(f"update_keyword_term: {candidate_pattern}")
+            print(f"current_keyword_list: {current_keyword_list}")
         if candidate_pattern['terms'] not in current_keyword_list:
-            print("found!")
+            # print("found!")
             filtered_keyword_term = {k: v for k, v in candidate_pattern.items() if k not in ['index', 'category']}
             current_category_patterns.append(filtered_keyword_term)
-        print(f"new: {imported_json['categories'][update_category]['patterns']}")
+        if debug: print(f"new: {imported_json['categories'][update_category]['patterns']}")
     return imported_json
 
 def export_json(updated_json):
@@ -123,16 +125,17 @@ def reset_json_matches(imported_json):
     return imported_json
 
 def import_json():
-    with open('../../cached_data/databank.json', 'r') as file:
+    json_file_path = '../../cached_data/databank.json'
+    with open(json_file_path, 'r') as file:
         return json.load(file)
 
-def add_entry_to_json(index_classifier:int, entry:list, category:str, candidate_cache:list):
-    print(f"candidate_cache: {candidate_cache}")
+def add_entry_to_json(index_classifier:int, entry:list, category:str, candidate_cache:list, debug=False):
+    if debug: print(f"candidate_cache: {candidate_cache}")
     # current_keyword_list = [x['terms'] for x in candidate_cache]
     # print(f"current_keyword_list: {current_keyword_list}")
     locate_next_matching_dict = any(d.get('terms') == entry and d.get('category') == category for d in candidate_cache)
     # next(keyword == entry for keyword in current_keyword_list)
-    print(f"locate_next_matching_dict: {locate_next_matching_dict}")
+    if debug: print(f"locate_next_matching_dict: {locate_next_matching_dict}")
     if locate_next_matching_dict is not None:
         current_time = datetime.now(timezone.utc)
         iso_time = current_time.isoformat(timespec='microseconds').replace('+00:00', 'Z')
@@ -291,10 +294,10 @@ def plot_stacked(df_in):
 
 
 class CategoryUpdater:
-    def __init__(self, df, categories, json_file_path, words_col='Processed Details', categories_col='Classification', matched_words_col='Matched Keyword'):
+    def __init__(self, df, debug=False, words_col='Processed Details', categories_col='Classification', matched_words_col='Matched Keyword'):
         self.df = df.copy()
+        self.debug = debug
         self.categories = import_json().get('categories')
-        self.json_file_path = json_file_path
         self.words_col = words_col
         self.categories_col = categories_col
         self.matched_words_col = matched_words_col
@@ -351,24 +354,23 @@ class CategoryUpdater:
     
     def update_local_df(self, b):
         """Save the edited matched words to a JSON file."""
-        print(self.keyword_options_from_json.options)
-        print(self.matched_words_text.value)
 
         match_words_entered_textbox = [word.strip() for word in re.split(r'[,\s]+', self.matched_words_text.value)]
         original_index_prior_to_filter = self.filtered_df.index[self.current_row]
 
         keyword_options = [s.lower() for s in self.keyword_options_from_json.options]
 
-        print(keyword_options)
-        print(match_words_entered_textbox)
+        if self.debug:
+            print(f"keyword_options: {keyword_options}")
+            print(f"match_words_entered_textbox: {match_words_entered_textbox}")
 
         if all(any(entered_match.lower() in keyword_option for keyword_option in keyword_options) for entered_match in match_words_entered_textbox):
             if all(word != '' for word in match_words_entered_textbox):
                 self.filtered_df.loc[original_index_prior_to_filter, self.matched_words_col] = self.matched_words_text.value
                 
-                add_entry_to_json(original_index_prior_to_filter, match_words_entered_textbox, self.category_select.value, self.candidate_cache_for_updates)
+                add_entry_to_json(original_index_prior_to_filter, match_words_entered_textbox, self.category_select.value, self.candidate_cache_for_updates, self.debug)
                 
-                print(self.candidate_cache_for_updates)
+                # print(self.candidate_cache_for_updates)
 
                 self.status_label.value = f"Saved '{self.matched_words_text.value}' under '{self.category_select.value}' to row {original_index_prior_to_filter} of dataframe (not yet pushed to JSON)."
             else:
@@ -430,15 +432,15 @@ class CategoryUpdater:
     def push_to_json(self, new_updates):
 
         new_categories = self.candidate_cache_for_updates
-        print(f"cache_to_update: {new_categories}")
 
         # Update new entries per category as per new_updates in imported_categories
-        updated_json = update_json(self.categories, new_categories)
-        print(f"updated_json: {updated_json}")
+        updated_json = update_json(self.categories, new_categories, self.debug)
+        if self.debug:
+            print(f"cache_to_update: {new_categories}")
+            print(f"updated_json: {updated_json}")
 
         # Save updated categories to JSON file
-        with open(self.json_file_path, 'w') as file:
-            json.dump(updated_json, file, indent=2)
+        export_json(updated_json)
         
     def on_filter_change(self, change):
         if change['type'] == 'change' and change['name'] == 'value':
