@@ -4,6 +4,8 @@ import os
 import pandas as pd
 import numpy as np
 import ruptures as rpt
+import json
+from datetime import datetime, timezone
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -59,38 +61,19 @@ def sort_df(df):
     df = df.sort_values(by='DateTime')
     return df.groupby('DateTime', group_keys=False).apply(lambda x: x.sort_index(), include_groups=True)
 
-def __find_regions(values, peaks, troughs, zero_crossings):
-    # Combine all indices and sort them
-    all_indices = sorted(list(peaks) + list(troughs) + list(zero_crossings))
-    
-    regions = []
-    
-    for i, idx in enumerate(all_indices):
-        if idx in peaks and values[idx] > 0:
-            left = max([x for x in all_indices[:i] if x in zero_crossings or x in troughs] or [0])
-            
-            right = min([x for x in all_indices[i+1:] if x in zero_crossings or x in troughs] or [len(values)-1])
-            
-            regions.append((left, right))
-        
-        elif idx in troughs and values[idx] < 0:
-            left = max([x for x in all_indices[:i] if x in zero_crossings or x in peaks] or [0])
-            
-            right = min([x for x in all_indices[i+1:] if x in zero_crossings or x in peaks] or [len(values)-1])
-            
-            regions.append((left, right))
-    if 0 not in regions[0]:
-        regions.insert(0, [0,regions[0][0]])
-    if len(values)-1 not in regions[-1]:
-        regions.insert(len(regions), [regions[-1][-1], len(values)-1])
-    return regions
-
 def __detect_change_points(y, penalty=10, min_size=10, jump=5, model="rbf"):
     # Convert y to a numpy array if it's not already
     y_array = np.array(y).reshape(-1, 1)  # reshape to 2D array
     algo = rpt.Pelt(model=model, jump=jump, min_size=min_size).fit(y_array)
     change_points = algo.predict(pen=penalty)
     return change_points
+
+def __calculate_r2(y_true, y_pred):
+    """Calculate R-squared"""
+    ss_total = np.sum((y_true - np.mean(y_true))**2)
+    ss_residual = np.sum((y_true - y_pred)**2)
+    r2 = 1 - (ss_residual / ss_total)
+    return r2
 
 def __linearize_segments(numeric_time, y, change_points, min_segment_size=2):
     numeric_time = np.array(numeric_time)
@@ -99,16 +82,57 @@ def __linearize_segments(numeric_time, y, change_points, min_segment_size=2):
     change_points = [0] + change_points + [len(y)]
     for start, end in zip(change_points, change_points[1:]):
         if end - start >= min_segment_size:
-            coeffs = np.polyfit(numeric_time[start:end], y[start:end], 1)
-            segments.append((start, end, coeffs))
+            
+            x_segment = numeric_time[start:end]
+            y_segment = y[start:end]
+            coeffs = np.polyfit(x_segment, y_segment, 1)
+
+            y_pred = np.polyval(coeffs, x_segment)
+            r2 = __calculate_r2(y_segment, y_pred)
+
+            segments.append((start, end, coeffs, r2))
     return segments
+
+def update_json(imported_json, updated_entries):
+    for update_category, update_keyword_patterns in updated_entries['categories'].items():
+        current_category_patterns = imported_json['categories'][update_category]['patterns']
+        current_keyword_list = [x['terms'] for x in current_category_patterns]
+        for update_keyword_term in update_keyword_patterns:
+            if update_keyword_term['terms'] not in current_keyword_list:
+                current_category_patterns.extend(update_keyword_term)
+
+def export_json(updated_json):
+    json_file_path = '../../cached_data/databank.json'
+    with open(json_file_path, 'w') as json_file:
+        json.dump(updated_json, json_file, indent=2)
+
+def reset_json_matches(imported_json):
+    for category, keyword_patterns in imported_json.get('categories').items():
+        imported_json['categories'][category]['totalMatches'] = 0
+        for pattern_ind, _ in enumerate(keyword_patterns.get('patterns')):
+            imported_json['categories'][category]['patterns'][pattern_ind]['matchCount'] = 0
+    return imported_json
+
+def import_json():
+    with open('../../cached_data/databank.json', 'r') as file:
+        return json.load(file)
+
+def add_entry_to_json(entry:list, category:str, json_dict:dict):
+    current_category_patterns = json_dict.setdefault('categories', {}).setdefault(category, {}).setdefault('patterns',[])
+    current_keyword_list = [x['terms'] for x in current_category_patterns]
+    if not any(entry == keyword for keyword in current_keyword_list):
+        current_time = datetime.now(timezone.utc)
+        iso_time = current_time.isoformat(timespec='microseconds').replace('+00:00', 'Z')
+        current_category_patterns.append({
+            "terms": entry,
+            "dateAdded": iso_time,
+            "lastUpdated": iso_time,
+        })
+    else:
+        print(f"Entry '{entry}' already exists in category '{category}', skipping.")
 
 def plot_attribute_against_datetime(
     df_in,
-    rate_of_chng_settings={
-        'day_span': 7,
-        'gaussian_sigma': 20
-    },
     segment_settings={
         'penalty': 0.8,
         'min_size': 55,
@@ -119,8 +143,8 @@ def plot_attribute_against_datetime(
     
     # ============================== INITIALIZATIONS FOR PLOTTING ==============================
 
-    df_col_for_balance='Balance'
-    rate_of_change_col = f"rate_of_change_{rate_of_chng_settings['day_span']}D"
+    df_col_for_balance = 'Balance'
+    concat_coeffs_col = "Regional Rates of Change (PELT)"
     segmented_col = "Linear Region Segmentations (PELT)"
     
     # ==========================================================================================
@@ -130,10 +154,6 @@ def plot_attribute_against_datetime(
     df['DateTime'] = pd.to_datetime(df['DateTime'])
     df = df.sort_values(by='DateTime')
     df.set_index('DateTime', inplace=True)
-
-
-    df[rate_of_change_col] = df[df_col_for_balance].rolling(f"{rate_of_chng_settings['day_span']}D").apply(lambda x: x.iloc[-1] - x.iloc[0], raw=False)
-    df[rate_of_change_col] = gaussian_filter1d(df[rate_of_change_col], sigma=rate_of_chng_settings['gaussian_sigma'])
 
     df.reset_index(inplace=True)
 
@@ -149,10 +169,16 @@ def plot_attribute_against_datetime(
         model = segment_settings['model']
     )
     segments = __linearize_segments(df['numeric_time'].values, df['Balance'].values, change_points)
+    concat_y_segments = []
+    concat_coeffs = []
+    for start, end, coeffs, _ in segments:
+        # print(_)
+        concat_y_segments.extend(list(np.polyval(coeffs, df['numeric_time'][start:end])))
+        concat_coeffs.extend([coeffs[0]*86400*7]*(end-start))
 
     # ==========================================================================================
 
-    fig = make_subplots(rows=2, cols=1, subplot_titles=('Accumulated Balance across Datetimes', f"{rate_of_chng_settings['day_span']}-day Rate of Change"),vertical_spacing=0.1,
+    fig = make_subplots(rows=2, cols=1, subplot_titles=('Accumulated Balance across Datetimes', "Rate of Change via segmentation by PELT algorithm"),vertical_spacing=0.1,
                         shared_xaxes=True)
 
     fig.add_trace(go.Scatter(
@@ -161,20 +187,18 @@ def plot_attribute_against_datetime(
         mode='markers', 
         marker=dict(color='#BB2525', size=6),
         name=df_col_for_balance), row=1, col=1)
+    
     fig.add_trace(go.Scatter(
         x=df['DateTime'], 
-        y=df[rate_of_change_col],
+        y=concat_coeffs,
         mode='lines',
         line=dict(color='#0C0C54', width=2),
-        name=rate_of_change_col), row=2, col=1)
+        name=concat_coeffs_col), row=2, col=1)
 
     if view_segments:
-        y_tot = []
-        for start, end, coeffs in segments:
-            y_tot.extend(list(np.polyval(coeffs, df['numeric_time'][start:end])))
         fig.add_trace(go.Scatter(
             x=df['DateTime'],
-            y=y_tot,
+            y=concat_y_segments,
             mode='lines',
             name=segmented_col,
             line=dict(color='#BCBF07', width=3)
@@ -187,7 +211,7 @@ def plot_attribute_against_datetime(
 
     fig.add_trace(go.Scatter(
         x=df['DateTime'],
-        y=[max(0, y) for y in df[rate_of_change_col]],
+        y=[max(0, y) for y in concat_coeffs],
         fill='tozeroy',
         fillcolor='rgba(0, 255, 0, 0.1)',
         line=dict(width=0),
@@ -196,7 +220,7 @@ def plot_attribute_against_datetime(
 
     fig.add_trace(go.Scatter(
         x=df['DateTime'],
-        y=[min(0, y) for y in df[rate_of_change_col]],
+        y=[min(0, y) for y in concat_coeffs],
         fill='tozeroy',
         fillcolor='rgba(255, 0, 0, 0.1)',
         line=dict(width=0),
