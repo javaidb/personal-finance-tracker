@@ -132,19 +132,18 @@ def generate_fin_df(account_types=None):
     overall_df['DateTime'] = pd.to_datetime(overall_df['DateTime'])
     return overall_df
 
+
+
 def df_preprocessing(df_in):
+
+    print(f"Pre-processing bank statements.")
+
     df = df_in.copy()
     df = __process_transaction_details(df)
     df = __classify_transactions(df)
     
     for col in ['Balance', 'Amount']:
         df[col] = pd.to_numeric(df[col].replace(',', '', regex=True), errors='coerce')
-
-    # substrings_to_avoid = ['MB', 'Tax', 'Opening Balance']
-    # columns_to_filter = ['Details', 'Transaction Type']
-    # pattern = '|'.join(substrings_to_avoid)
-    # mask = df[columns_to_filter].apply(lambda x: x.str.contains(pattern, na=False)).any(axis=1)
-    # df = df[~mask]
 
     return df
 
@@ -188,7 +187,7 @@ def __classify_transactions(df):
         pd.DataFrame: A new DataFrame with an additional 'adjusted_amount' column.
     """
 
-    imported_json = import_json()
+    imported_json = import_json().get('categories')
     imported_json = reset_json_matches(imported_json)
 
     def categorize_strings(row, categories = imported_json):
@@ -198,7 +197,7 @@ def __classify_transactions(df):
         found_categories = []
         matched_keywords = []
         pattern_indices = []
-        for category, keyword_patterns in categories.get('categories').items():
+        for category, keyword_patterns in categories.items():
             for pattern_ind, keyword_pattern in enumerate(keyword_patterns.get('patterns')):
                 keyword = ' '.join(keyword_pattern.get('terms'))
                 if all(word.lower() in s_lower for word in keyword.split()):
@@ -206,7 +205,7 @@ def __classify_transactions(df):
                     matched_keywords.append(keyword)
                     pattern_indices.append(pattern_ind)
                     # Increment match tally
-                    categories['categories'][category]['patterns'][pattern_ind]['matchCount'] += 1
+                    categories[category]['patterns'][pattern_ind]['matchCount'] += 1
             # if found_category:
             #     break
 
@@ -224,12 +223,13 @@ def __classify_transactions(df):
             matched_keyword = matched_keywords[index]
             pattern_index = pattern_indices[index]
             # Increment match tallies
-            categories['categories'][found_category]['totalMatches'] += 1
+            categories[found_category]['totalMatches'] += 1
         
-            assigned_matches = categories['categories'][found_category]['patterns'][pattern_index].setdefault('assignedDetailMatch', [])
+            assigned_matches = categories[found_category]['patterns'][pattern_index].setdefault('assignedDetailMatch', [])
             if list_of_strings not in assigned_matches:
                 assigned_matches.append(list_of_strings)
-        export_json(categories)
+        categories_with_outcol = {"categories": categories}
+        export_json(categories_with_outcol)
         return pd.Series([found_category, matched_keyword])
 
     df[['Classification', 'Matched Keyword']] = df.apply(categorize_strings, axis = 1)
@@ -246,6 +246,8 @@ def recalibrate_amounts(df_in):
     Returns:
         pd.DataFrame: A new DataFrame with an additional 'adjusted_amount' column.
     """
+
+    print(f"Recalibrating amounts in bank statements.")
 
     df = df_in.copy()
     for account_type in df['Account Type'].unique().tolist():
@@ -301,6 +303,9 @@ def tabulate_gap_balances(df_in):
     return df
 
 def df_postprocessing(df_in, rent_ranges):
+
+    print(f"Post-processing bank statements.")
+
     df = df_in.copy()
 
     df = __identify_rent_payments(df, rent_ranges)
