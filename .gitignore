@@ -2,6 +2,8 @@
 cached_data/*
 # Ignore all .pdf files in sdf/ and its subfolders
 bank_statements/**/*.pdf
+# Ignore personal configs
+src/config/config.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
