@@ -45,6 +45,8 @@ pip install -r requirements.txt
 
 ### Setup
 - Clone this repository to your local machine.
+- Make a copy of config within *src/config* and rename *config.py*
+    - Add general estimates of rent paid for property (See config_template for isntructions/formatting)
 - Within bank_statements/..., there are 3 folders called 'Chequing', 'Savings' and 'Credit'; *This will be where you dump all your bank statements*:
     - Navigate to ScotiaOnline.
     - Download all desired statements and place within one of three predefined folders in _bank_statements/..._ by placing within a folder named by the account name.
