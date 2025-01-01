@@ -188,32 +188,51 @@ def __classify_transactions(df):
         pd.DataFrame: A new DataFrame with an additional 'adjusted_amount' column.
     """
 
-    with open('../../cached_data/databank.json', 'r') as file:
-        categories = json.load(file)
+    imported_json = import_json()
+    imported_json = reset_json_matches(imported_json)
 
-    def categorize_strings(list_of_strings):
+    def categorize_strings(row, categories = imported_json):
+        list_of_strings = row['Processed Details']
         s = ' '.join(list_of_strings)
         s_lower = s.lower()
-        found_category = None
-        for category, keywords in categories.items():
-            for keyword in keywords:
-                if ' ' in keyword:
-                    # Multi-word keyword
-                    if all(word.lower() in s_lower for word in keyword.split()):
-                        found_category = category
-                        break
-                else:
-                    # Single-word keyword
-                    if keyword.lower() in s_lower:
-                        found_category = category
-                        break
-            if found_category:
-                break
-        if not found_category:
-            found_category = "uncharacterized"
-        return found_category
+        found_categories = []
+        matched_keywords = []
+        pattern_indices = []
+        for category, keyword_patterns in categories.get('categories').items():
+            for pattern_ind, keyword_pattern in enumerate(keyword_patterns.get('patterns')):
+                keyword = ' '.join(keyword_pattern.get('terms'))
+                if all(word.lower() in s_lower for word in keyword.split()):
+                    found_categories.append(category)
+                    matched_keywords.append(keyword)
+                    pattern_indices.append(pattern_ind)
+                    # Increment match tally
+                    categories['categories'][category]['patterns'][pattern_ind]['matchCount'] += 1
+            # if found_category:
+            #     break
 
-    df['Classification'] = df['Processed Details'].apply(categorize_strings)
+        # If multiple matches found (should ONLY be a case where there is one string is a subset of another, e.g. 'uber' vs 'uber eats'), grab one with most strings matched 
+        if matched_keywords and len(matched_keywords) > 1:
+            index = max(range(len(matched_keywords)), key=lambda i: len(matched_keywords[i].split()))
+        else:
+            index = 0
+        # Now assign category/associated match keywords
+        if not found_categories:
+            found_category = "uncharacterized"
+            matched_keyword= None
+        else:
+            found_category = found_categories[index]
+            matched_keyword = matched_keywords[index]
+            pattern_index = pattern_indices[index]
+            # Increment match tallies
+            categories['categories'][found_category]['totalMatches'] += 1
+        
+            assigned_matches = categories['categories'][found_category]['patterns'][pattern_index].setdefault('assignedDetailMatch', [])
+            if list_of_strings not in assigned_matches:
+                assigned_matches.append(list_of_strings)
+        export_json(categories)
+        return pd.Series([found_category, matched_keyword])
+
+    df[['Classification', 'Matched Keyword']] = df.apply(categorize_strings, axis = 1)
     return df
 
 def recalibrate_amounts(df_in):
