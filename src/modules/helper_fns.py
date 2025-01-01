@@ -7,12 +7,15 @@ import ruptures as rpt
 import json
 from datetime import datetime, timezone
 
+import ipywidgets as widgets
+from IPython.display import display
+
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 from plotly.colors import qualitative
 
-from scipy.ndimage import gaussian_filter1d
+# from scipy.ndimage import gaussian_filter1d
 
 def __extract_month(input_string):
     months = '|'.join(f'.*{m}.*' for m in calendar.month_abbr[1:])
@@ -93,13 +96,19 @@ def __linearize_segments(numeric_time, y, change_points, min_segment_size=2):
             segments.append((start, end, coeffs, r2))
     return segments
 
-def update_json(imported_json, updated_entries):
-    for update_category, update_keyword_patterns in updated_entries['categories'].items():
+def update_json(imported_json, candidate_word_updates):
+    for candidate_pattern in candidate_word_updates:
+        update_category = candidate_pattern["category"]
         current_category_patterns = imported_json['categories'][update_category]['patterns']
         current_keyword_list = [x['terms'] for x in current_category_patterns]
-        for update_keyword_term in update_keyword_patterns:
-            if update_keyword_term['terms'] not in current_keyword_list:
-                current_category_patterns.extend(update_keyword_term)
+        print(f"update_keyword_term: {candidate_pattern}")
+        print(f"current_keyword_list: {current_keyword_list}")
+        if candidate_pattern['terms'] not in current_keyword_list:
+            print("found!")
+            filtered_keyword_term = {k: v for k, v in candidate_pattern.items() if k not in ['index', 'category']}
+            current_category_patterns.append(filtered_keyword_term)
+        print(f"new: {imported_json['categories'][update_category]['patterns']}")
+    return imported_json
 
 def export_json(updated_json):
     json_file_path = '../../cached_data/databank.json'
@@ -117,17 +126,34 @@ def import_json():
     with open('../../cached_data/databank.json', 'r') as file:
         return json.load(file)
 
-def add_entry_to_json(entry:list, category:str, json_dict:dict):
-    current_category_patterns = json_dict.setdefault('categories', {}).setdefault(category, {}).setdefault('patterns',[])
-    current_keyword_list = [x['terms'] for x in current_category_patterns]
-    if not any(entry == keyword for keyword in current_keyword_list):
+def add_entry_to_json(index_classifier:int, entry:list, category:str, candidate_cache:list):
+    print(f"candidate_cache: {candidate_cache}")
+    # current_keyword_list = [x['terms'] for x in candidate_cache]
+    # print(f"current_keyword_list: {current_keyword_list}")
+    locate_next_matching_dict = any(d.get('terms') == entry and d.get('category') == category for d in candidate_cache)
+    # next(keyword == entry for keyword in current_keyword_list)
+    print(f"locate_next_matching_dict: {locate_next_matching_dict}")
+    if locate_next_matching_dict is not None:
         current_time = datetime.now(timezone.utc)
         iso_time = current_time.isoformat(timespec='microseconds').replace('+00:00', 'Z')
-        current_category_patterns.append({
+        for candidate_word_update in candidate_cache:
+            if candidate_word_update.get("index") == index_classifier:
+                candidate_word_update.update({
+                    "terms": entry,
+                    "dateAdded": iso_time,
+                    "lastUpdated": iso_time,
+                    "index": index_classifier,
+                    "category": category
+                })
+            return
+        candidate_cache.append({
             "terms": entry,
             "dateAdded": iso_time,
             "lastUpdated": iso_time,
+            "index": index_classifier,
+            "category": category
         })
+        return
     else:
         print(f"Entry '{entry}' already exists in category '{category}', skipping.")
 
@@ -262,3 +288,172 @@ def plot_stacked(df_in):
     )
 
     fig.show()
+
+
+class CategoryUpdater:
+    def __init__(self, df, categories, json_file_path, words_col='Processed Details', categories_col='Classification', matched_words_col='Matched Keyword'):
+        self.df = df.copy()
+        self.categories = import_json().get('categories')
+        self.json_file_path = json_file_path
+        self.words_col = words_col
+        self.categories_col = categories_col
+        self.matched_words_col = matched_words_col
+        self.current_row = 0
+        self.filtered_df = self.df.copy()
+        self.candidate_cache_for_updates = []
+        self.local_match_entry = None
+        self.setup_widgets()
+        
+    def setup_widgets(self):
+        self.keyword_options_from_json = widgets.SelectMultiple(
+            options=[],
+            description='Words:',
+            disabled=False
+        )
+        
+        self.matched_words_text = widgets.Textarea(
+            description='Matched Words:',
+            disabled=False,
+            layout=widgets.Layout(width='300px', height='100px')
+        )
+        
+        self.category_select = widgets.Dropdown(
+            options=list(self.categories.keys()),
+            description='Category:',
+            disabled=False,
+        )
+        self.category_select.observe(self.on_category_change, names='value')
+        
+        self.filter_select = widgets.Dropdown(
+            options=['All'] + list(self.categories.keys()),
+            description='Filter:',
+            value='All'
+        )
+        self.filter_select.observe(self.on_filter_change, names='value')
+        
+        self.prev_button = widgets.Button(description="Previous")
+        self.prev_button.on_click(self.prev_row)
+        
+        self.next_button = widgets.Button(description="Next")
+        self.next_button.on_click(self.next_row)
+        
+        self.save_button_local = widgets.Button(description="Save changes to local")
+        self.save_button_local.on_click(self.update_local_df)
+        
+        self.push_to_json_button = widgets.Button(description="Push changes to json")
+        self.push_to_json_button.on_click(self.push_to_json)
+        
+        self.status_label = widgets.Label(value="")
+        
+        display(self.filter_select, self.keyword_options_from_json, self.category_select, self.matched_words_text, widgets.HBox([self.save_button_local, self.push_to_json_button]),
+                widgets.HBox([self.prev_button, self.next_button]), self.status_label)
+        self.load_current_row()
+    
+    def update_local_df(self, b):
+        """Save the edited matched words to a JSON file."""
+        print(self.keyword_options_from_json.options)
+        print(self.matched_words_text.value)
+
+        match_words_entered_textbox = [word.strip() for word in re.split(r'[,\s]+', self.matched_words_text.value)]
+        original_index_prior_to_filter = self.filtered_df.index[self.current_row]
+
+        keyword_options = [s.lower() for s in self.keyword_options_from_json.options]
+
+        print(keyword_options)
+        print(match_words_entered_textbox)
+
+        if all(any(entered_match.lower() in keyword_option for keyword_option in keyword_options) for entered_match in match_words_entered_textbox):
+            if all(word != '' for word in match_words_entered_textbox):
+                self.filtered_df.loc[original_index_prior_to_filter, self.matched_words_col] = self.matched_words_text.value
+                
+                add_entry_to_json(original_index_prior_to_filter, match_words_entered_textbox, self.category_select.value, self.candidate_cache_for_updates)
+                
+                print(self.candidate_cache_for_updates)
+
+                self.status_label.value = f"Saved '{self.matched_words_text.value}' under '{self.category_select.value}' to row {original_index_prior_to_filter} of dataframe (not yet pushed to JSON)."
+            else:
+                self.status_label.value = f"{match_words_entered_textbox} is an invalid entry, cannot be empty, please try another entry."
+        else:
+            self.status_label.value = f"{match_words_entered_textbox} is an invalid entry, unable to locate substring for match in above word associations, please try another entry."
+
+
+    def load_current_row(self, retain_word_entry=False):
+        # if not retain_word_entry:
+        #     self.local_match_entry = None
+        if 0 <= self.current_row < len(self.filtered_df):
+            words = self.filtered_df.iloc[self.current_row][self.words_col]
+            category = self.filtered_df.iloc[self.current_row][self.categories_col]
+            matched_words = self.filtered_df.iloc[self.current_row][self.matched_words_col]
+            # print(matched_words)
+            self.keyword_options_from_json.options = words
+            if not retain_word_entry:
+                if matched_words is None: matched_words = ''
+                self.matched_words_text.value = matched_words
+            self.category_select.value = category
+            original_index = self.filtered_df.index[self.current_row]
+            self.status_label.value = f"Row {original_index + 1} of {len(self.df)} - Current category: {category}"
+            
+            self.prev_button.disabled = (self.current_row == 0)
+            self.next_button.disabled = (self.current_row == len(self.filtered_df) - 1)
+        else:
+            self.status_label.value = "No rows to display"
+            self.prev_button.disabled = True
+            self.next_button.disabled = True
+        
+    def on_category_change(self, change):
+        if change['type'] == 'change' and change['name'] == 'value':
+            new_category = change['new']
+            original_index = self.filtered_df.index[self.current_row]
+            old_category = self.df.at[original_index, self.categories_col]
+            
+            if new_category != old_category:
+                self.df.at[original_index, self.categories_col] = new_category
+                self.filtered_df.at[original_index, self.categories_col] = new_category
+                
+                # Update JSON file
+                words = self.df.iloc[original_index][self.words_col]
+                # self.update_json_category(words, old_category, new_category)
+                
+                print(f"Updated row {original_index + 1} to category: {new_category}")
+                self.load_current_row(retain_word_entry=True)  # Refresh the display
+        
+    # def update_json_category(self, words, old_category, new_category):
+    #     # Remove words from old category
+    #     if old_category in self.categories:
+    #         self.categories[old_category] = [word for word in self.categories[old_category] if word not in words]
+        
+    #     # Add words to new category
+    #     if new_category not in self.categories:
+    #         self.categories[new_category] = []
+    #     self.categories[new_category].extend([word for word in words if word not in self.categories[new_category]])
+        
+    def push_to_json(self, new_updates):
+
+        new_categories = self.candidate_cache_for_updates
+        print(f"cache_to_update: {new_categories}")
+
+        # Update new entries per category as per new_updates in imported_categories
+        updated_json = update_json(self.categories, new_categories)
+        print(f"updated_json: {updated_json}")
+
+        # Save updated categories to JSON file
+        with open(self.json_file_path, 'w') as file:
+            json.dump(updated_json, file, indent=2)
+        
+    def on_filter_change(self, change):
+        if change['type'] == 'change' and change['name'] == 'value':
+            filter_category = change['new']
+            if filter_category == 'All':
+                self.filtered_df = self.df.copy()
+            else:
+                self.filtered_df = self.df[self.df[self.categories_col] == filter_category].copy()
+            self.current_row = 0
+            self.load_current_row()
+        
+    def prev_row(self, b):
+        self.current_row = max(0, self.current_row - 1)
+        self.load_current_row()
+        
+    def next_row(self, b):
+        self.current_row = min(len(self.filtered_df) - 1, self.current_row + 1)
+        self.load_current_row()
