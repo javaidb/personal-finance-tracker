@@ -55,6 +55,13 @@ pip install -r requirements.txt
 
 Once prior steps are completed, simply navigate to finance-tracker notebook and hit 'run all'.
 
+## Contributors and Dependencies
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b9d234cc-f426-4833-b7fd-93ae682f0176" alt="Scotiabank Logo" width="200" />
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://github.com/user-attachments/assets/fd9c0f77-868c-4fdb-a53d-ba6344781b4e" width="120" />
+</p>
+
 ## Authors
 
 - [@javaidb](https://www.github.com/javaidb)
