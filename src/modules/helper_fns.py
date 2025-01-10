@@ -6,9 +6,10 @@ import numpy as np
 import ruptures as rpt
 import json
 from datetime import datetime, timezone
+import logging
 
 import ipywidgets as widgets
-from IPython.display import display
+from IPython.display import display, clear_output
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -269,10 +270,11 @@ class GeneralHelperFns:
         fig.show()
         return
 
-    def plot_stacked(self, df_in):
+    def plot_stacked(self, df_in, timeframe = 'month'):
         df = df_in.copy()
-        timeframe = 'Month'
-        df[timeframe] = pd.to_datetime(df['DateTime']).dt.to_period('M').astype(str)
+        if timeframe.lower() == 'year': letter_class = 'Y'
+        elif timeframe.lower() == 'month': letter_class = 'M'
+        df[timeframe] = pd.to_datetime(df['DateTime']).dt.to_period(letter_class).astype(str)
 
         monthly_expenditure = df.groupby([timeframe, 'Classification'])['Amount'].sum().reset_index()
         
@@ -287,7 +289,7 @@ class GeneralHelperFns:
                     color='Classification',
                     color_discrete_map=color_map,
                     category_orders={'Classification': unique_values},
-                    title='Monthly Expenditure by Category',
+                    title=f'{timeframe.capitalize()}ly Expenditure by Category',
                     labels={'Amount': 'Total Expenditure', timeframe: timeframe},
                     barmode='stack')
 
@@ -299,19 +301,32 @@ class GeneralHelperFns:
             bargap=0.1
         )
 
+        fig.update_yaxes(nticks=15)
+
         fig.show()
 
+class OutputWidgetHandler(logging.Handler):
+    def __init__(self, output_widget):
+        super(OutputWidgetHandler, self).__init__()
+        self.output_widget = output_widget
+
+    def emit(self, record):
+        """ Overload of logging.Handler method """
+        with self.output_widget:
+            formatted_record = self.format(record)
+            print(formatted_record)
 
 class CategoryUpdater(GeneralHelperFns):
-    def __init__(self, df, debug=False, words_col='Processed Details', categories_col='Classification', matched_words_col='Matched Keyword'):
-        self.df = df.copy()
+    def __init__(self, statement_reader_handler, debug=False, words_col='Processed Details', categories_col='Classification', matched_words_col='Matched Keyword'):
+        self.reprocess_fn = statement_reader_handler.process_raw_df
+        self.pristine_df = statement_reader_handler.filtered_df.copy()
         self.debug = debug
         self.categories = self.import_json().get('categories')
         self.words_col = words_col
         self.categories_col = categories_col
         self.matched_words_col = matched_words_col
         self.current_row = 0
-        self.filtered_df = self.df.copy()
+        self.local_df = self.pristine_df.copy()
         self.candidate_cache_for_updates = []
         self.update_pie_chart(setup=True)
         self.setup_widgets()
@@ -360,7 +375,7 @@ class CategoryUpdater(GeneralHelperFns):
         ))
         self.save_button_local.on_click(self.update_local_df)
         
-        self.push_to_json_button = widgets.Button(
+        self.update_everything_button = widgets.Button(
             description=" (JSON)",
             icon='arrow-up',
             layout=widgets.Layout(width='auto', height='auto'),
@@ -368,7 +383,7 @@ class CategoryUpdater(GeneralHelperFns):
                 button_color='#E0E0E0',
                 font_weight='normal'
         ))
-        self.push_to_json_button.on_click(self.push_to_json)
+        self.update_everything_button.on_click(self.update_everything)
         
         self.status_label = widgets.Label(value="")
         
@@ -379,30 +394,56 @@ class CategoryUpdater(GeneralHelperFns):
         user_entry_content = widgets.VBox([
             self.filter_select, self.keyword_options_from_json, self.category_select, self.matched_words_text,
             widgets.HBox([self.prev_button, self.next_button, self.save_button_local]), 
-            widgets.HBox([self.push_to_json_button]),
+            widgets.HBox([self.update_everything_button]),
             self.status_label
         ])
 
-        all_content = widgets.HBox([user_entry_content, self.fig])
-        
+        self.out = widgets.Output()
+
+        self.setup_logging()
+
+        all_content = widgets.VBox([
+            widgets.HBox([
+                user_entry_content, 
+                self.fig
+            ]),
+            self.out
+        ])
         display(all_content)
+
         self.load_current_row()
+
+    def setup_logging(self):
+        """ Set up the logger to write to the output widget """
+        self.logger = logging.getLogger(__name__)
+        handler = OutputWidgetHandler(self.out)
+        handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] %(message)s'))
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.INFO)
+
+    def log_message(self, message):
+        """ Log a message """
+        self.logger.info(message)
+
+    def clear_logs(self):
+        """ Clear the logs in the output widget """
+        self.out.clear_output()
 
     def update_local_df(self, b):
         """Save the edited matched words to a JSON file."""
 
         match_words_entered_textbox = [word.strip() for word in re.split(r'[,\s]+', self.matched_words_text.value)]
-        original_index_prior_to_filter = self.filtered_df.index[self.current_row]
+        original_index_prior_to_filter = self.local_df.index[self.current_row]
 
         keyword_options = [s.lower() for s in self.keyword_options_from_json.options]
 
         if self.debug:
-            print(f"keyword_options: {keyword_options}")
-            print(f"match_words_entered_textbox: {match_words_entered_textbox}")
+            self.log_message(f"keyword_options: {keyword_options}")
+            self.log_message(f"match_words_entered_textbox: {match_words_entered_textbox}")
 
         if all(any(entered_match.lower() in keyword_option for keyword_option in keyword_options) for entered_match in match_words_entered_textbox):
             if all(word != '' for word in match_words_entered_textbox):
-                self.filtered_df.loc[original_index_prior_to_filter, self.matched_words_col] = self.matched_words_text.value
+                self.local_df.loc[original_index_prior_to_filter, self.matched_words_col] = self.matched_words_text.value
                 
                 self.add_entry_to_json(original_index_prior_to_filter, match_words_entered_textbox, self.category_select.value, self.candidate_cache_for_updates, self.debug)
                 
@@ -416,9 +457,9 @@ class CategoryUpdater(GeneralHelperFns):
     
     def update_pie_chart(self, setup=False):
         
-        status_counts = self.df['Classification'].value_counts(dropna=False)
+        status_counts = self.pristine_df['Classification'].value_counts(dropna=False)
         none_count = status_counts.get('uncharacterized', 0)
-        other_count = len(self.df) - none_count
+        other_count = len(self.pristine_df) - none_count
         
         labels = ['Uncharacterized', 'Characterized']
         values = [none_count, other_count]
@@ -448,21 +489,21 @@ class CategoryUpdater(GeneralHelperFns):
             self.fig.data[0].values = values
 
     def load_current_row(self, retain_word_entry=False):
-        if 0 <= self.current_row < len(self.filtered_df):
-            words = self.filtered_df.iloc[self.current_row][self.words_col]
-            category = self.filtered_df.iloc[self.current_row][self.categories_col]
-            matched_words = self.filtered_df.iloc[self.current_row][self.matched_words_col]
+        if 0 <= self.current_row < len(self.local_df):
+            words = self.local_df.iloc[self.current_row][self.words_col]
+            category = self.local_df.iloc[self.current_row][self.categories_col]
+            matched_words = self.local_df.iloc[self.current_row][self.matched_words_col]
             # print(matched_words)
             self.keyword_options_from_json.options = words
             if not retain_word_entry:
                 if matched_words is None: matched_words = ''
                 self.matched_words_text.value = matched_words
             self.category_select.value = category
-            original_index = self.filtered_df.index[self.current_row]
-            self.status_label.value = f"Row {original_index + 1} of {len(self.df)} - Current category: {category}"
+            original_index = self.local_df.index[self.current_row]
+            self.status_label.value = f"Row {original_index + 1} of {len(self.pristine_df)} - Current category: {category}"
             
             self.prev_button.disabled = (self.current_row == 0)
-            self.next_button.disabled = (self.current_row == len(self.filtered_df) - 1)
+            self.next_button.disabled = (self.current_row == len(self.local_df) - 1)
         else:
             self.status_label.value = "No rows to display"
             self.prev_button.disabled = True
@@ -473,41 +514,64 @@ class CategoryUpdater(GeneralHelperFns):
     def on_category_change(self, change):
         if change['type'] == 'change' and change['name'] == 'value':
             new_category = change['new']
-            original_index = self.filtered_df.index[self.current_row]
-            old_category = self.df.at[original_index, self.categories_col]
+            original_index = self.local_df.index[self.current_row]
+            old_category = self.pristine_df.at[original_index, self.categories_col]
             
             if new_category != old_category:
-                self.df.at[original_index, self.categories_col] = new_category
-                self.filtered_df.at[original_index, self.categories_col] = new_category
+                self.pristine_df.at[original_index, self.categories_col] = new_category
+                self.local_df.at[original_index, self.categories_col] = new_category
                 
                 ## Update JSON file
                 # words = self.df.iloc[original_index][self.words_col]
                 # self.update_json_category(words, old_category, new_category)
                 
-                print(f"Updated row {original_index + 1} to category: {new_category}")
+                self.log_message(f"Updated row {original_index + 1} to category: {new_category}")
                 self.load_current_row(retain_word_entry=True)
-        
-    def push_to_json(self, new_updates):
+
+    def push_to_json(self):
+
+        self.clear_logs()
 
         new_categories = self.candidate_cache_for_updates
 
         # Update new entries per category as per new_updates in imported_categories
         updated_json = self.update_json(self.categories, new_categories, self.debug)
         if self.debug:
-            print(f"cache_to_update: {new_categories}")
-            print(f"updated_json: {updated_json}")
+            self.log_message(f"cache_to_update: {new_categories}")
+            self.log_message(f"updated_json: {updated_json}")
 
         # Save updated categories to JSON file
         updated_json_with_outcol = {'categories': updated_json}
         self.export_json(updated_json_with_outcol, print_statement=True)
-        
+
+    def reset_windows(self, new_df):
+        # Set current row to 0
+        self.current_row = 0
+
+        # Reload local dfs
+        self.pristine_df = new_df.copy()
+        self.local_df = new_df.copy()
+
+        self.load_current_row()
+
+    def update_everything(self, new_updates):
+        # Push to JSON
+        self.push_to_json()
+
+        # Update dataframe used by jupyter nb
+        new_df = self.reprocess_fn()
+
+        # Refresh charts
+        self.reset_windows(new_df)
+        self.update_pie_chart()
+
     def on_filter_change(self, change):
         if change['type'] == 'change' and change['name'] == 'value':
             filter_category = change['new']
             if filter_category == 'All':
-                self.filtered_df = self.df.copy()
+                self.local_df = self.pristine_df.copy()
             else:
-                self.filtered_df = self.df[self.df[self.categories_col] == filter_category].copy()
+                self.local_df = self.pristine_df[self.pristine_df[self.categories_col] == filter_category].copy()
             self.current_row = 0
             self.load_current_row()
         
@@ -516,5 +580,5 @@ class CategoryUpdater(GeneralHelperFns):
         self.load_current_row()
         
     def next_row(self, b):
-        self.current_row = min(len(self.filtered_df) - 1, self.current_row + 1)
+        self.current_row = min(len(self.local_df) - 1, self.current_row + 1)
         self.load_current_row()
