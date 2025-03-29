@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Finance Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .header-section {
+            background-color: #343a40;
+            color: white;
+            padding: 60px 0;
+            margin-bottom: 30px;
+        }
+        .account-card {
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .account-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .statement-count {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        .process-btn {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-section">
+        <div class="container">
+            <h1>Personal Finance Tracker</h1>
+            <p class="lead">Process your bank statements and visualize your financial data</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Your Bank Statements</h2>
+                    </div>
+                    <div class="card-body">
+                        {% if account_types %}
+                            <form id="process-form" action="/process_statements" method="post">
+                                <div class="mb-4">
+                                    <h4>Available Account Types</h4>
+                                    <p class="text-muted">Statements found in your bank_statements directory:</p>
+                                    
+                                    {% for account_type in account_types %}
+                                        <div class="card account-card">
+                                            <div class="card-body">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="account_types" 
+                                                           value="{{ account_type }}" id="check-{{ account_type }}" checked>
+                                                    <label class="form-check-label" for="check-{{ account_type }}">
+                                                        <h5 class="mb-1">{{ account_type }}</h5>
+                                                    </label>
+                                                </div>
+                                                
+                                                {% if account_type in statement_counts %}
+                                                    <div class="ms-4 mt-2">
+                                                        <ul class="list-group">
+                                                            {% for account_name, count in statement_counts[account_type].items() %}
+                                                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                                    {{ account_name }}
+                                                                    <span class="badge bg-primary rounded-pill">{{ count }} statements</span>
+                                                                </li>
+                                                            {% endfor %}
+                                                        </ul>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-success btn-lg process-btn">
+                                        Process Bank Statements
+                                    </button>
+                                </div>
+                            </form>
+                        {% else %}
+                            <div class="alert alert-warning">
+                                <h4 class="alert-heading">No Bank Statements Found!</h4>
+                                <p>There are no bank statements in your bank_statements directory. Please add your PDF statements to:</p>
+                                <pre>/bank_statements/[account_type]/[account_name]/</pre>
+                                <p>For example: /bank_statements/Chequing/Ultimate Package/statement_jan_2023.pdf</p>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="mt-4 d-none" id="progress-container">
+                            <h5>Processing...</h5>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const processForm = document.getElementById('process-form');
+            const progressContainer = document.getElementById('progress-container');
+            
+            if (processForm) {
+                processForm.addEventListener('submit', function() {
+                    // Show progress bar
+                    progressContainer.classList.remove('d-none');
+                    
+                    // Disable submit button to prevent multiple submissions
+                    const submitBtn = this.querySelector('button[type="submit"]');
+                    if (submitBtn) {
+                        submitBtn.disabled = true;
+                        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html> 

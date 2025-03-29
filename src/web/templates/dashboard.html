@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Dashboard | Personal Finance Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .sidebar {
+            background-color: #f8f9fa;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            padding-top: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 30px;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .nav-link {
+            color: #495057;
+            border-radius: 0;
+            padding: 10px 15px;
+        }
+        .nav-link.active {
+            background-color: #e9ecef;
+            font-weight: bold;
+        }
+        .dashboard-header {
+            background-color: #343a40;
+            color: white;
+            padding: 20px 0;
+            margin-bottom: 20px;
+        }
+        .category-badge {
+            font-size: 0.9rem;
+            margin: 3px;
+            padding: 5px 10px;
+        }
+        .stats-card {
+            background-color: #f8f9fa;
+            border-left: 4px solid #0d6efd;
+            padding: 15px;
+            border-radius: 5px;
+            transition: transform 0.3s ease;
+        }
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                <div class="position-sticky">
+                    <h4 class="p-3">Finance Tracker</h4>
+                    <hr>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#overview">Overview</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#transactions">Transactions</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#categories">Categories</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#trends">Trends</a>
+                        </li>
+                    </ul>
+                    <hr>
+                    <div class="p-3">
+                        <a href="/" class="btn btn-outline-secondary btn-sm w-100">Back to Home</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main content -->
+            <div class="col-md-9 col-lg-10 ms-sm-auto px-md-4">
+                <div class="dashboard-header">
+                    <div class="container">
+                        <h1>Finance Dashboard</h1>
+                        <p>View and analyze your financial data</p>
+                    </div>
+                </div>
+
+                <!-- Overview Section -->
+                <section id="overview" class="mb-5">
+                    <h2>Overview</h2>
+                    <div id="status-message"></div>
+
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Balance Over Time</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <canvas id="balanceChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Spending by Category</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <canvas id="categoryChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Transactions Section -->
+                <section id="transactions" class="mb-5">
+                    <h2>Recent Transactions</h2>
+                    <div class="card mt-4">
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Description</th>
+                                            <th>Amount</th>
+                                            <th>Category</th>
+                                            <th>Account</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="transactions-table-body">
+                                        <tr>
+                                            <td colspan="5" class="text-center">Loading transactions...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Categories Section -->
+                <section id="categories" class="mb-5">
+                    <h2>Spending Categories</h2>
+                    <div class="card mt-4">
+                        <div class="card-body">
+                            <div id="categories-container" class="d-flex flex-wrap">
+                                <p class="text-center w-100">Loading categories...</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Trends Section -->
+                <section id="trends" class="mb-5">
+                    <h2>Spending Trends</h2>
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5>Monthly Spending Trends</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="trendsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set a loading message
+            document.getElementById('status-message').innerHTML = `
+                <div class="alert alert-info">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border spinner-border-sm me-2" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <div>
+                            Loading your financial data...
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Load data
+            fetchBalanceChart()
+                .then(() => {
+                    // After balance chart loads, load transactions and categories
+                    return Promise.all([
+                        fetchTransactions(),
+                        fetchCategories()
+                    ]);
+                })
+                .then(() => {
+                    // When all data is loaded, update the status message
+                    document.getElementById('status-message').innerHTML = `
+                        <div class="alert alert-success">
+                            <div class="d-flex align-items-center">
+                                <div>
+                                    <strong>Data loaded successfully!</strong> Your financial data has been loaded from your bank statements.
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                })
+                .catch(error => {
+                    console.error('Error loading data:', error);
+                    document.getElementById('status-message').innerHTML = `
+                        <div class="alert alert-danger">
+                            <div class="d-flex align-items-center">
+                                <div>
+                                    <strong>Error!</strong> Failed to load financial data: ${error.message}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            
+            // Navigation highlight
+            const navLinks = document.querySelectorAll('.nav-link');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    navLinks.forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+        });
+        
+        async function fetchBalanceChart() {
+            try {
+                const response = await fetch('/api/balance_chart');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch balance data');
+                }
+                
+                const data = await response.json();
+                renderBalanceChart(data);
+                
+                // For demo, also render a placeholder category chart
+                renderCategoryChart();
+                renderTrendsChart();
+                
+                return true;
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('balanceChart').parentNode.innerHTML = 
+                    '<div class="alert alert-danger">Failed to load balance chart</div>';
+                throw error;
+            }
+        }
+        
+        function renderBalanceChart(data) {
+            const ctx = document.getElementById('balanceChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: data.datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            },
+                            ticks: {
+                                maxTicksLimit: 10
+                            }
+                        },
+                        y: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Balance'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderCategoryChart() {
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Groceries', 'Dining', 'Transport', 'Shopping', 'Bills', 'Other'],
+                    datasets: [{
+                        data: [25, 20, 15, 10, 20, 10],
+                        backgroundColor: [
+                            '#4CAF50', '#FFC107', '#2196F3', '#9C27B0', '#F44336', '#607D8B'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderTrendsChart() {
+            const ctx = document.getElementById('trendsChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'Monthly Spending',
+                        data: [1200, 1900, 1500, 1700, 1600, 1800],
+                        backgroundColor: '#2196F3'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        async function fetchTransactions() {
+            try {
+                const response = await fetch('/api/transactions');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch transactions');
+                }
+                
+                const transactions = await response.json();
+                renderTransactionsTable(transactions);
+                return true;
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('transactions-table-body').innerHTML = 
+                    '<tr><td colspan="5" class="text-center text-danger">Failed to load transactions</td></tr>';
+                throw error;
+            }
+        }
+        
+        function renderTransactionsTable(transactions) {
+            const tableBody = document.getElementById('transactions-table-body');
+            tableBody.innerHTML = '';
+            
+            if (transactions.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No transactions found</td></tr>';
+                return;
+            }
+            
+            transactions.forEach(transaction => {
+                const row = document.createElement('tr');
+                
+                // Format date - extract from DateTime field
+                const date = transaction.DateTime ? new Date(transaction.DateTime).toLocaleDateString() : 'N/A';
+                
+                // Fix the account name reference to handle different property names
+                const accountName = transaction.Account_Name || transaction['Account Name'] || 'N/A';
+                
+                row.innerHTML = `
+                    <td>${date}</td>
+                    <td>${transaction.Details || 'N/A'}</td>
+                    <td class="${transaction.Amount < 0 ? 'text-danger' : 'text-success'}">
+                        ${transaction.Amount ? transaction.Amount.toFixed(2) : 'N/A'}
+                    </td>
+                    <td><span class="badge bg-secondary">${transaction.Classification || 'Uncategorized'}</span></td>
+                    <td>${accountName}</td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+        
+        async function fetchCategories() {
+            try {
+                const response = await fetch('/api/categories');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch categories');
+                }
+                
+                const categories = await response.json();
+                renderCategories(categories);
+                return true;
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('categories-container').innerHTML = 
+                    '<div class="alert alert-danger w-100">Failed to load categories</div>';
+                throw error;
+            }
+        }
+        
+        function renderCategories(categories) {
+            const container = document.getElementById('categories-container');
+            container.innerHTML = '';
+            
+            if (Object.keys(categories).length === 0) {
+                container.innerHTML = '<p class="text-center w-100">No categories found</p>';
+                return;
+            }
+            
+            // Colors for different categories
+            const colors = ['primary', 'success', 'danger', 'warning', 'info', 'secondary', 'dark'];
+            
+            let index = 0;
+            for (const category in categories) {
+                const badge = document.createElement('div');
+                badge.className = `badge bg-${colors[index % colors.length]} category-badge`;
+                badge.innerHTML = `${category}: ${categories[category]}`;
+                
+                container.appendChild(badge);
+                index++;
+            }
+        }
+    </script>
+</body>
+</html> 
