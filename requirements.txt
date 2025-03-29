@@ -6,3 +6,5 @@ ipykernel
 jupyter
 tqdm
 ruptures
+flask==2.3.3
+werkzeug==2.3.7
