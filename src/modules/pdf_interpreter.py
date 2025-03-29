@@ -1,17 +1,27 @@
 import pdfplumber
 import re
 import pandas as pd
-from tqdm.notebook import tqdm_notebook
+from tqdm import tqdm
 import json
 import os
 
 from src.modules.helper_fns import GeneralHelperFns
-from src.config import config
+
+# Try to import config, but don't fail if it doesn't exist
+try:
+    from src.config import config
+except ImportError:
+    print("Warning: Could not import config, using defaults")
+    # Create a simple empty config
+    import types
+    config = types.SimpleNamespace()
+    config.rent_ranges = []
 
 class PDFReader(GeneralHelperFns):
 
-    def __init__(self):
+    def __init__(self, base_path=None):
         super().__init__()
+        self.base_path = base_path
         self.df_raw = self.generate_fin_df()
 
     def process_raw_df(self):
@@ -20,18 +30,21 @@ class PDFReader(GeneralHelperFns):
         filtered_df = self.combine_balances_across_accounts(filtered_df)
         filtered_df = self.tabulate_gap_balances(filtered_df)
         self.filtered_df = self.df_postprocessing(filtered_df)
+        return self.filtered_df
 
     def extract_features_from_pdf(self, pdf_file, x_tolerance=2, init_y_top=440, reg_y_top=210):
 
         parent_dir = os.path.dirname(pdf_file)
-        dir_before_file = parent_dir.split("/")[-2]
-        if dir_before_file in ["Chequing", "Savings"]:
+        # Fix path handling to be OS-independent
+        account_dir = os.path.basename(os.path.dirname(parent_dir))
+        
+        if account_dir in ["Chequing", "Savings"]:
             x_right = 600
             x_left = 750
             init_y_top = 400
             regular_page_box = (70, reg_y_top, x_right, x_left)
             initial_page_box = (70, init_y_top, x_right, x_left)
-        elif dir_before_file == "Credit":
+        elif account_dir == "Credit":
             x_right = 400
             x_left = 730
             reg_y_top = 100
@@ -130,9 +143,13 @@ class PDFReader(GeneralHelperFns):
             account_names = self.read_all_account_folder_names(account_type)
             for account_name in account_names:
                 pdf_files = self.read_all_files(account_type, account_name)
-                for pdf_file in tqdm_notebook(pdf_files, desc=f"Reading PDFs from '{account_name}' bucket"):
+                for pdf_file in tqdm(pdf_files, desc=f"Reading PDFs from '{account_name}' bucket"):
                     pdf_file_atts = self.grab_pdf_name_attributes(pdf_file)
-                    pdf_file_path = self.process_import_path(pdf_file, account_type, account_name)
+                    # Use base_path if provided
+                    if self.base_path:
+                        pdf_file_path = os.path.join(self.base_path, "bank_statements", account_type, account_name, pdf_file)
+                    else:
+                        pdf_file_path = self.process_import_path(pdf_file, account_type, account_name)
                     lines = self.extract_features_from_pdf(pdf_file_path, x_tolerance=2, init_y_top=440, reg_y_top=210)
                     transactions= self.process_transactions_from_lines(lines, account_type)
                     temp_df = pd.DataFrame(transactions)
@@ -323,7 +340,14 @@ class PDFReader(GeneralHelperFns):
 
         df = df_in.copy()
 
-        df = self.__identify_rent_payments(df, config.rent_ranges)
+        try:
+            from src.config import config
+            df = self.__identify_rent_payments(df, config.rent_ranges)
+        except (ImportError, AttributeError) as e:
+            print(f"Warning: Could not load rent ranges from config: {e}")
+            # Use default empty list if config not available
+            df = self.__identify_rent_payments(df, [])
+            
         df = self.__apply_custom_conditinos(df)
 
         substring_exclusion_list = ['mb credit', 'mb transfer', 'opening balance', 'closing balance']
@@ -351,9 +375,10 @@ class PDFReader(GeneralHelperFns):
     def __identify_rent_payments(self, df_in, rent_ranges):
         df = df_in.copy()
 
-        # df = df[df['Details'].apply(
-        # lambda x: any('transfer' in word for word in x.lower().split())
-        # )]
+        # If no rent_ranges provided, return unchanged DataFrame
+        if not rent_ranges:
+            return df
+
         df = df.sort_values('DateTime')
 
         df['day_of_month'] = df['DateTime'].dt.day
@@ -394,3 +419,102 @@ class PDFReader(GeneralHelperFns):
         df['Amount'] = df['Amount'].where(df['Transaction Type'] != 'Withdrawal', df['Amount'].abs() * -1)
         df['Amount'] = df['Amount'].where(df['Transaction Type'] != 'Deposit', df['Amount'].abs())
         return df
+
+    def import_json(self):
+        if hasattr(self, 'base_path') and self.base_path:
+            json_file_path = os.path.join(self.base_path, "cached_data", "databank.json")
+        else:
+            # Use os.path.join for OS-independence
+            json_file_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'databank.json')
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(json_file_path), exist_ok=True)
+        
+        # Create a default databank.json if it doesn't exist
+        if not os.path.exists(json_file_path):
+            default_categories = {
+                "categories": {
+                    "Groceries": {
+                        "totalMatches": 0,
+                        "patterns": [
+                            {
+                                "terms": ["grocery"],
+                                "dateAdded": "2023-01-01T00:00:00.000000Z",
+                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
+                                "matchCount": 0
+                            }
+                        ]
+                    },
+                    "Dining": {
+                        "totalMatches": 0,
+                        "patterns": [
+                            {
+                                "terms": ["restaurant"],
+                                "dateAdded": "2023-01-01T00:00:00.000000Z",
+                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
+                                "matchCount": 0
+                            }
+                        ]
+                    },
+                    "Transport": {
+                        "totalMatches": 0,
+                        "patterns": [
+                            {
+                                "terms": ["gas", "fuel"],
+                                "dateAdded": "2023-01-01T00:00:00.000000Z",
+                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
+                                "matchCount": 0
+                            }
+                        ]
+                    },
+                    "Bills": {
+                        "totalMatches": 0,
+                        "patterns": [
+                            {
+                                "terms": ["bill", "utility"],
+                                "dateAdded": "2023-01-01T00:00:00.000000Z",
+                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
+                                "matchCount": 0
+                            }
+                        ]
+                    },
+                    "Rent": {
+                        "totalMatches": 0,
+                        "patterns": [
+                            {
+                                "terms": ["rent"],
+                                "dateAdded": "2023-01-01T00:00:00.000000Z",
+                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
+                                "matchCount": 0
+                            }
+                        ]
+                    }
+                }
+            }
+            with open(json_file_path, 'w') as json_file:
+                json.dump(default_categories, json_file, indent=2)
+                print(f"Created default databank.json at '{json_file_path}'.")
+        
+        with open(json_file_path, 'r') as file:
+            return json.load(file)
+
+    def export_json(self, updated_json, print_statement=False):
+        if hasattr(self, 'base_path') and self.base_path:
+            json_file_path = os.path.join(self.base_path, "cached_data", "databank.json")
+        else:
+            # Use os.path.join for OS-independence
+            json_file_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'databank.json')
+        
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(json_file_path), exist_ok=True)
+            
+        with open(json_file_path, 'w') as json_file:
+            json.dump(updated_json, json_file, indent=2)
+        if print_statement: print(f"Exported updated JSON to '{json_file_path}'.")
+
+    def reset_json_matches(self, imported_json):
+        for category, keyword_patterns in imported_json.items():
+            imported_json[category]['totalMatches'] = 0
+            for pattern_ind, _ in enumerate(keyword_patterns.get('patterns')):
+                imported_json[category]['patterns'][pattern_ind]['matchCount'] = 0
+        return imported_json
