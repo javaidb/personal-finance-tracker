@@ -6,6 +6,7 @@
     <title>Finance Dashboard | Personal Finance Tracker</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
         .sidebar {
             background-color: #f8f9fa;
@@ -179,6 +180,33 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- PELT Trend Analysis -->
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5>Balance Trend Analysis (PELT Algorithm)</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">
+                                This chart uses the PELT algorithm to detect significant changes in your balance trend. Vertical lines indicate breakpoints between different financial periods.
+                            </p>
+                            <div class="chart-container">
+                                <canvas id="peltChart"></canvas>
+                            </div>
+                            <div class="mt-4">
+                                <h6>Rate of Change Analysis</h6>
+                                <div class="chart-container">
+                                    <canvas id="rateOfChangeChart"></canvas>
+                                </div>
+                                <div class="mt-3">
+                                    <small class="text-muted">
+                                        <span class="badge bg-success me-1">Green</span> Positive rate (increasing balance)
+                                        <span class="badge bg-danger ms-3 me-1">Red</span> Negative rate (decreasing balance)
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </section>
             </div>
         </div>
@@ -206,7 +234,8 @@
                     // After balance chart loads, load transactions and categories
                     return Promise.all([
                         fetchTransactions(),
-                        fetchCategories()
+                        fetchCategories(),
+                        fetchPeltAnalysis()
                     ]);
                 })
                 .then(() => {
@@ -248,21 +277,34 @@
             try {
                 const response = await fetch('/api/balance_chart');
                 if (!response.ok) {
-                    throw new Error('Failed to fetch balance data');
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                
                 const data = await response.json();
                 renderBalanceChart(data);
                 
-                // For demo, also render a placeholder category chart
-                renderCategoryChart();
+                // Also render other charts with placeholders until real data arrives
+                renderCategoryChart(null); // Initially render with placeholder data
                 renderTrendsChart();
                 
-                return true;
+                return data;
             } catch (error) {
-                console.error('Error:', error);
-                document.getElementById('balanceChart').parentNode.innerHTML = 
-                    '<div class="alert alert-danger">Failed to load balance chart</div>';
+                console.error('Error fetching balance chart data:', error);
+                throw error;
+            }
+        }
+        
+        async function fetchPeltAnalysis() {
+            try {
+                const response = await fetch('/api/pelt_analysis');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                renderPeltChart(data);
+                renderRateOfChangeChart(data.rateOfChange);
+                return data;
+            } catch (error) {
+                console.error('Error fetching PELT analysis data:', error);
                 throw error;
             }
         }
@@ -301,17 +343,56 @@
             });
         }
         
-        function renderCategoryChart() {
+        function renderCategoryChart(categoryData) {
             const ctx = document.getElementById('categoryChart').getContext('2d');
+            
+            // If we already have a chart, destroy it to prevent duplicates
+            const existingChart = Chart.getChart(ctx.canvas);
+            if (existingChart) {
+                existingChart.destroy();
+            }
+            
+            // If no real data yet, show placeholder
+            if (!categoryData) {
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Loading...'],
+                        datasets: [{
+                            data: [1],
+                            backgroundColor: ['#cccccc']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right'
+                            }
+                        }
+                    }
+                });
+                return;
+            }
+            
+            // Convert category data to arrays for Chart.js
+            const labels = Object.keys(categoryData);
+            const data = Object.values(categoryData);
+            
+            // Define colors for different categories
+            const colors = [
+                '#4CAF50', '#FFC107', '#2196F3', '#9C27B0', '#F44336', '#607D8B',
+                '#FF9800', '#795548', '#00BCD4', '#009688', '#E91E63', '#673AB7'
+            ];
+            
             new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Groceries', 'Dining', 'Transport', 'Shopping', 'Bills', 'Other'],
+                    labels: labels,
                     datasets: [{
-                        data: [25, 20, 15, 10, 20, 10],
-                        backgroundColor: [
-                            '#4CAF50', '#FFC107', '#2196F3', '#9C27B0', '#F44336', '#607D8B'
-                        ]
+                        data: data,
+                        backgroundColor: labels.map((_, i) => colors[i % colors.length])
                     }]
                 },
                 options: {
@@ -320,6 +401,17 @@
                     plugins: {
                         legend: {
                             position: 'right'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: $${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
                         }
                     }
                 }
@@ -350,6 +442,183 @@
             });
         }
         
+        function renderPeltChart(data) {
+            const ctx = document.getElementById('peltChart').getContext('2d');
+            
+            // Create the chart
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: data.datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'month',
+                                displayFormats: {
+                                    month: 'MMM yyyy'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Balance'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        legend: {
+                            position: 'top'
+                        },
+                        annotation: {
+                            annotations: []
+                        }
+                    }
+                }
+            });
+            
+            // Add vertical lines for change points after chart is created
+            if (data.changePoints && data.changePoints.length > 0) {
+                // We need to use the Chart.js annotation plugin
+                // For each change point, add a vertical line annotation
+                data.changePoints.forEach((date, index) => {
+                    // Add a vertical line annotation for each change point
+                    const lineColor = 'green';
+                    
+                    // Create an HTML element for the annotation
+                    const line = document.createElement('div');
+                    line.style.position = 'absolute';
+                    line.style.width = '2px';
+                    line.style.backgroundColor = lineColor;
+                    line.style.top = '0';
+                    line.style.bottom = '0';
+                    line.style.opacity = '0.7';
+                    line.style.borderStyle = 'dashed';
+                    line.style.zIndex = '1';
+                    
+                    // Add a title attribute for tooltip
+                    line.title = `Change point: ${date}`;
+                    
+                    // Find position for the line
+                    const dateIndex = data.labels.findIndex(label => label === date);
+                    if (dateIndex !== -1) {
+                        const meta = chart.getDatasetMeta(0);
+                        if (meta.data[dateIndex]) {
+                            const x = meta.data[dateIndex].x;
+                            line.style.left = `${x}px`;
+                            chart.canvas.parentNode.appendChild(line);
+                        }
+                    }
+                });
+            }
+        }
+        
+        function renderRateOfChangeChart(rateData) {
+            const ctx = document.getElementById('rateOfChangeChart').getContext('2d');
+            
+            // Create datasets for positive and negative values
+            const positiveData = rateData.data.map(val => val > 0 ? val : null);
+            const negativeData = rateData.data.map(val => val < 0 ? val : null);
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: rateData.labels,
+                    datasets: [
+                        {
+                            label: 'Positive Rate of Change',
+                            data: positiveData,
+                            borderColor: 'rgba(40, 167, 69, 0.8)',
+                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        },
+                        {
+                            label: 'Negative Rate of Change',
+                            data: negativeData,
+                            borderColor: 'rgba(220, 53, 69, 0.8)',
+                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'month',
+                                displayFormats: {
+                                    month: 'MMM yyyy'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Weekly Rate of Change ($)'
+                            },
+                            grid: {
+                                color: function(context) {
+                                    if (context.tick.value === 0) {
+                                        return 'rgba(0, 0, 0, 0.5)';
+                                    }
+                                    return 'rgba(0, 0, 0, 0.1)';
+                                },
+                                lineWidth: function(context) {
+                                    if (context.tick.value === 0) {
+                                        return 2;
+                                    }
+                                    return 1;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    if (value === null) return null;
+                                    
+                                    const sign = value >= 0 ? '+' : '';
+                                    return `Rate of Change: ${sign}$${value.toFixed(2)}/week`;
+                                }
+                            }
+                        },
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+        
         async function fetchTransactions() {
             try {
                 const response = await fetch('/api/transactions');
@@ -372,7 +641,7 @@
             const tableBody = document.getElementById('transactions-table-body');
             tableBody.innerHTML = '';
             
-            if (transactions.length === 0) {
+            if (!transactions || transactions.length === 0) {
                 tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No transactions found</td></tr>';
                 return;
             }
@@ -381,16 +650,32 @@
                 const row = document.createElement('tr');
                 
                 // Format date - extract from DateTime field
-                const date = transaction.DateTime ? new Date(transaction.DateTime).toLocaleDateString() : 'N/A';
+                let date = 'N/A';
+                if (transaction.DateTime) {
+                    try {
+                        date = new Date(transaction.DateTime).toLocaleDateString();
+                    } catch (e) {
+                        date = 'Invalid Date';
+                    }
+                }
                 
                 // Fix the account name reference to handle different property names
                 const accountName = transaction.Account_Name || transaction['Account Name'] || 'N/A';
                 
+                // Handle possibly null or undefined values
+                const amount = transaction.Amount !== null && transaction.Amount !== undefined 
+                    ? parseFloat(transaction.Amount).toFixed(2) 
+                    : 'N/A';
+                
+                const amountClass = amount !== 'N/A' && parseFloat(amount) < 0 
+                    ? 'text-danger' 
+                    : 'text-success';
+                
                 row.innerHTML = `
                     <td>${date}</td>
                     <td>${transaction.Details || 'N/A'}</td>
-                    <td class="${transaction.Amount < 0 ? 'text-danger' : 'text-success'}">
-                        ${transaction.Amount ? transaction.Amount.toFixed(2) : 'N/A'}
+                    <td class="${amountClass}">
+                        ${amount !== 'N/A' ? '$' + amount : amount}
                     </td>
                     <td><span class="badge bg-secondary">${transaction.Classification || 'Uncategorized'}</span></td>
                     <td>${accountName}</td>
@@ -408,7 +693,8 @@
                 }
                 
                 const categories = await response.json();
-                renderCategories(categories);
+                renderCategories(categories.counts);
+                renderCategoryChart(categories.spending); // Update with real data
                 return true;
             } catch (error) {
                 console.error('Error:', error);

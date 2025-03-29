@@ -5,6 +5,7 @@ import pandas as pd
 import json
 from pathlib import Path
 import glob
+import numpy as np
 
 # Add parent directory to path so we can import our existing modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -104,8 +105,13 @@ def get_transactions():
     if processed_df is None:
         return jsonify({"error": "No data has been processed yet"}), 404
     
-    # Convert DataFrame to dict for JSON response
-    transactions = processed_df.head(100).to_dict(orient='records')
+    # Convert DataFrame to dict for JSON response, handling NaN values
+    df_copy = processed_df.head(100).copy()
+    
+    # Replace NaN values with None for JSON serialization
+    df_copy = df_copy.where(pd.notna(df_copy), None)
+    
+    transactions = df_copy.to_dict(orient='records')
     return jsonify(transactions)
 
 @app.route('/api/categories')
@@ -113,8 +119,20 @@ def get_categories():
     if processed_df is None:
         return jsonify({"error": "No data has been processed yet"}), 404
     
-    category_counts = processed_df['Classification'].value_counts().to_dict()
-    return jsonify(category_counts)
+    # Fill NaN values in Classification with 'Uncategorized'
+    df_copy = processed_df.copy()
+    df_copy['Classification'] = df_copy['Classification'].fillna('Uncategorized')
+    
+    # Count transactions by category and sum amounts (negative for expenses)
+    category_counts = df_copy['Classification'].value_counts().to_dict()
+    
+    # Calculate total spending by category (for negative amounts only - expenses)
+    category_spending = df_copy[df_copy['Amount'] < 0].groupby('Classification')['Amount'].sum().abs().to_dict()
+    
+    return jsonify({
+        "counts": category_counts,
+        "spending": category_spending
+    })
 
 @app.route('/api/balance_chart')
 def get_balance_chart():
@@ -141,6 +159,94 @@ def get_balance_chart():
     }
     
     return jsonify(chart_data)
+
+@app.route('/api/pelt_analysis')
+def get_pelt_analysis():
+    if processed_df is None or statement_reader is None:
+        return jsonify({"error": "No data has been processed yet"}), 404
+    
+    # Set PELT parameters
+    segment_settings = {
+        'penalty': 100,
+        'min_size': 50,
+        'jump': 50,
+        'model': "l2"
+    }
+    
+    # Generate the PELT analysis data
+    helper = GeneralHelperFns()
+    df = processed_df.copy()
+    df = df[df[['Balance']].notnull().all(axis=1)]
+    df['DateTime'] = pd.to_datetime(df['DateTime'])
+    df = df.sort_values(by='DateTime')
+    
+    # Calculate numeric time and change points
+    df['numeric_time'] = (df['DateTime'] - df['DateTime'].min()).dt.total_seconds()
+    
+    try:
+        change_points = helper._GeneralHelperFns__detect_change_points(
+            df['Balance'].values,
+            penalty=segment_settings['penalty'],
+            min_size=segment_settings['min_size'],
+            jump=segment_settings['jump'],
+            model=segment_settings['model']
+        )
+        
+        segments = helper._GeneralHelperFns__linearize_segments(
+            df['numeric_time'].values, 
+            df['Balance'].values, 
+            change_points
+        )
+        
+        # Prepare segment data
+        concat_y_segments = []
+        concat_coeffs = []
+        change_dates = []
+        
+        for start, end, coeffs, _ in segments:
+            segment_y_values = list(np.polyval(coeffs, df['numeric_time'][start:end]))
+            concat_y_segments.extend(segment_y_values)
+            # Convert slope to weekly rate of change for better visualization
+            weekly_change_rate = coeffs[0] * 86400 * 7  # seconds in a day * 7 days
+            concat_coeffs.extend([weekly_change_rate] * (end - start))
+        
+        # Get the dates for change points
+        for cp in change_points:
+            if cp < len(df):
+                change_dates.append(df['DateTime'].iloc[cp].strftime('%Y-%m-%d'))
+        
+        # Prepare data for chart.js, making sure all values are JSON serializable
+        pelt_data = {
+            "labels": df['DateTime'].dt.strftime('%Y-%m-%d').tolist(),
+            "datasets": [
+                {
+                    "label": "Balance",
+                    "data": [float(x) if pd.notna(x) else None for x in df['Balance'].tolist()],
+                    "borderColor": "#BB2525",
+                    "pointRadius": 2,
+                    "fill": False,
+                    "yAxisID": "y"
+                },
+                {
+                    "label": "Trend Segments",
+                    "data": [float(x) if pd.notna(x) else None for x in concat_y_segments],
+                    "borderColor": "#BCBF07",
+                    "borderWidth": 3,
+                    "pointRadius": 0,
+                    "fill": False,
+                    "yAxisID": "y"
+                }
+            ],
+            "changePoints": change_dates,
+            "rateOfChange": {
+                "labels": df['DateTime'].dt.strftime('%Y-%m-%d').tolist(),
+                "data": [float(x) if pd.notna(x) else None for x in concat_coeffs]
+            }
+        }
+        
+        return jsonify(pelt_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 
