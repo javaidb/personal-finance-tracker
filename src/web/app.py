@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import glob
 import numpy as np
+import colorsys
+import random
 
 # Add parent directory to path so we can import our existing modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -71,17 +73,42 @@ def process_statements():
         # Process statements and get the resulting DataFrame
         processed_df = statement_reader.process_raw_df()
         
+        # Ensure processed_df is not None before proceeding
+        if processed_df is None or processed_df.empty:
+            error_message = "No transactions found in the selected statements."
+            return render_template('error.html', message=error_message, show_details=False)
+        
         # Basic stats to confirm processing
         stats = {
             "total_transactions": len(processed_df),
-            "date_range": [processed_df['DateTime'].min().strftime('%Y-%m-%d'), 
-                          processed_df['DateTime'].max().strftime('%Y-%m-%d')],
-            "total_accounts": processed_df['Account Name'].nunique()
+            "date_range": ["N/A", "N/A"]  # Default values
         }
+        
+        # Safely extract date range if the DataFrame is not empty and contains DateTime column
+        if not processed_df.empty and 'DateTime' in processed_df.columns:
+            # Ensure DateTime is properly converted to datetime objects
+            processed_df['DateTime'] = pd.to_datetime(processed_df['DateTime'], errors='coerce')
+            
+            # Remove NaT values for min/max calculations
+            date_df = processed_df[pd.notna(processed_df['DateTime'])]
+            
+            if not date_df.empty:
+                stats["date_range"] = [
+                    date_df['DateTime'].min().strftime('%Y-%m-%d'),
+                    date_df['DateTime'].max().strftime('%Y-%m-%d')
+                ]
+                
+        stats["total_accounts"] = processed_df['Account Name'].nunique()
         
         return redirect(url_for('dashboard'))
     except Exception as e:
-        return render_template('error.html', message=f"Error processing statements: {str(e)}")
+        import traceback
+        error_details = traceback.format_exc()
+        error_message = f"Error processing statements: {str(e)}\n\nDetailed error:\n{error_details}"
+        print("=" * 80)
+        print(error_message)
+        print("=" * 80)
+        return render_template('error.html', message=error_message, show_details=True)
 
 @app.route('/dashboard')
 def dashboard():
@@ -93,10 +120,16 @@ def dashboard():
             statement_reader = PDFReader(base_path=Path(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))))
             processed_df = statement_reader.process_raw_df()
             
+            # Check if we have data after processing
+            if processed_df is None or processed_df.empty:
+                return render_template('error.html', message="No transaction data found. Please upload some bank statements first.", show_details=False)
+            
             # If we got here, processing succeeded
             return render_template('dashboard.html')
         except Exception as e:
-            return render_template('error.html', message=f"Could not auto-process statements: {str(e)}")
+            import traceback
+            error_details = traceback.format_exc()
+            return render_template('error.html', message=f"Could not auto-process statements: {str(e)}", show_details=True, error_details=error_details)
     
     return render_template('dashboard.html')
 
@@ -106,7 +139,17 @@ def get_transactions():
         return jsonify({"error": "No data has been processed yet"}), 404
     
     # Convert DataFrame to dict for JSON response, handling NaN values
-    df_copy = processed_df.head(100).copy()
+    df_copy = processed_df.copy()
+    
+    # Sort by date in descending order (most recent first)
+    df_copy['DateTime'] = pd.to_datetime(df_copy['DateTime'])
+    df_copy = df_copy.sort_values(by='DateTime', ascending=False)
+    
+    # Get the most recent 3 months of data instead of just 20 transactions
+    if not df_copy.empty:
+        latest_date = df_copy['DateTime'].max()
+        three_months_ago = latest_date - pd.DateOffset(months=3)
+        df_copy = df_copy[df_copy['DateTime'] >= three_months_ago]
     
     # Replace NaN values with None for JSON serialization
     df_copy = df_copy.where(pd.notna(df_copy), None)
@@ -282,27 +325,27 @@ def get_monthly_trends():
         # Prepare datasets for chart.js
         expense_datasets = []
         category_colors = {
-            'Groceries': '#4CAF50',
-            'Dining': '#FFC107',
-            'Transport': '#2196F3',
-            'Shopping': '#9C27B0',
-            'Bills': '#F44336',
-            'Entertainment': '#FF9800',
-            'Travel': '#795548',
-            'Healthcare': '#00BCD4',
-            'Education': '#009688',
-            'Housing': '#E91E63',
-            'Uncategorized': '#607D8B'
+            'Groceries': '#4CAF50',        # Green
+            'Dining': '#FF9800',           # Orange
+            'Transport': '#2196F3',        # Blue
+            'Shopping': '#9C27B0',         # Purple
+            'Bills': '#F44336',            # Red
+            'Entertainment': '#FFD700',    # Gold
+            'Travel': '#8B4513',           # Brown
+            'Healthcare': '#00BCD4',       # Cyan
+            'Education': '#3F51B5',        # Indigo
+            'Housing': '#E91E63',          # Pink
+            'Uncategorized': '#607D8B'     # Blue Grey
         }
         
         # Add any missing categories to the color map
         for cat in categories:
             if cat not in category_colors:
-                # Generate a color if not predefined
-                import random
-                r = random.randint(0, 200)
-                g = random.randint(0, 200)
-                b = random.randint(0, 200)
+                # Generate a distinct color if not predefined
+                hue = random.random()  # Use random hue
+                saturation = 0.7 + random.random() * 0.3  # High saturation
+                value = 0.7 + random.random() * 0.3  # Not too dark, not too light
+                r, g, b = [int(x * 255) for x in colorsys.hsv_to_rgb(hue, saturation, value)]
                 category_colors[cat] = f'rgb({r},{g},{b})'
         
         # Create a dataset for each category
