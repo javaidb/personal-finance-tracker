@@ -248,5 +248,123 @@ def get_pelt_analysis():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/monthly_trends')
+def get_monthly_trends():
+    if processed_df is None:
+        return jsonify({"error": "No data has been processed yet"}), 404
+    
+    try:
+        # Make a copy of the dataframe and ensure DateTime is in datetime format
+        df = processed_df.copy()
+        df['DateTime'] = pd.to_datetime(df['DateTime'])
+        
+        # Extract month and year for grouping
+        df['YearMonth'] = df['DateTime'].dt.strftime('%Y-%m')
+        
+        # Fill missing classifications
+        df['Classification'] = df['Classification'].fillna('Uncategorized')
+        
+        # Separate income (positive amounts) and expenses (negative amounts)
+        income_df = df[df['Amount'] > 0].copy()
+        expense_df = df[df['Amount'] < 0].copy()
+        expense_df['Amount'] = expense_df['Amount'].abs()  # Make expenses positive for charting
+        
+        # Aggregate monthly income (total)
+        monthly_income = income_df.groupby('YearMonth')['Amount'].sum().to_dict()
+        
+        # Aggregate monthly expenses by category
+        monthly_expenses_by_category = expense_df.groupby(['YearMonth', 'Classification'])['Amount'].sum().reset_index()
+        
+        # Convert to the format needed for stacked bar chart
+        categories = sorted(df['Classification'].unique())
+        months = sorted(df['YearMonth'].unique())
+        
+        # Prepare datasets for chart.js
+        expense_datasets = []
+        category_colors = {
+            'Groceries': '#4CAF50',
+            'Dining': '#FFC107',
+            'Transport': '#2196F3',
+            'Shopping': '#9C27B0',
+            'Bills': '#F44336',
+            'Entertainment': '#FF9800',
+            'Travel': '#795548',
+            'Healthcare': '#00BCD4',
+            'Education': '#009688',
+            'Housing': '#E91E63',
+            'Uncategorized': '#607D8B'
+        }
+        
+        # Add any missing categories to the color map
+        for cat in categories:
+            if cat not in category_colors:
+                # Generate a color if not predefined
+                import random
+                r = random.randint(0, 200)
+                g = random.randint(0, 200)
+                b = random.randint(0, 200)
+                category_colors[cat] = f'rgb({r},{g},{b})'
+        
+        # Create a dataset for each category
+        for category in categories:
+            category_data = []
+            for month in months:
+                # Find the amount for this category and month
+                amount = monthly_expenses_by_category[
+                    (monthly_expenses_by_category['YearMonth'] == month) & 
+                    (monthly_expenses_by_category['Classification'] == category)
+                ]['Amount'].sum()
+                
+                category_data.append(float(amount) if pd.notna(amount) else 0)
+            
+            expense_datasets.append({
+                'label': category,
+                'data': category_data,
+                'backgroundColor': category_colors.get(category, '#607D8B'),
+                'stack': 'expenses'
+            })
+        
+        # Create income dataset
+        income_data = [float(monthly_income.get(month, 0)) for month in months]
+        income_dataset = {
+            'label': 'Income',
+            'data': income_data,
+            'backgroundColor': 'rgba(75, 192, 192, 0.7)',
+            'stack': 'income',
+            'type': 'bar'  # This allows mixing with the stacked bars
+        }
+        
+        # Create net dataset (income - expenses)
+        total_expenses_by_month = expense_df.groupby('YearMonth')['Amount'].sum().to_dict()
+        net_data = []
+        for month in months:
+            income = monthly_income.get(month, 0)
+            expense = total_expenses_by_month.get(month, 0)
+            net = income - expense
+            net_data.append(float(net) if pd.notna(net) else 0)
+        
+        net_dataset = {
+            'label': 'Net',
+            'data': net_data,
+            'borderColor': 'rgba(54, 162, 235, 1)',
+            'backgroundColor': 'rgba(54, 162, 235, 0.2)',
+            'borderWidth': 2,
+            'type': 'line',
+            'fill': False,
+            'yAxisID': 'y'
+        }
+        
+        # All datasets including income
+        all_datasets = expense_datasets + [income_dataset, net_dataset]
+        
+        chart_data = {
+            'labels': months,
+            'datasets': all_datasets
+        }
+        
+        return jsonify(chart_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True) 
