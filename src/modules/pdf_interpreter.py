@@ -4,6 +4,8 @@ import pandas as pd
 from tqdm import tqdm
 import json
 import os
+import hashlib
+from pathlib import Path
 
 from src.modules.helper_fns import GeneralHelperFns
 
@@ -22,6 +24,12 @@ class PDFReader(GeneralHelperFns):
     def __init__(self, base_path=None):
         super().__init__()
         self.base_path = base_path
+        # Create cache directory if it doesn't exist
+        if self.base_path:
+            self.cache_dir = os.path.join(self.base_path, "cached_data", "pdf_cache")
+        else:
+            self.cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "cached_data", "pdf_cache")
+        os.makedirs(self.cache_dir, exist_ok=True)
         self.df_raw = self.generate_fin_df()
 
     def process_raw_df(self):
@@ -134,11 +142,52 @@ class PDFReader(GeneralHelperFns):
         else:
             return int(row['Statement Year'])
 
+    def __get_pdf_hash(self, pdf_file_path):
+        """Generate a hash for the PDF file to use as cache identifier"""
+        with open(pdf_file_path, 'rb') as f:
+            return hashlib.md5(f.read()).hexdigest()
+            
+    def __get_cache_path(self, pdf_hash):
+        """Get the path to the cached data for a PDF"""
+        return os.path.join(self.cache_dir, f"{pdf_hash}.json")
+        
+    def __is_pdf_cached(self, pdf_hash):
+        """Check if a PDF has already been processed and cached"""
+        cache_path = self.__get_cache_path(pdf_hash)
+        return os.path.exists(cache_path)
+        
+    def __save_to_cache(self, pdf_hash, transactions, metadata):
+        """Save processed transactions to cache"""
+        cache_data = {
+            "transactions": transactions,
+            "metadata": metadata
+        }
+        with open(self.__get_cache_path(pdf_hash), 'w') as f:
+            json.dump(cache_data, f)
+            
+    def __load_from_cache(self, pdf_hash):
+        """Load processed transactions from cache"""
+        with open(self.__get_cache_path(pdf_hash), 'r') as f:
+            cache_data = json.load(f)
+        return cache_data["transactions"], cache_data["metadata"]
+    
+    def clear_pdf_cache(self):
+        """Clear all cached PDF data"""
+        import shutil
+        if os.path.exists(self.cache_dir):
+            shutil.rmtree(self.cache_dir)
+        os.makedirs(self.cache_dir, exist_ok=True)
+        print(f"PDF cache cleared.")
+
     def generate_fin_df(self, account_types=None):
         overall_df = pd.DataFrame()
         if account_types is None:
             account_types = self.read_all_account_type_folder_names()
             # account_types = ['Chequing', 'Credit']
+        
+        cached_pdfs = 0
+        processed_pdfs = 0
+        
         for account_type in account_types:
             account_names = self.read_all_account_folder_names(account_type)
             for account_name in account_names:
@@ -150,21 +199,42 @@ class PDFReader(GeneralHelperFns):
                         pdf_file_path = os.path.join(self.base_path, "bank_statements", account_type, account_name, pdf_file)
                     else:
                         pdf_file_path = self.process_import_path(pdf_file, account_type, account_name)
-                    lines = self.extract_features_from_pdf(pdf_file_path, x_tolerance=2, init_y_top=440, reg_y_top=210)
-                    transactions= self.process_transactions_from_lines(lines, account_type)
+                    
+                    # Check if the PDF has already been processed
+                    pdf_hash = self.__get_pdf_hash(pdf_file_path)
+                    metadata = {
+                        "year": pdf_file_atts['year'],
+                        "month": pdf_file_atts['month'],
+                        "account_type": account_type,
+                        "account_name": account_name,
+                        "pdf_file": pdf_file
+                    }
+                    
+                    if self.__is_pdf_cached(pdf_hash):
+                        # Load from cache if available
+                        transactions, _ = self.__load_from_cache(pdf_hash)
+                        cached_pdfs += 1
+                    else:
+                        # Process the PDF if not cached
+                        lines = self.extract_features_from_pdf(pdf_file_path, x_tolerance=2, init_y_top=440, reg_y_top=210)
+                        transactions = self.process_transactions_from_lines(lines, account_type)
+                        # Save to cache for future use
+                        self.__save_to_cache(pdf_hash, transactions, metadata)
+                        processed_pdfs += 1
+                    
                     temp_df = pd.DataFrame(transactions)
-                    temp_df[['Statement Year']] = pdf_file_atts['year']
-                    temp_df[['Statement Month']] = pdf_file_atts['month']
-                    temp_df[['Account Type']] = account_type
-                    temp_df[['Account Name']] = account_name
+                    temp_df[['Statement Year']] = metadata['year']
+                    temp_df[['Statement Month']] = metadata['month']
+                    temp_df[['Account Type']] = metadata['account_type']
+                    temp_df[['Account Name']] = metadata['account_name']
                     overall_df = pd.concat([temp_df, overall_df], ignore_index=True)
 
+        print(f"PDF processing summary: {cached_pdfs} PDFs loaded from cache, {processed_pdfs} PDFs newly processed.")
+        
         overall_df['Transaction Year'] = overall_df.apply(self.__calculate_transaction_year, axis=1)
         overall_df['DateTime'] = overall_df['Transaction Date'] + ' ' + overall_df['Transaction Year'].astype(str)
         overall_df['DateTime'] = pd.to_datetime(overall_df['DateTime'])
         return overall_df
-
-
 
     def df_preprocessing(self, df_in):
 
