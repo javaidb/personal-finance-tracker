@@ -8,6 +8,7 @@ import hashlib
 from pathlib import Path
 
 from src.modules.helper_fns import GeneralHelperFns
+from src.modules.merchant_categorizer import MerchantCategorizer
 
 # Try to import config, but don't fail if it doesn't exist
 try:
@@ -293,25 +294,51 @@ class PDFReader(GeneralHelperFns):
 
     def __classify_transactions(self, df):
         """
-        Classifies transactions based on a databank.
-
+        Classifies transactions using merchant matching first, then falling back to pattern matching.
+        
         Args:
-            df_ (pd.DataFrame): The input DataFrame.
+            df (pd.DataFrame): The input DataFrame.
 
         Returns:
-            pd.DataFrame: A new DataFrame with an additional 'adjusted_amount' column.
+            pd.DataFrame: A DataFrame with 'Classification' and 'Matched Keyword' columns.
         """
-
+        print(f"Classifying transactions using merchant categorization with pattern matching fallback...")
+        
+        # Initialize merchant categorizer
+        merchant_categorizer = MerchantCategorizer(self.base_path)
+        
+        # Import patterns for fallback classification
         imported_json = self.import_json().get('categories')
         imported_json = self.reset_json_matches(imported_json)
+        
+        # Stats for reporting
+        merchant_matches = 0
+        pattern_matches = 0
+        uncategorized = 0
+        
+        # For collecting training data
+        uncharacterized_merchants = {}
 
-        def categorize_strings(row, categories = imported_json):
-            list_of_strings = row['Processed Details']
-            s = ' '.join(list_of_strings)
+        def categorize_strings(row, categories=imported_json):
+            nonlocal merchant_matches, pattern_matches, uncategorized, uncharacterized_merchants
+            
+            processed_details = row['Processed Details']
+            
+            # Try merchant-based categorization first
+            category, merchant = merchant_categorizer.categorize_transaction(processed_details)
+            
+            # If we got a match from the merchant categorizer, use that
+            if category != "uncharacterized":
+                merchant_matches += 1
+                return pd.Series([category, f"Merchant: {merchant}"])
+            
+            # Fall back to pattern matching
+            s = ' '.join(processed_details)
             s_lower = s.lower()
             found_categories = []
             matched_keywords = []
             pattern_indices = []
+            
             for category, keyword_patterns in categories.items():
                 for pattern_ind, keyword_pattern in enumerate(keyword_patterns.get('patterns')):
                     keyword = ' '.join(keyword_pattern.get('terms'))
@@ -321,34 +348,125 @@ class PDFReader(GeneralHelperFns):
                         pattern_indices.append(pattern_ind)
                         # Increment match tally
                         categories[category]['patterns'][pattern_ind]['matchCount'] += 1
-                # if found_category:
-                #     break
 
-            # If multiple matches found (should ONLY be a case where there is one string is a subset of another, e.g. 'uber' vs 'uber eats'), grab one with most strings matched 
-            if matched_keywords and len(matched_keywords) > 1:
-                index = max(range(len(matched_keywords)), key=lambda i: len(matched_keywords[i].split()))
-            else:
-                index = 0
             # Now assign category/associated match keywords
             if not found_categories:
                 found_category = "uncharacterized"
-                matched_keyword= None
+                matched_keyword = None
+                uncategorized += 1
+                
+                # Store uncharacterized merchants for later review
+                if merchant != "Unknown":
+                    # Extract amount from the row
+                    amount = abs(row['Amount']) if isinstance(row['Amount'], (int, float)) else 0
+                    # Group similar merchants
+                    if merchant in uncharacterized_merchants:
+                        uncharacterized_merchants[merchant]["count"] += 1
+                        uncharacterized_merchants[merchant]["total_amount"] += amount
+                        if len(uncharacterized_merchants[merchant]["examples"]) < 5:  # Store up to 5 examples
+                            uncharacterized_merchants[merchant]["examples"].append(s)
+                    else:
+                        uncharacterized_merchants[merchant] = {
+                            "count": 1,
+                            "total_amount": amount,
+                            "examples": [s]
+                        }
             else:
+                # If multiple matches found, grab the one with most strings matched
+                if len(matched_keywords) > 1:
+                    index = max(range(len(matched_keywords)), key=lambda i: len(matched_keywords[i].split()))
+                else:
+                    index = 0
+                
                 found_category = found_categories[index]
                 matched_keyword = matched_keywords[index]
-                pattern_index = pattern_indices[index]
+                pattern_ind = pattern_indices[index]
+                pattern_matches += 1
+                
                 # Increment match tallies
                 categories[found_category]['totalMatches'] += 1
+                
+                # Record this match in the patterns
+                assigned_matches = categories[found_category]['patterns'][pattern_ind].setdefault('assignedDetailMatch', [])
+                if processed_details not in assigned_matches:
+                    assigned_matches.append(processed_details)
+                
+                # Auto-learn this merchant-category mapping
+                if found_category != "uncharacterized":
+                    merchant_categorizer.auto_learn(processed_details, found_category)
             
-                assigned_matches = categories[found_category]['patterns'][pattern_index].setdefault('assignedDetailMatch', [])
-                if list_of_strings not in assigned_matches:
-                    assigned_matches.append(list_of_strings)
             categories_with_outcol = {"categories": categories}
             self.export_json(categories_with_outcol)
+            
             return pd.Series([found_category, matched_keyword])
 
-        df[['Classification', 'Matched Keyword']] = df.apply(categorize_strings, axis = 1)
+        df[['Classification', 'Matched Keyword']] = df.apply(categorize_strings, axis=1)
+        
+        # Save uncharacterized merchants to a review file
+        if uncategorized > 0:
+            self.__save_uncharacterized_merchants(uncharacterized_merchants)
+        
+        # Report classification stats
+        total = len(df)
+        print(f"Classification complete: {merchant_matches} by merchant ({merchant_matches/total:.1%}), "
+              f"{pattern_matches} by pattern ({pattern_matches/total:.1%}), "
+              f"{uncategorized} uncategorized ({uncategorized/total:.1%})")
+        
         return df
+        
+    def __save_uncharacterized_merchants(self, uncharacterized_merchants):
+        """Save uncharacterized merchants to a review file"""
+        if not uncharacterized_merchants:
+            return
+            
+        # Sort merchants by frequency
+        sorted_merchants = sorted(uncharacterized_merchants.items(), 
+                                  key=lambda x: x[1]["count"],
+                                  reverse=True)
+        
+        # Create a review file
+        if self.base_path:
+            review_path = os.path.join(self.base_path, "cached_data", "uncharacterized_merchants.json")
+        else:
+            review_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+                                      "cached_data", "uncharacterized_merchants.json")
+        
+        # Load existing file if it exists
+        if os.path.exists(review_path):
+            try:
+                with open(review_path, 'r') as f:
+                    content = f.read().strip()
+                    if content:  # Only try to parse if file is not empty
+                        existing_data = json.load(f)
+                    else:
+                        existing_data = {}
+                    
+                # Merge with new data
+                for merchant, data in uncharacterized_merchants.items():
+                    if merchant in existing_data:
+                        existing_data[merchant]["count"] += data["count"]
+                        existing_data[merchant]["total_amount"] += data["total_amount"]
+                        # Add unique examples
+                        existing_examples = set(existing_data[merchant]["examples"])
+                        for example in data["examples"]:
+                            if len(existing_examples) < 5 and example not in existing_examples:
+                                existing_data[merchant]["examples"].append(example)
+                                existing_examples.add(example)
+                    else:
+                        existing_data[merchant] = data
+                        
+                review_data = existing_data
+            except Exception as e:
+                print(f"Error loading existing uncharacterized merchants file: {e}")
+                review_data = dict(sorted_merchants)
+        else:
+            review_data = dict(sorted_merchants)
+        
+        # Save to file
+        with open(review_path, 'w') as f:
+            json.dump(review_data, f, indent=2)
+            
+        print(f"Saved {len(uncharacterized_merchants)} uncharacterized merchants to {review_path}")
 
     def recalibrate_amounts(self, df_in):
         """
