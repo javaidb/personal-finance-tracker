@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Uncharacterized Merchants | Personal Finance Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        .header-section {
+            background-color: #343a40;
+            color: white;
+            padding: 30px 0;
+            margin-bottom: 30px;
+        }
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            padding: 15px 20px;
+        }
+        .card-header h5 {
+            margin: 0;
+            font-weight: 600;
+            color: #333;
+        }
+        .stats-card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+        .stats-value {
+            font-size: 32px;
+            font-weight: 600;
+            color: #333;
+        }
+        .stats-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            width: 100%;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #0d6efd;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .merchant-card {
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            background-color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .merchant-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .merchant-name {
+            font-weight: 600;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .merchant-stats {
+            display: flex;
+            margin-bottom: 15px;
+            gap: 20px;
+        }
+        .stat-box {
+            background-color: #f5f5f5;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .examples-list {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .example-item {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .example-item:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        .pagination {
+            justify-content: center;
+            margin-top: 30px;
+        }
+        .alert {
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 20px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 50px 0;
+        }
+        .empty-state h3 {
+            margin-bottom: 15px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-section">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1>Review Uncharacterized Merchants</h1>
+                    <p class="lead mb-0">Categorize merchants that couldn't be automatically classified</p>
+                </div>
+                <div>
+                    <a href="/merchants" class="btn btn-outline-light">Back to Merchants</a>
+                    <a href="/" class="btn btn-outline-light ms-2">Home</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="stats-card">
+                    <div class="stats-value" id="remaining-count">{{ merchant_count }}</div>
+                    <div class="stats-label">Merchants to Categorize</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-info">
+            <strong>Tip:</strong> Review these merchants and assign them to categories. This will improve future categorization accuracy and reduce the number of uncharacterized transactions.
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div id="merchants-container">
+            <div class="loading">
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <div id="pagination-container" class="mt-4">
+            <nav aria-label="Merchant pagination">
+                <ul class="pagination"></ul>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Categorize Merchant Modal -->
+    <div class="modal fade" id="categorizeMerchantModal" tabindex="-1" aria-labelledby="categorizeMerchantModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="categorizeMerchantModalLabel">Categorize Merchant</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="categorize-merchant-form">
+                        <div class="mb-3">
+                            <label for="review-merchant-name" class="form-label">Merchant Name</label>
+                            <input type="text" class="form-control" id="review-merchant-name" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="review-merchant-category" class="form-label">Category</label>
+                            <select class="form-select" id="review-merchant-category">
+                                {% for category in categories %}
+                                <option value="{{ category }}">{{ category }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-categorization-btn">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // DOM elements
+        const merchantsContainer = document.getElementById('merchants-container');
+        const paginationContainer = document.querySelector('.pagination');
+        const alertContainer = document.getElementById('alert-container');
+        const categorizeModal = new bootstrap.Modal(document.getElementById('categorizeMerchantModal'));
+        const remainingCountEl = document.getElementById('remaining-count');
+
+        // Global variables
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentMerchants = [];
+
+        // Load merchants on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUncharacterizedMerchants(1);
+            
+            // Save categorization
+            document.getElementById('save-categorization-btn').addEventListener('click', function() {
+                const merchantName = document.getElementById('review-merchant-name').value;
+                const category = document.getElementById('review-merchant-category').value;
+                categorizeMerchant(merchantName, category);
+            });
+        });
+
+        // Load uncharacterized merchants
+        function loadUncharacterizedMerchants(page) {
+            merchantsContainer.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            fetch(`/api/merchants/uncharacterized?page=${page}&limit=5`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        currentPage = data.page;
+                        totalPages = data.pages;
+                        currentMerchants = data.merchants;
+                        
+                        if (data.merchants.length === 0) {
+                            showEmptyState();
+                        } else {
+                            renderMerchants(data.merchants);
+                            renderPagination(data.page, data.pages);
+                        }
+                        
+                        // Update count
+                        remainingCountEl.textContent = data.total;
+                    } else {
+                        showError('Failed to load merchants: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Failed to load merchants. Please try again.');
+                });
+        }
+
+        // Render merchants
+        function renderMerchants(merchants) {
+            merchantsContainer.innerHTML = '';
+            
+            merchants.forEach(merchant => {
+                const merchantCard = document.createElement('div');
+                merchantCard.className = 'merchant-card';
+                
+                merchantCard.innerHTML = `
+                    <div class="merchant-name">${merchant.merchant}</div>
+                    <div class="merchant-stats">
+                        <div class="stat-box">
+                            <strong>Occurrences:</strong> ${merchant.count}
+                        </div>
+                        <div class="stat-box">
+                            <strong>Total Amount:</strong> $${merchant.total_amount.toFixed(2)}
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-primary categorize-btn" data-merchant="${merchant.merchant}">Categorize</button>
+                    
+                    <div class="examples-list">
+                        <div><strong>Examples:</strong></div>
+                        ${merchant.examples.map(example => `
+                            <div class="example-item">${example}</div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                merchantsContainer.appendChild(merchantCard);
+            });
+            
+            // Add event listeners to categorize buttons
+            document.querySelectorAll('.categorize-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const merchantName = this.getAttribute('data-merchant');
+                    showCategorizeModal(merchantName);
+                });
+            });
+        }
+
+        // Render pagination
+        function renderPagination(currentPage, totalPages) {
+            paginationContainer.innerHTML = '';
+            
+            if (totalPages <= 1) {
+                return;
+            }
+            
+            // Previous button
+            const prevLi = document.createElement('li');
+            prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+            prevLi.innerHTML = `<a class="page-link" href="#" data-page="${currentPage - 1}">Previous</a>`;
+            paginationContainer.appendChild(prevLi);
+            
+            // Page numbers
+            for (let i = 1; i <= totalPages; i++) {
+                const pageLi = document.createElement('li');
+                pageLi.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                pageLi.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+                paginationContainer.appendChild(pageLi);
+            }
+            
+            // Next button
+            const nextLi = document.createElement('li');
+            nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+            nextLi.innerHTML = `<a class="page-link" href="#" data-page="${currentPage + 1}">Next</a>`;
+            paginationContainer.appendChild(nextLi);
+            
+            // Add event listeners
+            document.querySelectorAll('.page-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const page = parseInt(this.getAttribute('data-page'));
+                    if (page >= 1 && page <= totalPages) {
+                        loadUncharacterizedMerchants(page);
+                    }
+                });
+            });
+        }
+
+        // Show categorize modal
+        function showCategorizeModal(merchantName) {
+            document.getElementById('review-merchant-name').value = merchantName;
+            categorizeModal.show();
+        }
+
+        // Categorize merchant
+        function categorizeMerchant(merchantName, category) {
+            fetch('/api/merchants/uncharacterized', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    merchant: merchantName,
+                    category: category
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        categorizeModal.hide();
+                        showSuccess(`Categorized "${merchantName}" as "${category}"`);
+                        
+                        // Update merchant count
+                        fetch('/api/merchants/uncharacterized/count')
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    remainingCountEl.textContent = data.count;
+                                }
+                            });
+                        
+                        // Reload current page
+                        loadUncharacterizedMerchants(currentPage);
+                    } else {
+                        showError('Failed to categorize merchant: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Failed to categorize merchant. Please try again.');
+                });
+        }
+
+        // Show empty state
+        function showEmptyState() {
+            merchantsContainer.innerHTML = `
+                <div class="empty-state">
+                    <h3>All merchants have been categorized!</h3>
+                    <p>There are no more uncharacterized merchants to review.</p>
+                    <a href="/merchants" class="btn btn-primary mt-3">Back to Merchant Management</a>
+                </div>
+            `;
+            document.getElementById('pagination-container').style.display = 'none';
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            alertContainer.innerHTML = `
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+        }
+
+        // Show error message
+        function showError(message) {
+            alertContainer.innerHTML = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html> 
