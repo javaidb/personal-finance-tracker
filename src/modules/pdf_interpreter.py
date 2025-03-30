@@ -30,6 +30,7 @@ class PDFReader(GeneralHelperFns):
         else:
             self.cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "cached_data", "pdf_cache")
         os.makedirs(self.cache_dir, exist_ok=True)
+        self.cached_pdfs_count = 0  # Track number of cached PDFs
         self.df_raw = self.generate_fin_df()
 
     def process_raw_df(self):
@@ -179,6 +180,17 @@ class PDFReader(GeneralHelperFns):
         os.makedirs(self.cache_dir, exist_ok=True)
         print(f"PDF cache cleared.")
 
+    def get_cache_info(self):
+        """Get information about cached PDFs"""
+        if not os.path.exists(self.cache_dir):
+            return {"cached_pdfs_count": 0}
+        
+        cached_files = [f for f in os.listdir(self.cache_dir) if f.endswith('.json')]
+        return {
+            "cached_pdfs_count": len(cached_files),
+            "cache_size_kb": sum(os.path.getsize(os.path.join(self.cache_dir, f)) for f in cached_files) // 1024
+        }
+
     def generate_fin_df(self, account_types=None):
         overall_df = pd.DataFrame()
         if account_types is None:
@@ -230,6 +242,7 @@ class PDFReader(GeneralHelperFns):
                     overall_df = pd.concat([temp_df, overall_df], ignore_index=True)
 
         print(f"PDF processing summary: {cached_pdfs} PDFs loaded from cache, {processed_pdfs} PDFs newly processed.")
+        self.cached_pdfs_count = cached_pdfs
         
         overall_df['Transaction Year'] = overall_df.apply(self.__calculate_transaction_year, axis=1)
         overall_df['DateTime'] = overall_df['Transaction Date'] + ' ' + overall_df['Transaction Year'].astype(str)
