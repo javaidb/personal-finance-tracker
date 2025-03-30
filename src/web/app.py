@@ -141,12 +141,25 @@ def get_transactions():
     # Convert DataFrame to dict for JSON response, handling NaN values
     df_copy = processed_df.copy()
     
+    # Get date range filter parameters
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
     # Sort by date in descending order (most recent first)
     df_copy['DateTime'] = pd.to_datetime(df_copy['DateTime'])
     df_copy = df_copy.sort_values(by='DateTime', ascending=False)
     
-    # Get the most recent 3 months of data instead of just 20 transactions
-    if not df_copy.empty:
+    # Apply date range filtering if parameters are provided
+    if start_date:
+        start_date = pd.to_datetime(start_date)
+        df_copy = df_copy[df_copy['DateTime'] >= start_date]
+    
+    if end_date:
+        end_date = pd.to_datetime(end_date)
+        df_copy = df_copy[df_copy['DateTime'] <= end_date]
+    
+    # If no date filters provided, default to last 3 months
+    if not start_date and not end_date and not df_copy.empty:
         latest_date = df_copy['DateTime'].max()
         three_months_ago = latest_date - pd.DateOffset(months=3)
         df_copy = df_copy[df_copy['DateTime'] >= three_months_ago]
@@ -408,6 +421,19 @@ def get_monthly_trends():
         return jsonify(chart_data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/clear_cache', methods=['POST'])
+def clear_cache():
+    global statement_reader
+    
+    if statement_reader is None:
+        return jsonify({"error": "No statement reader initialized"}), 400
+    
+    try:
+        statement_reader.clear_pdf_cache()
+        return jsonify({"success": True, "message": "PDF cache cleared successfully"})
+    except Exception as e:
+        return jsonify({"error": f"Failed to clear cache: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 
