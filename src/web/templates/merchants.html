@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merchant Management | Personal Finance Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        .header-section {
+            background-color: #343a40;
+            color: white;
+            padding: 30px 0;
+            margin-bottom: 30px;
+        }
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            padding: 15px 20px;
+        }
+        .card-header h5 {
+            margin: 0;
+            font-weight: 600;
+            color: #333;
+        }
+        .stats-card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+        }
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+        .stats-value {
+            font-size: 32px;
+            font-weight: 600;
+            color: #333;
+        }
+        .stats-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .merchant-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+        }
+        .merchant-table th {
+            font-weight: 600;
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding: 12px 15px;
+        }
+        .merchant-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+        }
+        .merchant-table tr:hover {
+            background-color: #f9f9f9;
+        }
+        .merchant-table tr:last-child td {
+            border-bottom: none;
+        }
+        .search-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .search-box input {
+            padding-left: 40px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            padding: 10px 15px 10px 40px;
+            width: 100%;
+            font-family: 'Inter', sans-serif;
+        }
+        .search-icon {
+            position: absolute;
+            left: 15px;
+            top: 12px;
+            color: #aaa;
+        }
+        .category-badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            color: white;
+        }
+        .modal-content {
+            border: none;
+            border-radius: 12px;
+        }
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            width: 100%;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #0d6efd;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px 0;
+            color: #666;
+        }
+        .empty-state p {
+            margin-top: 10px;
+            font-size: 16px;
+        }
+        .alert {
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-section">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1>Merchant Management</h1>
+                    <p class="lead mb-0">Manage merchant categorization for your transactions</p>
+                </div>
+                <div>
+                    <a href="/" class="btn btn-outline-light">Back to Home</a>
+                    {% if has_review_data %}
+                    <a href="/merchants/review" class="btn btn-warning ms-2">Review Uncharacterized</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stats-card">
+                    <div class="stats-value" id="merchant-count">{{ merchant_count }}</div>
+                    <div class="stats-label">Merchants</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stats-card">
+                    <div class="stats-value" id="alias-count">{{ alias_count }}</div>
+                    <div class="stats-label">Aliases</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stats-card">
+                    <div class="stats-value" id="category-count">{{ categories|length }}</div>
+                    <div class="stats-label">Categories</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5>Merchant Database</h5>
+                    <div>
+                        <button class="btn btn-sm btn-primary" id="add-merchant-btn">
+                            Add Merchant
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="search-box">
+                    <input type="text" id="merchant-search" class="form-control" placeholder="Search merchants...">
+                    <span class="search-icon">🔍</span>
+                </div>
+                
+                <div id="merchants-container">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Merchant Modal -->
+    <div class="modal fade" id="editMerchantModal" tabindex="-1" aria-labelledby="editMerchantModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editMerchantModalLabel">Edit Merchant</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-merchant-form">
+                        <div class="mb-3">
+                            <label for="merchant-name" class="form-label">Merchant Name</label>
+                            <input type="text" class="form-control" id="merchant-name" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="merchant-category" class="form-label">Category</label>
+                            <select class="form-select" id="merchant-category">
+                                {% for category in categories %}
+                                <option value="{{ category }}">{{ category }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-merchant-btn">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Alias Modal -->
+    <div class="modal fade" id="addAliasModal" tabindex="-1" aria-labelledby="addAliasModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addAliasModalLabel">Add Alias</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-alias-form">
+                        <div class="mb-3">
+                            <label for="merchant-for-alias" class="form-label">Merchant</label>
+                            <input type="text" class="form-control" id="merchant-for-alias" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="alias-name" class="form-label">Alias Name</label>
+                            <input type="text" class="form-control" id="alias-name" placeholder="Enter alias name">
+                            <div class="form-text">Enter an alternative name that should be recognized as this merchant</div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-alias-btn">Add Alias</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Merchant Modal -->
+    <div class="modal fade" id="addMerchantModal" tabindex="-1" aria-labelledby="addMerchantModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addMerchantModalLabel">Add New Merchant</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-merchant-form">
+                        <div class="mb-3">
+                            <label for="new-merchant-name" class="form-label">Merchant Name</label>
+                            <input type="text" class="form-control" id="new-merchant-name" placeholder="Enter merchant name">
+                        </div>
+                        <div class="mb-3">
+                            <label for="new-merchant-category" class="form-label">Category</label>
+                            <select class="form-select" id="new-merchant-category">
+                                {% for category in categories %}
+                                <option value="{{ category }}">{{ category }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="add-new-merchant-btn">Add Merchant</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let merchants = [];
+        let categoryColors = {
+            'Groceries': '#4CAF50',
+            'Dining': '#FF9800',
+            'Transport': '#2196F3',
+            'Shopping': '#9C27B0',
+            'Bills': '#F44336',
+            'Entertainment': '#FFD700',
+            'Travel': '#8B4513',
+            'Healthcare': '#00BCD4',
+            'Education': '#3F51B5',
+            'Housing': '#E91E63',
+            'Income': '#2E7D32',
+            'Salary': '#1B5E20',
+            'Investments': '#388E3C',
+            'Transfers': '#424242',
+            'Utilities': '#F57C00',
+            'Insurance': '#D32F2F',
+            'Subscription': '#7B1FA2',
+            'Uncategorized': '#607D8B'
+        };
+
+        // Utility function to generate color for category
+        function getCategoryColor(category) {
+            if (categoryColors[category]) {
+                return categoryColors[category];
+            }
+            
+            // Generate consistent color for unknown categories
+            const hashCode = (str) => {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                return hash;
+            };
+            
+            const hue = Math.abs(hashCode(category) % 360);
+            return `hsl(${hue}, 70%, 50%)`;
+        }
+
+        // DOM elements
+        const merchantsContainer = document.getElementById('merchants-container');
+        const merchantSearch = document.getElementById('merchant-search');
+        const editMerchantModal = new bootstrap.Modal(document.getElementById('editMerchantModal'));
+        const addAliasModal = new bootstrap.Modal(document.getElementById('addAliasModal'));
+        const addMerchantModal = new bootstrap.Modal(document.getElementById('addMerchantModal'));
+
+        // Load merchants on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadMerchants();
+            
+            // Search functionality
+            merchantSearch.addEventListener('input', function() {
+                const searchTerm = this.value.trim();
+                if (searchTerm.length > 0) {
+                    searchMerchants(searchTerm);
+                } else {
+                    renderMerchants(merchants);
+                }
+            });
+            
+            // Save merchant changes
+            document.getElementById('save-merchant-btn').addEventListener('click', function() {
+                const merchantName = document.getElementById('merchant-name').value;
+                const category = document.getElementById('merchant-category').value;
+                updateMerchant(merchantName, category);
+            });
+            
+            // Add alias
+            document.getElementById('save-alias-btn').addEventListener('click', function() {
+                const merchantName = document.getElementById('merchant-for-alias').value;
+                const aliasName = document.getElementById('alias-name').value;
+                addAlias(aliasName, merchantName);
+            });
+            
+            // Add merchant
+            document.getElementById('add-merchant-btn').addEventListener('click', function() {
+                document.getElementById('new-merchant-name').value = '';
+                addMerchantModal.show();
+            });
+            
+            // Save new merchant
+            document.getElementById('add-new-merchant-btn').addEventListener('click', function() {
+                const merchantName = document.getElementById('new-merchant-name').value.trim();
+                const category = document.getElementById('new-merchant-category').value;
+                
+                if (!merchantName) {
+                    alert('Please enter a merchant name');
+                    return;
+                }
+                
+                updateMerchant(merchantName, category, true);
+            });
+        });
+
+        // Load all merchants
+        function loadMerchants() {
+            merchantsContainer.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            fetch('/api/merchants')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        merchants = data.merchants;
+                        renderMerchants(merchants);
+                    } else {
+                        showError('Failed to load merchants: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Failed to load merchants. Please try again.');
+                });
+        }
+
+        // Search merchants
+        function searchMerchants(term) {
+            merchantsContainer.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            fetch(`/api/merchants?search=${encodeURIComponent(term)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderMerchants(data.merchants);
+                    } else {
+                        showError('Failed to search merchants: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Failed to search merchants. Please try again.');
+                });
+        }
+
+        // Update merchant category
+        function updateMerchant(merchantName, category, isNew = false) {
+            fetch('/api/merchants', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    merchant: merchantName,
+                    category: category
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        editMerchantModal.hide();
+                        addMerchantModal.hide();
+                        loadMerchants();
+                        showSuccess(`${isNew ? 'Added' : 'Updated'} merchant ${merchantName} to category ${category}`);
+                    } else {
+                        showError('Failed to update merchant: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Failed to update merchant. Please try again.');
+                });
+        }
+
+        // Add alias for a merchant
+        function addAlias(alias, merchantName) {
+            alias = alias.trim();
+            if (!alias) {
+                alert('Please enter a valid alias name');
+                return;
+            }
+            
+            fetch('/api/aliases', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    alias: alias,
+                    merchant: merchantName
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addAliasModal.hide();
+                        loadMerchants();
+                        showSuccess(`Added alias "${alias}" for merchant "${merchantName}"`);
+                    } else {
+                        showError('Failed to add alias: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Failed to add alias. Please try again.');
+                });
+        }
+
+        // Render merchants table
+        function renderMerchants(merchantList) {
+            if (!merchantList || merchantList.length === 0) {
+                merchantsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 6H16V4C16 2.89 15.11 2 14 2H10C8.89 2 8 2.89 8 4V6H4C2.89 6 2 6.89 2 8V19C2 20.11 2.89 21 4 21H20C21.11 21 22 20.11 22 19V8C22 6.89 21.11 6 20 6ZM10 4H14V6H10V4ZM20 19H4V8H20V19Z" fill="#ccc"/>
+                        </svg>
+                        <p>No merchants found</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let tableHTML = `
+                <table class="merchant-table">
+                    <thead>
+                        <tr>
+                            <th>Merchant</th>
+                            <th>Category</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            merchantList.forEach(merchant => {
+                const categoryColor = getCategoryColor(merchant.category);
+                
+                tableHTML += `
+                    <tr>
+                        <td>${merchant.name}</td>
+                        <td>
+                            <span class="category-badge" style="background-color: ${categoryColor}">
+                                ${merchant.category}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary me-1 edit-btn" 
+                                    data-merchant="${merchant.name}" 
+                                    data-category="${merchant.category}">
+                                Edit
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary alias-btn" 
+                                    data-merchant="${merchant.name}">
+                                Add Alias
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+            
+            merchantsContainer.innerHTML = tableHTML;
+            
+            // Add event listeners for edit buttons
+            document.querySelectorAll('.edit-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const merchantName = this.getAttribute('data-merchant');
+                    const category = this.getAttribute('data-category');
+                    
+                    document.getElementById('merchant-name').value = merchantName;
+                    document.getElementById('merchant-category').value = category;
+                    
+                    editMerchantModal.show();
+                });
+            });
+            
+            // Add event listeners for alias buttons
+            document.querySelectorAll('.alias-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const merchantName = this.getAttribute('data-merchant');
+                    
+                    document.getElementById('merchant-for-alias').value = merchantName;
+                    document.getElementById('alias-name').value = '';
+                    
+                    addAliasModal.show();
+                });
+            });
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            const alertHTML = `
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            
+            const alertContainer = document.createElement('div');
+            alertContainer.innerHTML = alertHTML;
+            
+            document.querySelector('.container').insertBefore(alertContainer, document.querySelector('.card'));
+            
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                const alert = document.querySelector('.alert');
+                if (alert) {
+                    const bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                }
+            }, 3000);
+        }
+
+        // Show error message
+        function showError(message) {
+            const alertHTML = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            
+            const alertContainer = document.createElement('div');
+            alertContainer.innerHTML = alertHTML;
+            
+            document.querySelector('.container').insertBefore(alertContainer, document.querySelector('.card'));
+            
+            // Reset merchants container
+            merchantsContainer.innerHTML = `
+                <div class="empty-state">
+                    <p>Error loading data. Please try again.</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html> 
