@@ -87,7 +87,8 @@
                     </ul>
                     <hr>
                     <div class="p-3">
-                        <a href="/" class="btn btn-outline-secondary btn-sm w-100">Back to Home</a>
+                        <a href="/" class="btn btn-outline-secondary btn-sm w-100 mb-2">Back to Home</a>
+                        <button id="clear-cache-btn" class="btn btn-outline-danger btn-sm w-100">Clear PDF Cache</button>
                     </div>
                 </div>
             </div>
@@ -139,6 +140,24 @@
                     <h2>Recent Transactions</h2>
                     <div class="card mt-4">
                         <div class="card-body">
+                            <!-- Date Range Filter -->
+                            <div class="row mb-4">
+                                <div class="col-md-10">
+                                    <div class="row g-3">
+                                        <div class="col-md-5">
+                                            <label for="start-date" class="form-label">Start Date</label>
+                                            <input type="date" id="start-date" class="form-control">
+                                        </div>
+                                        <div class="col-md-5">
+                                            <label for="end-date" class="form-label">End Date</label>
+                                            <input type="date" id="end-date" class="form-control">
+                                        </div>
+                                        <div class="col-md-2 d-flex align-items-end">
+                                            <button id="apply-date-filter" class="btn btn-primary">Apply Filter</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table table-hover">
                                     <thead>
@@ -229,65 +248,170 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Set a loading message
-            document.getElementById('status-message').innerHTML = `
-                <div class="alert alert-info">
-                    <div class="d-flex align-items-center">
-                        <div class="spinner-border spinner-border-sm me-2" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <div>
-                            Loading your financial data...
-                        </div>
-                    </div>
-                </div>
-            `;
+            // Fetch data and populate the dashboard
+            fetchTransactions();
+            fetchCategories();
+            fetchBalanceChart();
+            fetchMonthlyTrends();
+            fetchPeltAnalysis();
             
-            // Load data
-            fetchBalanceChart()
-                .then(() => {
-                    // After balance chart loads, load transactions and categories
-                    return Promise.all([
-                        fetchTransactions(),
-                        fetchCategories(),
-                        fetchPeltAnalysis(),
-                        fetchMonthlyTrends()
-                    ]);
-                })
-                .then(() => {
-                    // When all data is loaded, update the status message
-                    document.getElementById('status-message').innerHTML = `
-                        <div class="alert alert-success">
-                            <div class="d-flex align-items-center">
-                                <div>
-                                    <strong>Data loaded successfully!</strong> Your financial data has been loaded from your bank statements.
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                })
-                .catch(error => {
-                    console.error('Error loading data:', error);
-                    document.getElementById('status-message').innerHTML = `
-                        <div class="alert alert-danger">
-                            <div class="d-flex align-items-center">
-                                <div>
-                                    <strong>Error!</strong> Failed to load financial data: ${error.message}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
+            // Event listeners for date filter
+            document.getElementById('apply-date-filter').addEventListener('click', function() {
+                fetchTransactions();
+            });
             
-            // Navigation highlight
+            // Event listener for cache clearing
+            document.getElementById('clear-cache-btn').addEventListener('click', function() {
+                clearPDFCache();
+            });
+            
+            // Navigation tabs
             const navLinks = document.querySelectorAll('.nav-link');
             navLinks.forEach(link => {
                 link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    // Remove active class from all links
                     navLinks.forEach(l => l.classList.remove('active'));
+                    // Add active class to clicked link
                     this.classList.add('active');
+                    // Show the corresponding section
+                    const targetId = this.getAttribute('href').substring(1);
+                    document.querySelectorAll('section').forEach(section => {
+                        section.style.display = 'none';
+                    });
+                    document.getElementById(targetId).style.display = 'block';
                 });
             });
+            
+            // Initialize pagination
+            initPagination();
         });
+        
+        // Transactions page variables
+        let allTransactions = [];
+        let currentPage = 1;
+        const transactionsPerPage = 20;
+            
+        function fetchTransactions() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            
+            let url = '/api/transactions';
+            const params = new URLSearchParams();
+            
+            if (startDate) {
+                params.append('start_date', startDate);
+            }
+            
+            if (endDate) {
+                params.append('end_date', endDate);
+            }
+            
+            // Append parameters to URL if they exist
+            if (params.toString()) {
+                url += '?' + params.toString();
+            }
+            
+            document.getElementById('transactions-table-body').innerHTML = '<tr><td colspan="5" class="text-center">Loading transactions...</td></tr>';
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    allTransactions = data;
+                    displayTransactions(currentPage);
+                    document.getElementById('transaction-count-display').innerText = `Showing transactions from ${data.length} total transactions`;
+                    updatePaginationButtons();
+                })
+                .catch(error => {
+                    console.error('Error fetching transactions:', error);
+                    document.getElementById('transactions-table-body').innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading transactions. Please try again.</td></tr>';
+                });
+        }
+            
+        function displayTransactions(page) {
+            const startIndex = (page - 1) * transactionsPerPage;
+            const endIndex = startIndex + transactionsPerPage;
+            const pageTransactions = allTransactions.slice(startIndex, endIndex);
+            
+            const tableBody = document.getElementById('transactions-table-body');
+            tableBody.innerHTML = '';
+            
+            if (pageTransactions.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No transactions found in this date range.</td></tr>';
+                return;
+            }
+            
+            pageTransactions.forEach(transaction => {
+                const row = document.createElement('tr');
+                
+                // Format date
+                const date = new Date(transaction.DateTime);
+                const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                
+                // Format amount with color (red for negative, green for positive)
+                const amount = parseFloat(transaction.Amount);
+                const formattedAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(amount));
+                const amountClass = amount < 0 ? 'text-danger' : 'text-success';
+                
+                row.innerHTML = `
+                    <td>${formattedDate}</td>
+                    <td>${transaction.Details}</td>
+                    <td class="${amountClass}">${amount < 0 ? '-' : ''}${formattedAmount}</td>
+                    <td>${transaction.Classification || 'Uncategorized'}</td>
+                    <td>${transaction.Account_Name}</td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+            
+        function initPagination() {
+            document.getElementById('prev-page-btn').addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    displayTransactions(currentPage);
+                    updatePaginationButtons();
+                }
+            });
+            
+            document.getElementById('next-page-btn').addEventListener('click', () => {
+                const maxPages = Math.ceil(allTransactions.length / transactionsPerPage);
+                if (currentPage < maxPages) {
+                    currentPage++;
+                    displayTransactions(currentPage);
+                    updatePaginationButtons();
+                }
+            });
+        }
+            
+        function updatePaginationButtons() {
+            const prevBtn = document.getElementById('prev-page-btn');
+            const nextBtn = document.getElementById('next-page-btn');
+            const maxPages = Math.ceil(allTransactions.length / transactionsPerPage);
+            
+            prevBtn.disabled = currentPage === 1;
+            nextBtn.disabled = currentPage === maxPages || maxPages === 0;
+        }
+        
+        function clearPDFCache() {
+            if (!confirm('Are you sure you want to clear the PDF cache? You will need to reprocess all PDFs next time.')) {
+                return;
+            }
+            
+            fetch('/api/clear_cache', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('PDF cache cleared successfully');
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error clearing cache:', error);
+                    alert('Error clearing cache. See console for details.');
+                });
+        }
         
         async function fetchBalanceChart() {
             try {
@@ -754,117 +878,6 @@
                 }
             });
         }
-        
-        async function fetchTransactions() {
-            try {
-                const response = await fetch('/api/transactions');
-                if (!response.ok) {
-                    throw new Error('Failed to fetch transactions');
-                }
-                
-                const transactions = await response.json();
-                window.allTransactions = transactions; // Store all transactions
-                window.currentPage = 0;
-                window.pageSize = 20;
-                renderTransactionsTable(transactions);
-                return true;
-            } catch (error) {
-                console.error('Error:', error);
-                document.getElementById('transactions-table-body').innerHTML = 
-                    '<tr><td colspan="5" class="text-center text-danger">Failed to load transactions</td></tr>';
-                throw error;
-            }
-        }
-        
-        function renderTransactionsTable(transactions) {
-            const tableBody = document.getElementById('transactions-table-body');
-            tableBody.innerHTML = '';
-            
-            if (!transactions || transactions.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No transactions found</td></tr>';
-                document.getElementById('transaction-count-display').textContent = 'No transactions found';
-                document.getElementById('prev-page-btn').disabled = true;
-                document.getElementById('next-page-btn').disabled = true;
-                return;
-            }
-            
-            // Calculate pagination
-            const startIndex = window.currentPage * window.pageSize;
-            const endIndex = Math.min(startIndex + window.pageSize, transactions.length);
-            const paginatedTransactions = transactions.slice(startIndex, endIndex);
-            
-            // Update pagination buttons
-            document.getElementById('prev-page-btn').disabled = window.currentPage === 0;
-            document.getElementById('next-page-btn').disabled = endIndex >= transactions.length;
-            
-            // Update count display
-            document.getElementById('transaction-count-display').textContent = 
-                `Showing ${startIndex + 1}-${endIndex} of ${transactions.length} transactions`;
-            
-            paginatedTransactions.forEach(transaction => {
-                const row = document.createElement('tr');
-                
-                // Format date - extract from DateTime field
-                let date = 'N/A';
-                if (transaction.DateTime) {
-                    try {
-                        date = new Date(transaction.DateTime).toLocaleDateString();
-                    } catch (e) {
-                        date = 'Invalid Date';
-                    }
-                }
-                
-                // Fix the account name reference to handle different property names
-                const accountName = transaction.Account_Name || transaction['Account Name'] || 'N/A';
-                
-                // Handle possibly null or undefined values
-                const amount = transaction.Amount !== null && transaction.Amount !== undefined 
-                    ? parseFloat(transaction.Amount).toFixed(2) 
-                    : 'N/A';
-                
-                // Fix: For transactions, expenses are negative (red), income is positive (green)
-                const amountClass = amount !== 'N/A' && parseFloat(amount) < 0 
-                    ? 'text-danger' 
-                    : 'text-success';
-                
-                // Format the amount with proper sign
-                const formattedAmount = amount !== 'N/A' 
-                    ? (parseFloat(amount) < 0 
-                        ? `-$${Math.abs(parseFloat(amount)).toFixed(2)}` // Expense: show minus sign
-                        : `$${amount}`) // Income: just show positive
-                    : amount;
-                
-                row.innerHTML = `
-                    <td>${date}</td>
-                    <td>${transaction.Details || 'N/A'}</td>
-                    <td class="${amountClass}">
-                        ${formattedAmount}
-                    </td>
-                    <td><span class="badge bg-secondary">${transaction.Classification || 'Uncategorized'}</span></td>
-                    <td>${accountName}</td>
-                `;
-                
-                tableBody.appendChild(row);
-            });
-        }
-        
-        // Set up pagination button handlers
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('prev-page-btn').addEventListener('click', function() {
-                if (window.currentPage > 0) {
-                    window.currentPage--;
-                    renderTransactionsTable(window.allTransactions);
-                }
-            });
-            
-            document.getElementById('next-page-btn').addEventListener('click', function() {
-                const totalPages = Math.ceil(window.allTransactions.length / window.pageSize);
-                if (window.currentPage < totalPages - 1) {
-                    window.currentPage++;
-                    renderTransactionsTable(window.allTransactions);
-                }
-            });
-        });
         
         async function fetchCategories() {
             try {
