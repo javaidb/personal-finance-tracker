@@ -50,6 +50,9 @@
             font-size: 0.9rem;
             margin: 3px;
             padding: 5px 10px;
+            display: inline-block;
+            border-radius: 0.25rem;
+            font-weight: 500;
         }
         .stats-card {
             background-color: #f8f9fa;
@@ -486,7 +489,7 @@
             });
         }
         
-        function renderCategoryChart(categoryData) {
+        function renderCategoryChart(categoryData, categoryColors) {
             const ctx = document.getElementById('categoryChart').getContext('2d');
             
             // If we already have a chart, destroy it to prevent duplicates
@@ -496,11 +499,11 @@
             }
             
             // If no real data yet, show placeholder
-            if (!categoryData) {
+            if (!categoryData || Object.keys(categoryData).length === 0) {
                 new Chart(ctx, {
                     type: 'doughnut',
                     data: {
-                        labels: ['Loading...'],
+                        labels: ['No spending data available'],
                         datasets: [{
                             data: [1],
                             backgroundColor: ['#cccccc']
@@ -523,11 +526,8 @@
             const labels = Object.keys(categoryData);
             const data = Object.values(categoryData);
             
-            // Define colors for different categories
-            const colors = [
-                '#4CAF50', '#FFC107', '#2196F3', '#9C27B0', '#F44336', '#607D8B',
-                '#FF9800', '#795548', '#00BCD4', '#009688', '#E91E63', '#673AB7'
-            ];
+            // Use provided category colors or fallback to defaults
+            const colors = labels.map(label => categoryColors && categoryColors[label] ? categoryColors[label] : '#607D8B');
             
             new Chart(ctx, {
                 type: 'doughnut',
@@ -535,7 +535,7 @@
                     labels: labels,
                     datasets: [{
                         data: data,
-                        backgroundColor: labels.map((_, i) => colors[i % colors.length])
+                        backgroundColor: colors
                     }]
                 },
                 options: {
@@ -559,45 +559,6 @@
                     }
                 }
             });
-        }
-        
-        function renderTrendsChart() {
-            const ctx = document.getElementById('trendsChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-                    datasets: [{
-                        label: 'Monthly Spending',
-                        data: [1200, 1900, 1500, 1700, 1600, 1800],
-                        backgroundColor: '#2196F3'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-        
-        async function fetchMonthlyTrends() {
-            try {
-                const response = await fetch('/api/monthly_trends');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                renderTrendsChart(data);
-                return data;
-            } catch (error) {
-                console.error('Error fetching monthly trends data:', error);
-                throw error;
-            }
         }
         
         function renderTrendsChart(data = null) {
@@ -634,6 +595,20 @@
                 return;
             }
             
+            // Apply consistent colors to datasets if available
+            if (window.categoryColors) {
+                data.datasets.forEach(dataset => {
+                    // Only apply color if it's a category dataset (not income or net)
+                    if (dataset.label !== 'Income' && dataset.label !== 'Net' && window.categoryColors[dataset.label]) {
+                        dataset.backgroundColor = window.categoryColors[dataset.label];
+                    }
+                    // Special case for Income
+                    if (dataset.label === 'Income' && window.categoryColors['Income']) {
+                        dataset.backgroundColor = window.categoryColors['Income'];
+                    }
+                });
+            }
+            
             // Create chart with real data
             new Chart(ctx, {
                 type: 'bar',
@@ -649,7 +624,7 @@
                                 label: function(context) {
                                     const label = context.dataset.label || '';
                                     const value = context.raw || 0;
-                                    return `${label}: $${value.toFixed(2)}`;
+                                    return `${label}: $${Math.abs(value).toFixed(2)}`;
                                 }
                             }
                         },
@@ -661,7 +636,7 @@
                                     // Only show important categories and Income/Net
                                     if (legendItem.text === 'Income' || 
                                         legendItem.text === 'Net' || 
-                                        data.datasets[legendItem.datasetIndex].data.reduce((a, b) => a + b, 0) > 100) {
+                                        data.datasets[legendItem.datasetIndex].data.reduce((a, b) => Math.abs(a) + Math.abs(b), 0) > 100) {
                                         return true;
                                     }
                                     return false;
@@ -691,10 +666,46 @@
             });
         }
         
+        async function fetchMonthlyTrends() {
+            try {
+                const response = await fetch('/api/monthly_trends');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                renderTrendsChart(data);
+                return data;
+            } catch (error) {
+                console.error('Error fetching monthly trends data:', error);
+                throw error;
+            }
+        }
+        
         function renderPeltChart(data) {
             const ctx = document.getElementById('peltChart').getContext('2d');
             
-            // Create the chart
+            // Clean up any existing chart
+            const existingChart = Chart.getChart(ctx.canvas);
+            if (existingChart) {
+                existingChart.destroy();
+            }
+            
+            // Customize the datasets for better aesthetics
+            if (data.datasets && data.datasets.length >= 2) {
+                // Enhance the balance line
+                data.datasets[0].borderWidth = 2;
+                data.datasets[0].pointRadius = 0;
+                data.datasets[0].pointHoverRadius = 5;
+                data.datasets[0].borderColor = "rgba(220, 53, 69, 0.8)";
+                data.datasets[0].backgroundColor = "rgba(220, 53, 69, 0.1)";
+                
+                // Enhance the trend segments
+                data.datasets[1].borderWidth = 3;
+                data.datasets[1].borderColor = "rgba(40, 167, 69, 0.8)";
+                data.datasets[1].backgroundColor = "rgba(40, 167, 69, 0.0)";
+            }
+            
+            // Create the chart with improved options
             const chart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -704,6 +715,11 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    elements: {
+                        line: {
+                            tension: 0.3 // Add slight curve to lines
+                        }
+                    },
                     scales: {
                         x: {
                             type: 'time',
@@ -713,71 +729,133 @@
                                     month: 'MMM yyyy'
                                 }
                             },
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)',
+                                display: true
+                            },
                             title: {
                                 display: true,
-                                text: 'Date'
+                                text: 'Date',
+                                color: '#666',
+                                font: {
+                                    family: 'Inter',
+                                    size: 12
+                                }
                             },
                             ticks: {
                                 maxTicksLimit: 8,
                                 autoSkip: true,
                                 maxRotation: 45,
-                                minRotation: 45
+                                minRotation: 45,
+                                color: '#666',
+                                font: {
+                                    family: 'Inter'
+                                }
                             }
                         },
                         y: {
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)',
+                                display: true
+                            },
                             title: {
                                 display: true,
-                                text: 'Balance'
+                                text: 'Balance',
+                                color: '#666',
+                                font: {
+                                    family: 'Inter',
+                                    size: 12
+                                }
+                            },
+                            ticks: {
+                                color: '#666',
+                                font: {
+                                    family: 'Inter'
+                                }
                             }
                         }
                     },
                     plugins: {
                         tooltip: {
                             mode: 'index',
-                            intersect: false
+                            intersect: false,
+                            titleFont: {
+                                family: 'Inter'
+                            },
+                            bodyFont: {
+                                family: 'Inter'
+                            },
+                            displayColors: true,
+                            backgroundColor: 'rgba(0,0,0,0.7)'
                         },
                         legend: {
-                            position: 'top'
-                        },
-                        annotation: {
-                            annotations: []
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    family: 'Inter'
+                                },
+                                color: '#666',
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            }
                         }
                     }
                 }
             });
             
-            // Add vertical lines for change points after chart is created
+            // Use subtle, modern vertical lines for change points
             if (data.changePoints && data.changePoints.length > 0) {
-                // For each change point, add a super subtle vertical line annotation
-                data.changePoints.forEach((date, index) => {
-                    // Add a vertical line annotation for each change point - much more subtle
-                    const lineColor = 'rgba(0, 100, 0, 0.15)'; // Very subtle green
-                    
-                    // Create an HTML element for the annotation
-                    const line = document.createElement('div');
-                    line.style.position = 'absolute';
-                    line.style.width = '0.5px'; // Ultra thin line
-                    line.style.backgroundColor = lineColor;
-                    line.style.top = '0';
-                    line.style.bottom = '0';
-                    line.style.opacity = '0.3'; // Very transparent
-                    line.style.borderStyle = 'solid'; // Solid instead of dashed
-                    line.style.zIndex = '1';
-                    
-                    // Add a title attribute for tooltip
-                    line.title = `Change point: ${date}`;
-                    
-                    // Find position for the line
-                    const dateIndex = data.labels.findIndex(label => label === date);
-                    if (dateIndex !== -1) {
+                // Get the chart's canvas parent
+                const chartContainer = chart.canvas.parentNode;
+                
+                // Make sure container has position relative for absolute positioning of lines
+                chartContainer.style.position = 'relative';
+                
+                // Remove any existing change point lines
+                const existingLines = chartContainer.querySelectorAll('.change-point-line');
+                existingLines.forEach(line => line.remove());
+                
+                // Add change point lines after a slight delay to ensure chart is rendered
+                setTimeout(() => {
+                    data.changePoints.forEach((date, index) => {
+                        const dateIndex = data.labels.findIndex(label => label === date);
+                        if (dateIndex === -1) return;
+                        
                         const meta = chart.getDatasetMeta(0);
-                        if (meta.data[dateIndex]) {
-                            const x = meta.data[dateIndex].x;
-                            line.style.left = `${x}px`;
-                            chart.canvas.parentNode.appendChild(line);
-                        }
-                    }
-                });
+                        if (!meta.data[dateIndex]) return;
+                        
+                        const x = meta.data[dateIndex].x;
+                        
+                        // Create the line element
+                        const line = document.createElement('div');
+                        line.className = 'change-point-line';
+                        line.style.position = 'absolute';
+                        line.style.top = '0';
+                        line.style.bottom = '0';
+                        line.style.width = '1px';
+                        line.style.backgroundColor = 'rgba(0, 0, 0, 0.15)';
+                        line.style.left = `${x}px`;
+                        line.style.pointerEvents = 'none';
+                        line.style.zIndex = '10';
+                        line.style.boxShadow = '0 0 2px rgba(0, 0, 0, 0.1)';
+                        
+                        // Add a subtle point at the top of the line
+                        const point = document.createElement('div');
+                        point.style.position = 'absolute';
+                        point.style.top = '0';
+                        point.style.left = '-2px';
+                        point.style.width = '5px';
+                        point.style.height = '5px';
+                        point.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+                        point.style.borderRadius = '50%';
+                        
+                        line.appendChild(point);
+                        chartContainer.appendChild(line);
+                        
+                        // Add date tooltip
+                        line.title = `Change point: ${date}`;
+                    });
+                }, 200);
             }
         }
         
@@ -887,18 +965,38 @@
                 }
                 
                 const categories = await response.json();
-                renderCategories(categories.counts);
-                renderCategoryChart(categories.spending); // Update with real data
+                
+                // Render the categories list
+                renderCategories(categories.counts || {}, categories.colors || {});
+                
+                // Render the category chart with spending data
+                renderCategoryChart(categories.spending || {}, categories.colors || {});
+                
+                // Show a message if there's no spending data but it was expected
+                if (categories.has_spending_data === false && !categories.error) {
+                    console.warn("No spending data available - check that you have transactions with negative amounts");
+                    // Add a small warning to the chart area
+                    const chartContainer = document.querySelector('#categoryChart').parentNode;
+                    const warningEl = document.createElement('div');
+                    warningEl.className = 'small text-warning text-center mt-2';
+                    warningEl.textContent = 'Note: No expense transactions found to display in chart';
+                    chartContainer.appendChild(warningEl);
+                }
+                
+                // Store colors globally for other charts to use
+                window.categoryColors = categories.colors || {};
+                
                 return true;
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Error fetching categories:', error);
                 document.getElementById('categories-container').innerHTML = 
-                    '<div class="alert alert-danger w-100">Failed to load categories</div>';
-                throw error;
+                    '<div class="alert alert-danger w-100">Failed to load categories: ' + error.message + '</div>';
+                renderCategoryChart(null); // Ensure chart shows the "no data" state
+                return false;
             }
         }
         
-        function renderCategories(categories) {
+        function renderCategories(categories, categoryColors) {
             const container = document.getElementById('categories-container');
             container.innerHTML = '';
             
@@ -907,13 +1005,16 @@
                 return;
             }
             
-            // Colors for different categories
-            const colors = ['primary', 'success', 'danger', 'warning', 'info', 'secondary', 'dark'];
-            
+            // Use provided colors from API instead of predefined colors
             let index = 0;
             for (const category in categories) {
                 const badge = document.createElement('div');
-                badge.className = `badge bg-${colors[index % colors.length]} category-badge`;
+                const bgColor = categoryColors && categoryColors[category] ? categoryColors[category] : '#607D8B';
+                
+                // Apply the color directly as inline style
+                badge.className = 'category-badge';
+                badge.style.backgroundColor = bgColor;
+                badge.style.color = 'white';
                 badge.innerHTML = `${category}: ${categories[category]}`;
                 
                 container.appendChild(badge);
