@@ -13,6 +13,7 @@ import random
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from src.modules.pdf_interpreter import PDFReader
 from src.modules.helper_fns import GeneralHelperFns, CategoryUpdater
+from src.modules.merchant_categorizer import MerchantCategorizer
 
 # Global color mapping for categories to ensure consistency across visualizations
 CATEGORY_COLORS = {
@@ -486,6 +487,360 @@ def clear_cache():
         return jsonify({"success": True, "message": "PDF cache cleared successfully"})
     except Exception as e:
         return jsonify({"error": f"Failed to clear cache: {str(e)}"}), 500
+
+@app.route('/merchants')
+def merchants_dashboard():
+    """Render the merchant management dashboard"""
+    try:
+        # Initialize merchant categorizer
+        merchant_categorizer = MerchantCategorizer(base_path=Path(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))))
+        
+        # Get merchant counts
+        merchant_count = len(merchant_categorizer.get_all_merchants())
+        alias_count = len(merchant_categorizer.get_all_aliases())
+        
+        # Load all potential categories
+        categories = []
+        try:
+            databank_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'databank.json')
+            with open(databank_path, 'r') as f:
+                databank = json.load(f)
+            categories = list(databank.get('categories', {}).keys())
+        except Exception as e:
+            print(f"Error loading categories: {str(e)}")
+            categories = ["Groceries", "Dining", "Transport", "Shopping", "Bills", "Entertainment", "Uncategorized"]
+        
+        # Check if uncharacterized merchants file exists
+        review_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'uncharacterized_merchants.json')
+        has_review_data = os.path.exists(review_path)
+        
+        return render_template('merchants.html', 
+                               merchant_count=merchant_count, 
+                               alias_count=alias_count,
+                               categories=categories,
+                               has_review_data=has_review_data)
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return render_template('error.html', 
+                               message=f"Error initializing merchant dashboard: {str(e)}",
+                               show_details=True, 
+                               error_details=error_details)
+
+@app.route('/merchants/review')
+def merchants_review():
+    """Render the page for reviewing uncharacterized merchants"""
+    try:
+        # Check if uncharacterized merchants file exists
+        review_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'uncharacterized_merchants.json')
+        if not os.path.exists(review_path):
+            return redirect(url_for('merchants_dashboard'))
+        
+        # Load the uncharacterized merchants
+        try:
+            with open(review_path, 'r') as f:
+                content = f.read().strip()
+                if content:
+                    merchants_data = json.load(f)
+                else:
+                    merchants_data = {}
+            
+            # Count merchants
+            merchant_count = len(merchants_data)
+            
+            # If no merchants to review, redirect back to dashboard
+            if merchant_count == 0:
+                return redirect(url_for('merchants_dashboard'))
+                
+        except json.JSONDecodeError:
+            # If file exists but is invalid JSON, initialize it as empty
+            merchants_data = {}
+            merchant_count = 0
+            with open(review_path, 'w') as f:
+                json.dump({}, f)
+            return redirect(url_for('merchants_dashboard'))
+        
+        # Load categories
+        categories = []
+        try:
+            databank_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'databank.json')
+            with open(databank_path, 'r') as f:
+                databank = json.load(f)
+            categories = list(databank.get('categories', {}).keys())
+        except Exception as e:
+            print(f"Error loading categories: {str(e)}")
+            categories = ["Groceries", "Dining", "Transport", "Shopping", "Bills", "Entertainment", "Uncategorized"]
+        
+        return render_template('merchants_review.html', 
+                               merchant_count=merchant_count,
+                               categories=categories)
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return render_template('error.html', 
+                               message=f"Error initializing merchant review: {str(e)}",
+                               show_details=True, 
+                               error_details=error_details)
+
+@app.route('/api/merchants')
+def get_merchants():
+    """API endpoint to get merchants"""
+    try:
+        # Get search term if provided
+        search_term = request.args.get('search', '')
+        
+        # Initialize merchant categorizer
+        merchant_categorizer = MerchantCategorizer(base_path=Path(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))))
+        
+        # Get merchants (filtered by search term if provided)
+        if search_term:
+            merchants = merchant_categorizer.search_merchants(search_term)
+        else:
+            merchants = merchant_categorizer.get_all_merchants()
+            
+        # Format as list for easier handling in frontend
+        merchant_list = [{"name": name, "category": category} for name, category in merchants.items()]
+        
+        # Sort by name
+        merchant_list.sort(key=lambda x: x["name"])
+        
+        return jsonify({
+            "success": True,
+            "merchants": merchant_list,
+            "count": len(merchant_list)
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/merchants', methods=['POST'])
+def update_merchant():
+    """API endpoint to update a merchant's category"""
+    try:
+        data = request.json
+        if not data or 'merchant' not in data or 'category' not in data:
+            return jsonify({
+                "success": False,
+                "error": "Missing required fields"
+            }), 400
+            
+        merchant_name = data['merchant']
+        category = data['category']
+        
+        # Initialize merchant categorizer
+        merchant_categorizer = MerchantCategorizer(base_path=Path(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))))
+        
+        # Update merchant
+        success = merchant_categorizer.add_merchant(merchant_name, category)
+        
+        return jsonify({
+            "success": success,
+            "merchant": merchant_name,
+            "category": category
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/aliases', methods=['POST'])
+def add_alias():
+    """API endpoint to add a merchant alias"""
+    try:
+        data = request.json
+        if not data or 'alias' not in data or 'merchant' not in data:
+            return jsonify({
+                "success": False,
+                "error": "Missing required fields"
+            }), 400
+            
+        alias = data['alias']
+        merchant = data['merchant']
+        
+        # Initialize merchant categorizer
+        merchant_categorizer = MerchantCategorizer(base_path=Path(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))))
+        
+        # Add alias
+        success = merchant_categorizer.add_alias(alias, merchant)
+        
+        if not success:
+            return jsonify({
+                "success": False,
+                "error": f"Could not add alias. Ensure '{merchant}' exists in the database."
+            }), 400
+        
+        return jsonify({
+            "success": True,
+            "alias": alias,
+            "merchant": merchant
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/merchants/uncharacterized')
+def get_uncharacterized_merchants():
+    """API endpoint to get uncharacterized merchants for review"""
+    try:
+        # Get page and limit parameters
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        
+        # Check if uncharacterized merchants file exists
+        review_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'uncharacterized_merchants.json')
+        if not os.path.exists(review_path):
+            return jsonify({
+                "success": True,
+                "merchants": [],
+                "total": 0,
+                "page": page,
+                "limit": limit,
+                "pages": 0
+            })
+        
+        # Load the uncharacterized merchants
+        try:
+            with open(review_path, 'r') as f:
+                content = f.read().strip()
+                if content:
+                    merchants_data = json.load(f)
+                else:
+                    merchants_data = {}
+        except json.JSONDecodeError:
+            # Handle invalid JSON by initializing an empty merchants data
+            merchants_data = {}
+            # Fix the file by writing an empty JSON object
+            with open(review_path, 'w') as f:
+                json.dump({}, f)
+        
+        # Sort by frequency
+        sorted_merchants = sorted(merchants_data.items(), 
+                                 key=lambda x: x[1]["count"],
+                                 reverse=True)
+        
+        total_merchants = len(sorted_merchants)
+        total_pages = (total_merchants + limit - 1) // limit if total_merchants > 0 else 0
+        
+        # Adjust page if out of bounds
+        if page > total_pages and total_pages > 0:
+            page = 1
+        
+        # Paginate results
+        start = (page - 1) * limit
+        end = start + limit
+        paginated_merchants = sorted_merchants[start:end] if total_merchants > 0 else []
+        
+        # Format for response
+        result = []
+        for merchant, data in paginated_merchants:
+            result.append({
+                "merchant": merchant,
+                "count": data["count"],
+                "total_amount": data["total_amount"],
+                "examples": data["examples"]
+            })
+        
+        return jsonify({
+            "success": True,
+            "merchants": result,
+            "total": total_merchants,
+            "page": page,
+            "limit": limit,
+            "pages": total_pages
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/merchants/uncharacterized', methods=['POST'])
+def categorize_uncharacterized_merchant():
+    """API endpoint to categorize an uncharacterized merchant"""
+    try:
+        data = request.json
+        if not data or 'merchant' not in data or 'category' not in data:
+            return jsonify({
+                "success": False,
+                "error": "Missing required fields"
+            }), 400
+            
+        merchant_name = data['merchant']
+        category = data['category']
+        
+        # Initialize merchant categorizer
+        merchant_categorizer = MerchantCategorizer(base_path=Path(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))))
+        
+        # Add merchant to database
+        success = merchant_categorizer.add_merchant(merchant_name, category)
+        
+        if success:
+            # Remove from uncharacterized list
+            review_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'uncharacterized_merchants.json')
+            if os.path.exists(review_path):
+                with open(review_path, 'r') as f:
+                    merchants_data = json.load(f)
+                
+                # Remove this merchant
+                if merchant_name in merchants_data:
+                    del merchants_data[merchant_name]
+                
+                # Save updated data
+                with open(review_path, 'w') as f:
+                    json.dump(merchants_data, f, indent=2)
+        
+        return jsonify({
+            "success": success,
+            "merchant": merchant_name,
+            "category": category
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/api/merchants/uncharacterized/count')
+def get_uncharacterized_count():
+    """API endpoint to get the count of uncharacterized merchants"""
+    try:
+        # Check if uncharacterized merchants file exists
+        review_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'uncharacterized_merchants.json')
+        if not os.path.exists(review_path):
+            return jsonify({
+                "success": True,
+                "count": 0
+            })
+        
+        # Load the uncharacterized merchants
+        try:
+            with open(review_path, 'r') as f:
+                content = f.read().strip()
+                if content:
+                    merchants_data = json.load(f)
+                else:
+                    merchants_data = {}
+        except json.JSONDecodeError:
+            # Handle invalid JSON
+            merchants_data = {}
+            # Fix the file by writing an empty JSON object
+            with open(review_path, 'w') as f:
+                json.dump({}, f)
+        
+        return jsonify({
+            "success": True,
+            "count": len(merchants_data)
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 
