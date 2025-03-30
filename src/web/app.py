@@ -14,6 +14,45 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from src.modules.pdf_interpreter import PDFReader
 from src.modules.helper_fns import GeneralHelperFns, CategoryUpdater
 
+# Global color mapping for categories to ensure consistency across visualizations
+CATEGORY_COLORS = {
+    'Groceries': '#4CAF50',        # Green
+    'Dining': '#FF9800',           # Orange
+    'Transport': '#2196F3',        # Blue
+    'Shopping': '#9C27B0',         # Purple
+    'Bills': '#F44336',            # Red
+    'Entertainment': '#FFD700',    # Gold
+    'Travel': '#8B4513',           # Brown
+    'Healthcare': '#00BCD4',       # Cyan
+    'Education': '#3F51B5',        # Indigo
+    'Housing': '#E91E63',          # Pink
+    'Income': '#2E7D32',           # Dark Green
+    'Salary': '#1B5E20',           # Darker Green
+    'Investments': '#388E3C',      # Medium Green
+    'Transfers': '#424242',        # Dark Grey
+    'Utilities': '#F57C00',        # Dark Orange
+    'Insurance': '#D32F2F',        # Dark Red
+    'Subscription': '#7B1FA2',     # Dark Purple
+    'Uncategorized': '#607D8B'     # Blue Grey
+}
+
+# Function to get consistent color for a category
+def get_category_color(category):
+    if category in CATEGORY_COLORS:
+        return CATEGORY_COLORS[category]
+    
+    # Generate a stable color for categories not in the predefined map
+    # Use the category name as a seed for consistency
+    random.seed(category)
+    hue = random.random()
+    saturation = 0.7 + random.random() * 0.3  # High saturation
+    value = 0.7 + random.random() * 0.3  # Not too dark, not too light
+    r, g, b = [int(x * 255) for x in colorsys.hsv_to_rgb(hue, saturation, value)]
+    
+    # Add the new color to the map for future use
+    CATEGORY_COLORS[category] = f'rgb({r},{g},{b})'
+    return CATEGORY_COLORS[category]
+
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -50,9 +89,19 @@ def index():
             pdf_count = len(glob.glob(os.path.join(account_dir, "*.pdf")))
             statement_counts[account_type][account_name] = pdf_count
     
+    # Get info about cached PDFs
+    cache_info = {"cached_pdfs_count": 0, "cache_size_kb": 0}
+    try:
+        # Initialize PDFReader to get cache info
+        temp_reader = PDFReader(base_path=Path(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))))
+        cache_info = temp_reader.get_cache_info()
+    except Exception as e:
+        print(f"Error getting cache info: {str(e)}")
+    
     return render_template('index.html', 
                            account_types=account_types, 
-                           statement_counts=statement_counts)
+                           statement_counts=statement_counts,
+                           cache_info=cache_info)
 
 @app.route('/process_statements', methods=['POST'])
 def process_statements():
@@ -175,20 +224,45 @@ def get_categories():
     if processed_df is None:
         return jsonify({"error": "No data has been processed yet"}), 404
     
-    # Fill NaN values in Classification with 'Uncategorized'
-    df_copy = processed_df.copy()
-    df_copy['Classification'] = df_copy['Classification'].fillna('Uncategorized')
-    
-    # Count transactions by category and sum amounts (negative for expenses)
-    category_counts = df_copy['Classification'].value_counts().to_dict()
-    
-    # Calculate total spending by category (for negative amounts only - expenses)
-    category_spending = df_copy[df_copy['Amount'] < 0].groupby('Classification')['Amount'].sum().abs().to_dict()
-    
-    return jsonify({
-        "counts": category_counts,
-        "spending": category_spending
-    })
+    try:
+        # Fill NaN values in Classification with 'Uncategorized'
+        df_copy = processed_df.copy()
+        df_copy['Classification'] = df_copy['Classification'].fillna('Uncategorized')
+        
+        # Count transactions by category and sum amounts (negative for expenses)
+        category_counts = df_copy['Classification'].value_counts().to_dict()
+        
+        # Calculate total spending by category (for negative amounts only - expenses)
+        spending_df = df_copy[df_copy['Amount'] < 0]
+        
+        # Handle case where there are no negative amounts (expenses)
+        if spending_df.empty:
+            category_spending = {}
+            print("Warning: No transactions with negative amounts found for spending chart")
+        else:
+            category_spending = spending_df.groupby('Classification')['Amount'].sum().abs().to_dict()
+        
+        # Create color mapping for each category
+        category_colors = {}
+        all_categories = set(list(category_counts.keys()) + list(category_spending.keys()))
+        for category in all_categories:
+            category_colors[category] = get_category_color(category)
+        
+        return jsonify({
+            "counts": category_counts,
+            "spending": category_spending,
+            "colors": category_colors,
+            "has_spending_data": len(category_spending) > 0
+        })
+    except Exception as e:
+        print(f"Error in categories API: {str(e)}")
+        return jsonify({
+            "error": str(e),
+            "counts": {},
+            "spending": {},
+            "colors": {},
+            "has_spending_data": False
+        }), 500
 
 @app.route('/api/balance_chart')
 def get_balance_chart():
@@ -323,7 +397,8 @@ def get_monthly_trends():
         # Separate income (positive amounts) and expenses (negative amounts)
         income_df = df[df['Amount'] > 0].copy()
         expense_df = df[df['Amount'] < 0].copy()
-        expense_df['Amount'] = expense_df['Amount'].abs()  # Make expenses positive for charting
+        # Don't make expenses positive, keep them negative for proper axis display
+        # expense_df['Amount'] = expense_df['Amount'].abs()  # Make expenses positive for charting
         
         # Aggregate monthly income (total)
         monthly_income = income_df.groupby('YearMonth')['Amount'].sum().to_dict()
@@ -337,29 +412,6 @@ def get_monthly_trends():
         
         # Prepare datasets for chart.js
         expense_datasets = []
-        category_colors = {
-            'Groceries': '#4CAF50',        # Green
-            'Dining': '#FF9800',           # Orange
-            'Transport': '#2196F3',        # Blue
-            'Shopping': '#9C27B0',         # Purple
-            'Bills': '#F44336',            # Red
-            'Entertainment': '#FFD700',    # Gold
-            'Travel': '#8B4513',           # Brown
-            'Healthcare': '#00BCD4',       # Cyan
-            'Education': '#3F51B5',        # Indigo
-            'Housing': '#E91E63',          # Pink
-            'Uncategorized': '#607D8B'     # Blue Grey
-        }
-        
-        # Add any missing categories to the color map
-        for cat in categories:
-            if cat not in category_colors:
-                # Generate a distinct color if not predefined
-                hue = random.random()  # Use random hue
-                saturation = 0.7 + random.random() * 0.3  # High saturation
-                value = 0.7 + random.random() * 0.3  # Not too dark, not too light
-                r, g, b = [int(x * 255) for x in colorsys.hsv_to_rgb(hue, saturation, value)]
-                category_colors[cat] = f'rgb({r},{g},{b})'
         
         # Create a dataset for each category
         for category in categories:
@@ -376,7 +428,7 @@ def get_monthly_trends():
             expense_datasets.append({
                 'label': category,
                 'data': category_data,
-                'backgroundColor': category_colors.get(category, '#607D8B'),
+                'backgroundColor': get_category_color(category),
                 'stack': 'expenses'
             })
         
@@ -385,7 +437,7 @@ def get_monthly_trends():
         income_dataset = {
             'label': 'Income',
             'data': income_data,
-            'backgroundColor': 'rgba(75, 192, 192, 0.7)',
+            'backgroundColor': get_category_color('Income'),
             'stack': 'income',
             'type': 'bar'  # This allows mixing with the stacked bars
         }
@@ -396,7 +448,7 @@ def get_monthly_trends():
         for month in months:
             income = monthly_income.get(month, 0)
             expense = total_expenses_by_month.get(month, 0)
-            net = income - expense
+            net = income + expense  # Expense is already negative
             net_data.append(float(net) if pd.notna(net) else 0)
         
         net_dataset = {
