@@ -731,8 +731,9 @@ class PDFReader(GeneralHelperFns):
         df['account_order'] = df['Account Type'].apply(account_type_order)
         df = df.sort_values(['DateTime', 'account_order']).drop('account_order', axis=1)
                         
-        # Rename original Balance column to account_balance
+        # Rename original Balance column to account_balance and ensure it's numeric
         df = df.rename(columns={'Balance': 'account_balance'})
+        df['account_balance'] = pd.to_numeric(df['account_balance'].astype(str).str.replace(',', ''), errors='coerce')
         
         # Initialize running_balance column
         df['running_balance'] = None
@@ -752,7 +753,7 @@ class PDFReader(GeneralHelperFns):
                 fixed_df = df[fixed_mask]
                 latest_fixed_balances = fixed_df.groupby('Account Name')['account_balance'].last()
                 total_fixed_balance = latest_fixed_balances.sum()
-                fixed_balances[current_date] = total_fixed_balance
+                fixed_balances[current_date] = float(total_fixed_balance)
         
         # Second pass: calculate running balances
         last_fixed_balance = None
@@ -768,7 +769,7 @@ class PDFReader(GeneralHelperFns):
                 last_fixed_balance = fixed_balances[current_date]
                 last_fixed_date = current_date
                 credit_sum = 0
-                df.loc[idx, 'running_balance'] = last_fixed_balance
+                df.loc[idx, 'running_balance'] = float(last_fixed_balance)
             else:  # Credit accounts
                 if last_fixed_balance is None:
                     # If no fixed balance seen yet, look ahead for the next fixed balance
@@ -790,12 +791,19 @@ class PDFReader(GeneralHelperFns):
                     (df['DateTime'] <= current_date) &
                     (df['Account Type'] == 'Credit')
                 )
-                credit_sum = df[credit_mask]['Amount'].sum()
+                credit_sum = float(df[credit_mask]['Amount'].sum())
                 
                 # Calculate running balance
-                df.loc[idx, 'running_balance'] = last_fixed_balance + credit_sum
+                df.loc[idx, 'running_balance'] = float(last_fixed_balance + credit_sum)
+        
+        # Ensure both balance columns are numeric
+        df['account_balance'] = pd.to_numeric(df['account_balance'], errors='coerce')
+        df['running_balance'] = pd.to_numeric(df['running_balance'], errors='coerce')
         
         print(f"DEBUG: After combining balances: {len(df)} rows")
+        print(f"DEBUG: Sample account_balance values: {df['account_balance'].head()}")
+        print(f"DEBUG: Sample running_balance values: {df['running_balance'].head()}")
+        
         return df
 
     def tabulate_gap_balances(self, df_in):

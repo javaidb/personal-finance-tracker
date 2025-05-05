@@ -477,56 +477,56 @@
                 // Debug logging for balance values
                 console.log('Balance values:', {
                     accountBalance: {
-                        raw: transaction.Account_Balance,
-                        type: typeof transaction.Account_Balance,
-                        isNull: transaction.Account_Balance === null,
-                        isUndefined: transaction.Account_Balance === undefined,
-                        isNaN: isNaN(transaction.Account_Balance)
+                        raw: transaction.account_balance,
+                        type: typeof transaction.account_balance,
+                        isNull: transaction.account_balance === null,
+                        isUndefined: transaction.account_balance === undefined,
+                        isNaN: isNaN(transaction.account_balance)
                     },
-                    overallBalance: {
-                        raw: transaction.Overall_Balance,
-                        type: typeof transaction.Overall_Balance,
-                        isNull: transaction.Overall_Balance === null,
-                        isUndefined: transaction.Overall_Balance === undefined,
-                        isNaN: isNaN(transaction.Overall_Balance)
+                    runningBalance: {
+                        raw: transaction.running_balance,
+                        type: typeof transaction.running_balance,
+                        isNull: transaction.running_balance === null,
+                        isUndefined: transaction.running_balance === undefined,
+                        isNaN: isNaN(transaction.running_balance)
                     }
                 });
                 
                 // Format balances with more careful type checking
                 let accountBalanceDisplay = '-';
-                if (transaction.Account_Balance !== null && 
-                    transaction.Account_Balance !== undefined && 
-                    !isNaN(parseFloat(transaction.Account_Balance))) {
+                if (transaction.account_balance !== null && 
+                    transaction.account_balance !== undefined && 
+                    !isNaN(parseFloat(transaction.account_balance))) {
                     accountBalanceDisplay = new Intl.NumberFormat('en-US', { 
                         style: 'currency', 
                         currency: 'USD' 
-                    }).format(parseFloat(transaction.Account_Balance));
+                    }).format(parseFloat(transaction.account_balance));
                 }
                 
-                let overallBalanceDisplay = '-';
-                if (transaction.Overall_Balance !== null && 
-                    transaction.Overall_Balance !== undefined && 
-                    !isNaN(parseFloat(transaction.Overall_Balance))) {
-                    overallBalanceDisplay = new Intl.NumberFormat('en-US', { 
+                let runningBalanceDisplay = '-';
+                if (transaction.running_balance !== null && 
+                    transaction.running_balance !== undefined && 
+                    !isNaN(parseFloat(transaction.running_balance))) {
+                    runningBalanceDisplay = new Intl.NumberFormat('en-US', { 
                         style: 'currency', 
                         currency: 'USD' 
-                    }).format(parseFloat(transaction.Overall_Balance));
+                    }).format(parseFloat(transaction.running_balance));
                 }
                 
                 // Debug logging for formatted values
                 console.log('Formatted values:', {
                     accountBalanceDisplay,
-                    overallBalanceDisplay
+                    runningBalanceDisplay
                 });
                 
                 row.innerHTML = `
                     <td>${formattedDate}</td>
                     <td>${transaction.Details || ''}</td>
-                    <td class="${amountClass}">${amountPrefix}${formattedAmount}</td>
+                    <td class="${transaction.Amount < 0 ? 'text-danger' : 'text-success'}">${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(transaction.Amount)}</td>
                     <td>${transaction.Classification || 'Uncategorized'}</td>
-                    <td>${transaction.Account_Name || ''}</td>
-                    <td>${accountBalanceDisplay}</td>
-                    <td>${overallBalanceDisplay}</td>
+                    <td>${transaction['Account Type'] || ''}</td>
+                    <td>${transaction.account_balance !== null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(transaction.account_balance) : '-'}</td>
+                    <td>${transaction.running_balance !== null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(transaction.running_balance) : '-'}</td>
                 `;
                 
                 tableBody.appendChild(row);

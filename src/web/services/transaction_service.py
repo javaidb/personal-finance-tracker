@@ -58,22 +58,32 @@ class TransactionService:
             print(f"DEBUG: Initial DataFrame size: {len(self.processed_df)}")
             df = self.processed_df.copy()
             
-            # Debug: Check what columns we actually have
-            print(f"DEBUG: Available columns: {df.columns.tolist()}")
-            print(f"DEBUG: Sample row: {df.iloc[0].to_dict()}")
+            # Debug: Check what columns we actually have and their data types
+            print(f"DEBUG: Available columns and their types:")
+            for col in df.columns:
+                print(f"{col}: {df[col].dtype}")
+                if col in ['account_balance', 'running_balance', 'Amount']:
+                    print(f"Sample values for {col}:")
+                    print(df[col].head())
+                    print(f"Number of NaN values in {col}: {df[col].isna().sum()}")
             
             # Ensure DateTime is in proper format and sort by date in descending order
             df['DateTime'] = pd.to_datetime(df['DateTime'])
             df = df.sort_values(by='DateTime', ascending=False)
             
-            # For account balance, use the account_balance column
-            # For credit accounts, we don't show individual account balances
-            df['Account_Balance'] = None
-            non_credit_mask = df['Account Type'] != 'Credit'
-            df.loc[non_credit_mask, 'Account_Balance'] = df.loc[non_credit_mask, 'account_balance']
+            # First check if the balance columns exist
+            if 'account_balance' not in df.columns:
+                print("DEBUG: account_balance column missing!")
+            if 'running_balance' not in df.columns:
+                print("DEBUG: running_balance column missing!")
             
-            # For overall balance, use running_balance directly
-            df['Overall_Balance'] = df['running_balance']
+            # Ensure balance columns are numeric
+            df['account_balance'] = pd.to_numeric(df['account_balance'], errors='coerce')
+            df['running_balance'] = pd.to_numeric(df['running_balance'], errors='coerce')
+            
+            print("DEBUG: Balance columns after conversion:")
+            print("account_balance sample:", df['account_balance'].head())
+            print("running_balance sample:", df['running_balance'].head())
             
             # Apply date filtering if provided
             if start_date:
@@ -92,22 +102,31 @@ class TransactionService:
             
             print(f"DEBUG: Final DataFrame size after filtering: {len(df)}")
             
-            # Convert DataFrame to list of dictionaries
-            transactions = df.to_dict('records')
-            print(f"DEBUG: First transaction after conversion: {transactions[0] if transactions else None}")
+            # Convert DataFrame to list of dictionaries with explicit error handling
+            try:
+                transactions = []
+                for _, row in df.iterrows():
+                    transaction = {}
+                    for key, value in row.items():
+                        if isinstance(value, (np.int64, np.float64)):
+                            transaction[key] = float(value)
+                        elif pd.isna(value):
+                            transaction[key] = None
+                        elif isinstance(value, pd.Timestamp):
+                            transaction[key] = value.strftime('%Y-%m-%d')
+                        else:
+                            transaction[key] = value
+                    transactions.append(transaction)
+                
+                if transactions:
+                    print("DEBUG: First transaction after conversion:")
+                    print("account_balance:", transactions[0].get('account_balance'))
+                    print("running_balance:", transactions[0].get('running_balance'))
+                    print("Amount:", transactions[0].get('Amount'))
+            except Exception as e:
+                print(f"DEBUG: Error converting transactions: {str(e)}")
+                return []
             
-            # Format transactions
-            for transaction in transactions:
-                # Convert any non-serializable types
-                for key, value in transaction.items():
-                    if isinstance(value, (np.int64, np.float64)):
-                        transaction[key] = float(value)
-                    elif pd.isna(value):
-                        transaction[key] = None
-                    elif isinstance(value, pd.Timestamp):
-                        transaction[key] = value.strftime('%Y-%m-%d')
-            
-            print(f"DEBUG: First transaction after formatting: {transactions[0] if transactions else None}")
             return transactions
             
         except Exception as e:
@@ -480,14 +499,18 @@ class TransactionService:
         print(f"DEBUG: After processing transaction details: {len(df)} rows")
         
         # Convert numeric columns
-        for col in ['Balance', 'Amount']:
+        numeric_columns = ['Balance', 'Amount', 'account_balance', 'running_balance']
+        for col in numeric_columns:
             if col in df.columns:
+                print(f"DEBUG: Converting {col} to numeric")
                 # First remove any commas
-                df[col] = df[col].str.replace(',', '', regex=False)
+                if df[col].dtype == 'object':  # Only process strings
+                    df[col] = df[col].str.replace(',', '', regex=False)
                 # Then convert to numeric
                 df[col] = pd.to_numeric(df[col], errors='coerce')
                 # Fill NaN values with 0
                 df[col] = df[col].fillna(0)
+                print(f"DEBUG: {col} conversion complete. Sample values: {df[col].head()}")
         
         # Classify transactions
         df = self.__classify_transactions(df)
