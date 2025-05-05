@@ -16,6 +16,7 @@ mkdir bank_statements\Chequing 2>nul
 mkdir bank_statements\Credit 2>nul
 mkdir bank_statements\Savings 2>nul
 mkdir cached_data 2>nul
+mkdir logs 2>nul
 
 echo.
 echo Creating sample databank.json file if it doesn't exist...
@@ -33,6 +34,9 @@ if exist .venv\Scripts\activate (
   call .venv\Scripts\activate
 )
 
+:: Set port number
+set PORT=8000
+
 echo.
 echo Installing requirements...
 pip install -r requirements.txt
@@ -40,12 +44,12 @@ pip install -r requirements.txt
 echo.
 echo Starting the web application...
 echo.
-echo Web app will be available at: http://127.0.0.1:5000/
+echo Web app will be available at: http://127.0.0.1:%PORT%/
 echo.
 
 REM Start the web application and open the browser
-start "" http://127.0.0.1:5000/
-python src/web/app.py
+start http://localhost:%PORT%/
+python src/run.py
 
 REM When Flask ends, deactivate the virtual environment
 call .venv\Scripts\deactivate 
