@@ -7,6 +7,7 @@ import ruptures as rpt
 import json
 from datetime import datetime, timezone
 import logging
+from pathlib import Path
 
 import ipywidgets as widgets
 from IPython.display import display, clear_output
@@ -18,6 +19,12 @@ from plotly.colors import qualitative
 
 # from scipy.ndimage import gaussian_filter1d
 class GeneralHelperFns:
+    def __init__(self, base_path=None):
+        if base_path is None:
+            base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        self.base_path = base_path
+        self.databank_path = os.path.join(base_path, "cached_data", "databank.json")
+
     def __extract_month(self, input_string):
         months = '|'.join(f'.*{m}.*' for m in calendar.month_abbr[1:])
         month_match = re.match(f'.*({months}).*', input_string, re.IGNORECASE)
@@ -47,18 +54,39 @@ class GeneralHelperFns:
         return full_path
 
     def process_import_path(self, pdf_file, parent_account_type, parent_account_name):
-        return f"../../bank_statements/{parent_account_type}/{parent_account_name}/{pdf_file}"
+        # Get the absolute path to the project root directory
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        return os.path.join(project_root, "bank_statements", parent_account_type, parent_account_name, pdf_file)
 
     def read_all_account_type_folder_names(self):
-        directory = f"../../bank_statements/"
+        # Get the absolute path to the project root directory
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        directory = os.path.join(project_root, "bank_statements")
+        
+        # Make sure the directory exists
+        os.makedirs(directory, exist_ok=True)
+        
         return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
 
     def read_all_account_folder_names(self, account_type):
-        directory = f"../../bank_statements/{account_type}/"
+        # Get the absolute path to the project root directory
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        directory = os.path.join(project_root, "bank_statements", account_type)
+        
+        # Make sure the directory exists
+        os.makedirs(directory, exist_ok=True)
+        
         return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
 
     def read_all_files(self, account_type, account_name):
-        pdf_files = os.listdir(f"../../bank_statements/{account_type}/{account_name}/")
+        # Get the absolute path to the project root directory
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        directory = os.path.join(project_root, "bank_statements", account_type, account_name)
+        
+        # Make sure the directory exists
+        os.makedirs(directory, exist_ok=True)
+        
+        pdf_files = os.listdir(directory)
         return [f for f in pdf_files if f.endswith('.pdf')]
 
     def sort_df(self, df):
@@ -114,10 +142,16 @@ class GeneralHelperFns:
         return imported_json
 
     def export_json(self, updated_json, print_statement=False):
-        json_file_path = '../../cached_data/databank.json'
-        with open(json_file_path, 'w') as json_file:
-            json.dump(updated_json, json_file, indent=2)
-        if print_statement: print(f"Exported updated JSON to '{json_file_path}'.")
+        try:
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(self.databank_path), exist_ok=True)
+            
+            with open(self.databank_path, 'w') as json_file:
+                json.dump(updated_json, json_file, indent=2)
+            if print_statement: 
+                print(f"Exported updated JSON to '{self.databank_path}'.")
+        except Exception as e:
+            print(f"Error exporting JSON: {str(e)}")
 
     def reset_json_matches(self, imported_json):
         for category, keyword_patterns in imported_json.items():
@@ -127,9 +161,16 @@ class GeneralHelperFns:
         return imported_json
 
     def import_json(self):
-        json_file_path = '../../cached_data/databank.json'
-        with open(json_file_path, 'r') as file:
-            return json.load(file)
+        try:
+            if os.path.exists(self.databank_path):
+                with open(self.databank_path, 'r') as file:
+                    return json.load(file)
+            else:
+                # Return empty categories structure if file doesn't exist
+                return {"categories": {}}
+        except Exception as e:
+            print(f"Error importing JSON: {str(e)}")
+            return {"categories": {}}
 
     def add_entry_to_json(self, index_classifier:int, entry:list, category:str, candidate_cache:list, debug=False):
         if debug: print(f"candidate_cache: {candidate_cache}")
@@ -177,13 +218,18 @@ class GeneralHelperFns:
         
         # ============================== INITIALIZATIONS FOR PLOTTING ==============================
 
+        df = df_in.copy()
+        
+        # Check if Balance column exists, if not calculate running balance from Amount
+        if 'Balance' not in df.columns:
+            df['Balance'] = df['Amount'].fillna(0).cumsum()
+        
         df_col_for_balance = 'Balance'
         concat_coeffs_col = "Regional Rates of Change (PELT)"
         segmented_col = "Linear Region Segmentations (PELT)"
         
         # ==========================================================================================
 
-        df = df_in.copy()
         df = df[df[[df_col_for_balance]].notnull().all(axis=1)]
         df['DateTime'] = pd.to_datetime(df['DateTime'])
         df = df.sort_values(by='DateTime')
@@ -318,6 +364,9 @@ class OutputWidgetHandler(logging.Handler):
 
 class CategoryUpdater(GeneralHelperFns):
     def __init__(self, statement_reader_handler, debug=False, words_col='Processed Details', categories_col='Classification', matched_words_col='Matched Keyword'):
+        # Initialize parent class with base_path from statement_reader_handler
+        super().__init__(base_path=statement_reader_handler.base_path)
+        
         self.reprocess_fn = statement_reader_handler.process_raw_df
         self.pristine_df = statement_reader_handler.filtered_df.copy()
         self.debug = debug
