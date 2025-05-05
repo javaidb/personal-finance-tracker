@@ -199,6 +199,29 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- Milestones Section -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5>Financial Milestones</h5>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="showProjectionToggle">
+                                        <label class="form-check-label" for="showProjectionToggle">Show Projections</label>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <div id="milestoneChartLoader" class="loading-chart">
+                                            <div class="loading-spinner"></div>
+                                        </div>
+                                        <canvas id="milestoneChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
                 <!-- Transactions Section -->
@@ -233,11 +256,13 @@
                                             <th>Amount</th>
                                             <th>Category</th>
                                             <th>Account</th>
+                                            <th>Account Balance</th>
+                                            <th>Overall Balance</th>
                                         </tr>
                                     </thead>
                                     <tbody id="transactions-table-body">
                                         <tr>
-                                            <td colspan="5" class="text-center">Loading transactions...</td>
+                                            <td colspan="7" class="text-center">Loading transactions...</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -322,6 +347,7 @@
             Promise.all([
                 fetchCategories(),  // Get categories first for color consistency
                 fetchBalanceChart(),
+                fetchBalanceData(), // Add milestone chart initialization
                 fetchTransactions(),
                 fetchMonthlyTrends(),
                 fetchPeltAnalysis()
@@ -394,19 +420,28 @@
                 url += '?' + params.toString();
             }
             
-            document.getElementById('transactions-table-body').innerHTML = '<tr><td colspan="5" class="text-center">Loading transactions...</td></tr>';
+            document.getElementById('transactions-table-body').innerHTML = '<tr><td colspan="7" class="text-center">Loading transactions...</td></tr>';
             
             fetch(url)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch transactions');
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    allTransactions = data;
-                    displayTransactions(currentPage);
-                    document.getElementById('transaction-count-display').innerText = `Showing transactions from ${data.length} total transactions`;
-                    updatePaginationButtons();
+                    if (Array.isArray(data)) {
+                        allTransactions = data;
+                        displayTransactions(currentPage);
+                        document.getElementById('transaction-count-display').innerText = `Showing ${Math.min(transactionsPerPage, data.length)} of ${data.length} transactions`;
+                        updatePaginationButtons();
+                    } else {
+                        throw new Error('Invalid data format received');
+                    }
                 })
                 .catch(error => {
                     console.error('Error fetching transactions:', error);
-                    document.getElementById('transactions-table-body').innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading transactions. Please try again.</td></tr>';
+                    document.getElementById('transactions-table-body').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading transactions: ' + error.message + '</td></tr>';
                 });
         }
             
@@ -419,28 +454,79 @@
             tableBody.innerHTML = '';
             
             if (pageTransactions.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No transactions found in this date range.</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="7" class="text-center">No transactions found in this date range.</td></tr>';
                 return;
             }
             
             pageTransactions.forEach(transaction => {
                 const row = document.createElement('tr');
                 
+                // Debug logging
+                console.log('Processing transaction:', transaction);
+                
                 // Format date
                 const date = new Date(transaction.DateTime);
                 const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
                 
-                // Format amount with color (red for negative, green for positive)
+                // Format amount - preserve original sign and format
                 const amount = parseFloat(transaction.Amount);
                 const formattedAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(amount));
                 const amountClass = amount < 0 ? 'text-danger' : 'text-success';
+                const amountPrefix = amount < 0 ? '-' : '+';
+                
+                // Debug logging for balance values
+                console.log('Balance values:', {
+                    accountBalance: {
+                        raw: transaction.Account_Balance,
+                        type: typeof transaction.Account_Balance,
+                        isNull: transaction.Account_Balance === null,
+                        isUndefined: transaction.Account_Balance === undefined,
+                        isNaN: isNaN(transaction.Account_Balance)
+                    },
+                    overallBalance: {
+                        raw: transaction.Overall_Balance,
+                        type: typeof transaction.Overall_Balance,
+                        isNull: transaction.Overall_Balance === null,
+                        isUndefined: transaction.Overall_Balance === undefined,
+                        isNaN: isNaN(transaction.Overall_Balance)
+                    }
+                });
+                
+                // Format balances with more careful type checking
+                let accountBalanceDisplay = '-';
+                if (transaction.Account_Balance !== null && 
+                    transaction.Account_Balance !== undefined && 
+                    !isNaN(parseFloat(transaction.Account_Balance))) {
+                    accountBalanceDisplay = new Intl.NumberFormat('en-US', { 
+                        style: 'currency', 
+                        currency: 'USD' 
+                    }).format(parseFloat(transaction.Account_Balance));
+                }
+                
+                let overallBalanceDisplay = '-';
+                if (transaction.Overall_Balance !== null && 
+                    transaction.Overall_Balance !== undefined && 
+                    !isNaN(parseFloat(transaction.Overall_Balance))) {
+                    overallBalanceDisplay = new Intl.NumberFormat('en-US', { 
+                        style: 'currency', 
+                        currency: 'USD' 
+                    }).format(parseFloat(transaction.Overall_Balance));
+                }
+                
+                // Debug logging for formatted values
+                console.log('Formatted values:', {
+                    accountBalanceDisplay,
+                    overallBalanceDisplay
+                });
                 
                 row.innerHTML = `
                     <td>${formattedDate}</td>
-                    <td>${transaction.Details}</td>
-                    <td class="${amountClass}">${amount < 0 ? '-' : ''}${formattedAmount}</td>
+                    <td>${transaction.Details || ''}</td>
+                    <td class="${amountClass}">${amountPrefix}${formattedAmount}</td>
                     <td>${transaction.Classification || 'Uncategorized'}</td>
-                    <td>${transaction.Account_Name}</td>
+                    <td>${transaction.Account_Name || ''}</td>
+                    <td>${accountBalanceDisplay}</td>
+                    <td>${overallBalanceDisplay}</td>
                 `;
                 
                 tableBody.appendChild(row);
@@ -485,6 +571,8 @@
                 .then(data => {
                     if (data.success) {
                         alert('PDF cache cleared successfully');
+                        // Force a hard reload of the page to ensure fresh data
+                        window.location.href = window.location.href;
                     } else {
                         alert('Error: ' + data.error);
                     }
@@ -497,7 +585,7 @@
         
         async function fetchBalanceChart() {
             try {
-                const response = await fetch('/api/balance_chart');
+                const response = await fetch('/api/balance-chart');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -512,7 +600,7 @@
         
         async function fetchPeltAnalysis() {
             try {
-                const response = await fetch('/api/pelt_analysis');
+                const response = await fetch('/api/pelt-analysis');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -575,36 +663,16 @@
                     },
                     scales: {
                         x: {
-                            type: 'time',
-                            time: {
-                                unit: 'month',
-                                displayFormats: {
-                                    month: 'MMM yyyy'
-                                }
-                            },
+                            type: 'category',
                             grid: {
-                                display: true,
-                                color: 'rgba(0, 0, 0, 0.05)'
+                                display: false
                             },
                             ticks: {
                                 maxTicksLimit: 8,
-                                autoSkip: true,
-                                maxRotation: 45,
-                                minRotation: 45,
                                 color: '#666',
                                 font: {
                                     family: 'Inter',
                                     size: 11
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Date',
-                                color: '#666',
-                                font: {
-                                    family: 'Inter',
-                                    size: 12,
-                                    weight: '500'
                                 }
                             }
                         },
@@ -666,6 +734,75 @@
                     }
                 }
             });
+        }
+        
+        async function fetchCategories() {
+            try {
+                const response = await fetch('/api/categories');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch categories');
+                }
+                
+                const categories = await response.json();
+                
+                if (categories.error) {
+                    throw new Error(categories.error);
+                }
+                
+                // Render the categories list
+                renderCategories(categories.counts || {}, categories.colors || {});
+                
+                // Render the category chart with spending data
+                renderCategoryChart(categories.spending || {}, categories.colors || {});
+                
+                // Show a message if there's no spending data but it was expected
+                if (categories.has_spending_data === false) {
+                    console.warn("No spending data available - check that you have transactions with negative amounts");
+                    // Add a small warning to the chart area
+                    const chartContainer = document.querySelector('#categoryChart').parentNode;
+                    const warningEl = document.createElement('div');
+                    warningEl.className = 'small text-warning text-center mt-2';
+                    warningEl.textContent = 'Note: No expense transactions found to display in chart';
+                    chartContainer.appendChild(warningEl);
+                }
+                
+                // Store colors globally for other charts to use
+                window.categoryColors = categories.colors || {};
+                
+                return true;
+            } catch (error) {
+                console.error('Error fetching categories:', error);
+                document.getElementById('categories-container').innerHTML = 
+                    '<div class="alert alert-danger w-100">Failed to load categories: ' + error.message + '</div>';
+                renderCategoryChart(null); // Ensure chart shows the "no data" state
+                return false;
+            }
+        }
+        
+        function renderCategories(categories, categoryColors) {
+            const container = document.getElementById('categories-container');
+            container.innerHTML = '';
+            
+            if (Object.keys(categories).length === 0) {
+                container.innerHTML = '<p class="text-center w-100">No categories found</p>';
+                return;
+            }
+            
+            // Use provided colors from API instead of predefined colors
+            let index = 0;
+            for (const category in categories) {
+                const badge = document.createElement('div');
+                const bgColor = categoryColors && categoryColors[category] ? categoryColors[category] : '#607D8B';
+                
+                // Apply the color directly as inline style
+                badge.className = 'category-badge';
+                badge.style.backgroundColor = bgColor;
+                badge.style.color = 'white';
+                badge.innerHTML = `${category}: ${categories[category]}`;
+                
+                container.appendChild(badge);
+                index++;
+            }
         }
         
         function renderCategoryChart(categoryData, categoryColors) {
@@ -835,7 +972,7 @@
                             callbacks: {
                                 label: function(context) {
                                     const label = context.label || '';
-                                    const value = context.parsed || 0;
+                                    const value = context.raw || 0;
                                     const percentage = Math.round((value / total) * 100);
                                     return `${label}: ${new Intl.NumberFormat('en-US', {
                                         style: 'currency',
@@ -848,7 +985,7 @@
                 }
             });
             
-            // Optional: Add a total spending text in the center of the doughnut
+            // Add total spending text in the center of the doughnut
             if (total > 0) {
                 setTimeout(() => {
                     const chartArea = document.querySelector('#categoryChart').parentNode;
@@ -990,7 +1127,7 @@
         
         async function fetchMonthlyTrends() {
             try {
-                const response = await fetch('/api/monthly_trends');
+                const response = await fetch('/api/monthly-trends');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -1012,19 +1149,27 @@
                 existingChart.destroy();
             }
             
-            // Customize the datasets for better aesthetics
-            if (data.datasets && data.datasets.length >= 2) {
-                // Enhance the balance line
-                data.datasets[0].borderWidth = 2;
-                data.datasets[0].pointRadius = 0;
-                data.datasets[0].pointHoverRadius = 5;
-                data.datasets[0].borderColor = "rgba(220, 53, 69, 0.8)";
-                data.datasets[0].backgroundColor = "rgba(220, 53, 69, 0.1)";
-                
-                // Enhance the trend segments
-                data.datasets[1].borderWidth = 3;
-                data.datasets[1].borderColor = "rgba(40, 167, 69, 0.8)";
-                data.datasets[1].backgroundColor = "rgba(40, 167, 69, 0.0)";
+            // If no data or error, show placeholder
+            if (!data || data.error || !data.datasets || data.datasets.length === 0) {
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['No data available'],
+                        datasets: [{
+                            data: [0],
+                            borderColor: '#ccc',
+                            borderDash: [5, 5]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+                return;
             }
             
             // Create the chart with improved options
@@ -1044,13 +1189,7 @@
                     },
                     scales: {
                         x: {
-                            type: 'time',
-                            time: {
-                                unit: 'month',
-                                displayFormats: {
-                                    month: 'MMM yyyy'
-                                }
-                            },
+                            type: 'category',
                             grid: {
                                 color: 'rgba(0,0,0,0.05)',
                                 display: true
@@ -1093,6 +1232,13 @@
                                 color: '#666',
                                 font: {
                                     family: 'Inter'
+                                },
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('en-US', {
+                                        style: 'currency',
+                                        currency: 'USD',
+                                        maximumFractionDigits: 0
+                                    }).format(value);
                                 }
                             }
                         }
@@ -1106,6 +1252,15 @@
                             },
                             bodyFont: {
                                 family: 'Inter'
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    return `${context.dataset.label}: ${new Intl.NumberFormat('en-US', {
+                                        style: 'currency',
+                                        currency: 'USD'
+                                    }).format(value)}`;
+                                }
                             },
                             displayColors: true,
                             backgroundColor: 'rgba(0,0,0,0.7)'
@@ -1125,12 +1280,9 @@
                 }
             });
             
-            // Use subtle, modern vertical lines for change points
+            // Add vertical lines for change points
             if (data.changePoints && data.changePoints.length > 0) {
-                // Get the chart's canvas parent
                 const chartContainer = chart.canvas.parentNode;
-                
-                // Make sure container has position relative for absolute positioning of lines
                 chartContainer.style.position = 'relative';
                 
                 // Remove any existing change point lines
@@ -1140,7 +1292,7 @@
                 // Add change point lines after a slight delay to ensure chart is rendered
                 setTimeout(() => {
                     data.changePoints.forEach((date, index) => {
-                        const dateIndex = data.labels.findIndex(label => label === date);
+                        const dateIndex = data.labels.indexOf(date);
                         if (dateIndex === -1) return;
                         
                         const meta = chart.getDatasetMeta(0);
@@ -1184,6 +1336,35 @@
         function renderRateOfChangeChart(rateData) {
             const ctx = document.getElementById('rateOfChangeChart').getContext('2d');
             
+            // Clean up any existing chart
+            const existingChart = Chart.getChart(ctx.canvas);
+            if (existingChart) {
+                existingChart.destroy();
+            }
+            
+            // If no data, show placeholder
+            if (!rateData || !rateData.data || rateData.data.length === 0) {
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['No data available'],
+                        datasets: [{
+                            data: [0],
+                            borderColor: '#ccc',
+                            borderDash: [5, 5]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+                return;
+            }
+            
             // Create datasets for positive and negative values
             const positiveData = rateData.data.map(val => val > 0 ? val : null);
             const negativeData = rateData.data.map(val => val < 0 ? val : null);
@@ -1218,16 +1399,9 @@
                     maintainAspectRatio: false,
                     scales: {
                         x: {
-                            type: 'time',
-                            time: {
-                                unit: 'month',
-                                displayFormats: {
-                                    month: 'MMM yyyy'
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Date'
+                            type: 'category',
+                            grid: {
+                                display: false
                             },
                             ticks: {
                                 maxTicksLimit: 8,
@@ -1254,6 +1428,15 @@
                                     }
                                     return 1;
                                 }
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('en-US', {
+                                        style: 'currency',
+                                        currency: 'USD',
+                                        maximumFractionDigits: 0
+                                    }).format(value);
+                                }
                             }
                         }
                     },
@@ -1267,7 +1450,10 @@
                                     if (value === null) return null;
                                     
                                     const sign = value >= 0 ? '+' : '';
-                                    return `Rate of Change: ${sign}$${value.toFixed(2)}/week`;
+                                    return `Rate of Change: ${sign}${new Intl.NumberFormat('en-US', {
+                                        style: 'currency',
+                                        currency: 'USD'
+                                    }).format(value)}/week`;
                                 }
                             }
                         },
@@ -1278,71 +1464,273 @@
                 }
             });
         }
-        
-        async function fetchCategories() {
+
+        // Initialize milestone chart
+        let milestoneChart = null;
+        const milestones = [10000, 25000, 50000, 100000, 200000, 500000, 1000000];
+
+        function renderMilestoneChart(balanceData) {
+            const ctx = document.getElementById('milestoneChart').getContext('2d');
+            
+            // Get the current balance from the data
+            const currentBalance = balanceData && balanceData.datasets && balanceData.datasets[0] && balanceData.datasets[0].data 
+                ? balanceData.datasets[0].data[0] 
+                : 0;
+            
+            // Calculate next milestone
+            const nextMilestone = milestones.find(m => m > currentBalance) || milestones[milestones.length - 1];
+            const previousMilestone = milestones.filter(m => m <= currentBalance).pop() || 0;
+            
+            // Calculate progress percentage
+            const progress = ((currentBalance - previousMilestone) / (nextMilestone - previousMilestone)) * 100;
+            
+            // Clean up any existing chart
+            const existingChart = Chart.getChart(ctx.canvas);
+            if (existingChart) {
+                existingChart.destroy();
+            }
+            
+            // Create the milestone chart
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Progress'],
+                    datasets: [{
+                        data: [progress, 100 - progress],
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.8)',
+                            'rgba(200, 200, 200, 0.2)'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '80%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                }
+            });
+            
+            // Update milestone info
+            const milestoneInfo = document.createElement('div');
+            milestoneInfo.className = 'text-center mt-3';
+            milestoneInfo.innerHTML = `
+                <div class="h4 mb-2">Current Balance: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(currentBalance)}</div>
+                <div class="h5 mb-3">Next Milestone: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(nextMilestone)}</div>
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar bg-success" role="progressbar" 
+                         style="width: ${progress}%;" 
+                         aria-valuenow="${progress}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100">
+                        ${progress.toFixed(1)}%
+                    </div>
+                </div>
+            `;
+            
+            // Remove any existing milestone info
+            const existingInfo = document.querySelector('#milestoneChart').parentNode.querySelector('.text-center');
+            if (existingInfo) {
+                existingInfo.remove();
+            }
+            
+            document.querySelector('#milestoneChart').parentNode.appendChild(milestoneInfo);
+            
+            // Hide the loading spinner
+            document.getElementById('milestoneChartLoader').classList.add('hidden');
+        }
+
+        // Add milestone chart initialization to the balance data fetch
+        async function fetchBalanceData() {
             try {
-                const response = await fetch('/api/categories');
+                const response = await fetch('/api/balance-chart');
                 if (!response.ok) {
-                    throw new Error('Failed to fetch categories');
+                    throw new Error('Failed to fetch balance data');
+                }
+                const data = await response.json();
+                
+                if (!data || !data.datasets || !data.datasets[0] || !data.datasets[0].data) {
+                    throw new Error('Invalid balance data format');
                 }
                 
-                const categories = await response.json();
+                // Extract the last balance value from the datasets
+                const lastDataset = data.datasets[0];
+                const lastBalance = lastDataset.data[lastDataset.data.length - 1] || 0;
                 
-                // Render the categories list
-                renderCategories(categories.counts || {}, categories.colors || {});
+                // Create a simplified data object for the milestone chart
+                const milestoneData = {
+                    datasets: [{
+                        data: [lastBalance],
+                        backgroundColor: ['#4CAF50'],
+                        borderColor: ['#388E3C'],
+                        borderWidth: 1
+                    }]
+                };
                 
-                // Render the category chart with spending data
-                renderCategoryChart(categories.spending || {}, categories.colors || {});
+                // Render both charts
+                renderBalanceChart(data);
+                renderMilestoneChart(milestoneData);
                 
-                // Show a message if there's no spending data but it was expected
-                if (categories.has_spending_data === false && !categories.error) {
-                    console.warn("No spending data available - check that you have transactions with negative amounts");
-                    // Add a small warning to the chart area
-                    const chartContainer = document.querySelector('#categoryChart').parentNode;
-                    const warningEl = document.createElement('div');
-                    warningEl.className = 'small text-warning text-center mt-2';
-                    warningEl.textContent = 'Note: No expense transactions found to display in chart';
-                    chartContainer.appendChild(warningEl);
-                }
-                
-                // Store colors globally for other charts to use
-                window.categoryColors = categories.colors || {};
-                
-                return true;
             } catch (error) {
-                console.error('Error fetching categories:', error);
-                document.getElementById('categories-container').innerHTML = 
-                    '<div class="alert alert-danger w-100">Failed to load categories: ' + error.message + '</div>';
-                renderCategoryChart(null); // Ensure chart shows the "no data" state
-                return false;
+                console.error('Error loading data:', error);
+                document.getElementById('balanceChart').innerHTML = `<div class="alert alert-danger">Error loading data: ${error.message}</div>`;
+                document.getElementById('milestoneChart').innerHTML = `<div class="alert alert-danger">Error loading data: ${error.message}</div>`;
             }
         }
-        
-        function renderCategories(categories, categoryColors) {
-            const container = document.getElementById('categories-container');
-            container.innerHTML = '';
-            
-            if (Object.keys(categories).length === 0) {
-                container.innerHTML = '<p class="text-center w-100">No categories found</p>';
-                return;
-            }
-            
-            // Use provided colors from API instead of predefined colors
-            let index = 0;
-            for (const category in categories) {
-                const badge = document.createElement('div');
-                const bgColor = categoryColors && categoryColors[category] ? categoryColors[category] : '#607D8B';
+
+        // Add projection toggle handler
+        document.getElementById('showProjectionToggle').addEventListener('change', async function(e) {
+            const isChecked = e.target.checked;
+            if (isChecked) {
+                try {
+                    console.log('Fetching balance data for projection...');
+                    // Fetch historical balance data to calculate growth trend
+                    const response = await fetch('/api/balance-chart');
+                    const data = await response.json();
+                    console.log('Balance data received:', data);
+                    
+                    // Get the balance history from the data
+                    const balanceHistory = data.datasets[0].data;
+                    const dates = data.labels.map(date => new Date(date));
+                    
+                    console.log('First balance:', balanceHistory[0]);
+                    console.log('Last balance:', balanceHistory[balanceHistory.length - 1]);
+                    
+                    // Calculate total growth and time period
+                    const firstBalance = balanceHistory[0];
+                    const lastBalance = balanceHistory[balanceHistory.length - 1];
+                    const totalGrowth = lastBalance - firstBalance;
+                    
+                    // Calculate time difference in months
+                    const monthsDiff = (dates[dates.length - 1] - dates[0]) / (1000 * 60 * 60 * 24 * 30.44);
+                    console.log('Months difference:', monthsDiff);
+                    
+                    // Calculate average monthly growth rate
+                    const monthlyGrowth = totalGrowth / monthsDiff;
+                    console.log('Monthly growth rate:', monthlyGrowth);
+                    
+                    // Get current balance from milestone chart
+                    const currentBalance = milestoneChart.data.datasets[0].data[0].x;
+                    console.log('Current balance:', currentBalance);
+                    
+                    // Project for the next 24 months
+                    const projectedPoints = [];
+                    let projectedBalance = currentBalance;
+                    
+                    // Calculate projected time to reach each remaining milestone
+                    const remainingMilestones = milestones.filter(m => m > currentBalance);
+                    console.log('Remaining milestones:', remainingMilestones);
+                    const timeToMilestones = {};
+                    
+                    for (let i = 1; i <= 24; i++) {
+                        projectedBalance += monthlyGrowth;
+                        projectedPoints.push({
+                            x: projectedBalance,
+                            y: 50
+                        });
+                        
+                        // Check if we've crossed any milestones
+                        remainingMilestones.forEach(milestone => {
+                            if (projectedBalance >= milestone && !timeToMilestones[milestone]) {
+                                timeToMilestones[milestone] = i;
+                            }
+                        });
+                    }
+
+                    console.log('Time to milestones:', timeToMilestones);
+
+                    // Add projection dataset
+                    milestoneChart.data.datasets.push({
+                        label: 'Projection',
+                        data: projectedPoints,
+                        borderColor: 'rgba(128, 128, 128, 0.5)',
+                        borderDash: [5, 5],
+                        pointStyle: 'circle',
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                    });
+                    
+                    // Update milestone info with projected timeline
+                    const milestoneInfo = document.querySelector('#milestoneChart').parentNode.querySelector('.text-center');
+                    console.log('Found milestone info element:', milestoneInfo);
+                    
+                    if (milestoneInfo) {
+                        // Remove existing projection info if it exists
+                        const existingProjection = milestoneInfo.querySelector('.projection-info');
+                        if (existingProjection) {
+                            existingProjection.remove();
+                        }
+
+                        const timelineHtml = Object.entries(timeToMilestones)
+                            .map(([milestone, months]) => {
+                                const years = Math.floor(months / 12);
+                                const remainingMonths = months % 12;
+                                const timeString = years > 0 
+                                    ? `${years} year${years > 1 ? 's' : ''}${remainingMonths > 0 ? ` and ${remainingMonths} month${remainingMonths > 1 ? 's' : ''}` : ''}`
+                                    : `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`;
+                                return `<div class="mt-2">
+                                    <span class="badge bg-info">$${parseInt(milestone).toLocaleString()}</span>
+                                    <span class="ms-2">≈ ${timeString}</span>
+                                </div>`;
+                            })
+                            .join('');
+
+                        console.log('Generated timeline HTML:', timelineHtml);
+
+                        const monthlyGrowthFormatted = new Intl.NumberFormat('en-US', {
+                            style: 'currency',
+                            currency: 'USD',
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }).format(monthlyGrowth);
+
+                        const projectionInfo = `
+                            <div class="projection-info mt-4 pt-3 border-top">
+                                <div class="text-muted mb-2">Based on historical average monthly growth: ${monthlyGrowthFormatted}</div>
+                                <div class="h5 mb-3">Projected Timeline to Milestones:</div>
+                                ${timelineHtml}
+                                <div class="small text-muted mt-3">
+                                    * Projections based on historical performance. Actual results may vary.
+                                </div>
+                            </div>
+                        `;
+                        
+                        console.log('Adding projection info to milestone info element');
+                        milestoneInfo.insertAdjacentHTML('beforeend', projectionInfo);
+                    } else {
+                        console.error('Could not find milestone info element to add timeline to');
+                    }
+                } catch (error) {
+                    console.error('Error calculating projection:', error);
+                    // Show error message to user
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'alert alert-danger mt-3';
+                    errorDiv.textContent = 'Failed to calculate projection: ' + error.message;
+                    document.querySelector('#milestoneChart').parentNode.appendChild(errorDiv);
+                }
+            } else {
+                // Remove projection dataset
+                milestoneChart.data.datasets = milestoneChart.data.datasets.slice(0, 2);
                 
-                // Apply the color directly as inline style
-                badge.className = 'category-badge';
-                badge.style.backgroundColor = bgColor;
-                badge.style.color = 'white';
-                badge.innerHTML = `${category}: ${categories[category]}`;
-                
-                container.appendChild(badge);
-                index++;
+                // Remove projection info
+                const milestoneInfo = document.querySelector('#milestoneChart').parentNode.querySelector('.text-center');
+                if (milestoneInfo) {
+                    const projectionInfo = milestoneInfo.querySelector('.projection-info');
+                    if (projectionInfo) {
+                        projectionInfo.remove();
+                    }
+                }
             }
-        }
+            milestoneChart.update();
+        });
     </script>
 </body>
 </html>
