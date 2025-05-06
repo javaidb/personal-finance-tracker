@@ -243,6 +243,46 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Additional Filters -->
+                            <div class="row mb-4">
+                                <div class="col-md-10">
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label for="description-search" class="form-label">Search Description</label>
+                                            <input type="text" id="description-search" class="form-control" placeholder="Enter keywords...">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="account-type-filter" class="form-label">Account Type</label>
+                                            <select id="account-type-filter" class="form-select">
+                                                <option value="">All Accounts</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="category-filter" class="form-label">Category</label>
+                                            <select id="category-filter" class="form-select">
+                                                <option value="">All Categories</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label d-block">Time Range</label>
+                                            <div class="btn-group" role="group">
+                                                <input type="radio" class="btn-check" name="time-range" id="show-recent" autocomplete="off">
+                                                <label class="btn btn-outline-secondary" for="show-recent">Recent (3m)</label>
+                                                <input type="radio" class="btn-check" name="time-range" id="show-all" autocomplete="off" checked>
+                                                <label class="btn btn-outline-secondary" for="show-all">All Time</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row mb-2">
+                                <div class="col-md-10">
+                                    <button id="reset-filters" class="btn btn-secondary">Reset All Filters</button>
+                                </div>
+                            </div>
+
                             <div class="table-responsive">
                                 <table class="table table-hover">
                                     <thead>
@@ -339,6 +379,9 @@
             const statusMessage = document.getElementById('status-message');
             statusMessage.innerHTML = '<div class="alert alert-info">Loading your financial data...</div>';
             
+            // Load filter options
+            loadFilterOptions();
+            
             // Fetch data and populate the dashboard - ensure categories is loaded first
             Promise.all([
                 fetchCategories(),  // Get categories first for color consistency
@@ -359,10 +402,14 @@
                 statusMessage.innerHTML = `<div class="alert alert-danger">Error loading data: ${error.message}</div>`;
             });
             
-            // Event listeners for date filter
-            document.getElementById('apply-date-filter').addEventListener('click', function() {
-                fetchTransactions();
-            });
+            // Event listeners for filters
+            document.getElementById('apply-date-filter').addEventListener('click', fetchTransactions);
+            document.getElementById('description-search').addEventListener('input', debounce(fetchTransactions, 300));
+            document.getElementById('account-type-filter').addEventListener('change', fetchTransactions);
+            document.getElementById('category-filter').addEventListener('change', fetchTransactions);
+            document.getElementById('show-recent').addEventListener('change', fetchTransactions);
+            document.getElementById('show-all').addEventListener('change', fetchTransactions);
+            document.getElementById('reset-filters').addEventListener('click', resetFilters);
             
             // Event listener for cache clearing
             document.getElementById('clear-cache-btn').addEventListener('click', function() {
@@ -391,54 +438,106 @@
             initPagination();
         });
         
+        // Debounce function for search input
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        // Load filter options
+        function loadFilterOptions() {
+            fetch('/api/filter-options')
+                .then(response => response.json())
+                .then(data => {
+                    const accountTypeSelect = document.getElementById('account-type-filter');
+                    const categorySelect = document.getElementById('category-filter');
+                    
+                    // Populate account types
+                    data.account_types.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = type;
+                        accountTypeSelect.appendChild(option);
+                    });
+                    
+                    // Populate categories
+                    data.categories.forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category;
+                        option.textContent = category;
+                        categorySelect.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading filter options:', error);
+                });
+        }
+        
+        // Reset all filters
+        function resetFilters() {
+            document.getElementById('start-date').value = '';
+            document.getElementById('end-date').value = '';
+            document.getElementById('description-search').value = '';
+            document.getElementById('account-type-filter').value = '';
+            document.getElementById('category-filter').value = '';
+            document.getElementById('show-all').checked = true;
+            fetchTransactions();
+        }
+        
         // Transactions page variables
         let allTransactions = [];
         let currentPage = 1;
         const transactionsPerPage = 20;
-            
-        function fetchTransactions() {
+        
+        async function fetchTransactions() {
             const startDate = document.getElementById('start-date').value;
             const endDate = document.getElementById('end-date').value;
+            const description = document.getElementById('description-search').value;
+            const accountType = document.getElementById('account-type-filter').value;
+            const category = document.getElementById('category-filter').value;
+            const showRecent = document.getElementById('show-recent').checked;
             
             let url = '/api/transactions';
             const params = new URLSearchParams();
             
-            if (startDate) {
-                params.append('start_date', startDate);
-            }
-            
-            if (endDate) {
-                params.append('end_date', endDate);
-            }
+            if (startDate) params.append('start_date', startDate);
+            if (endDate) params.append('end_date', endDate);
+            if (description) params.append('description', description);
+            if (accountType) params.append('account_type', accountType);
+            if (category) params.append('category', category);
+            params.append('show_recent', showRecent);
             
             // Append parameters to URL if they exist
-            if (params.toString()) {
-                url += '?' + params.toString();
-            }
+            url += '?' + params.toString();
             
             document.getElementById('transactions-table-body').innerHTML = '<tr><td colspan="7" class="text-center">Loading transactions...</td></tr>';
             
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch transactions');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (Array.isArray(data)) {
-                        allTransactions = data;
-                        displayTransactions(currentPage);
-                        document.getElementById('transaction-count-display').innerText = `Showing ${Math.min(transactionsPerPage, data.length)} of ${data.length} transactions`;
-                        updatePaginationButtons();
-                    } else {
-                        throw new Error('Invalid data format received');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching transactions:', error);
-                    document.getElementById('transactions-table-body').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading transactions: ' + error.message + '</td></tr>';
-                });
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch transactions');
+                }
+                const data = await response.json();
+                
+                if (Array.isArray(data)) {
+                    allTransactions = data;
+                    displayTransactions(1); // Reset to first page when filters change
+                    document.getElementById('transaction-count-display').innerText = `Showing ${Math.min(transactionsPerPage, data.length)} of ${data.length} transactions`;
+                    updatePaginationButtons();
+                } else {
+                    throw new Error('Invalid data format received');
+                }
+            } catch (error) {
+                console.error('Error fetching transactions:', error);
+                document.getElementById('transactions-table-body').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading transactions: ' + error.message + '</td></tr>';
+            }
         }
             
         function displayTransactions(page) {
