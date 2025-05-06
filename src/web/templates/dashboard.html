@@ -454,11 +454,11 @@
                 return;
             }
             
-            // Define colors for different account types
+            // Define aesthetic colors for different account types
             const accountTypeColors = {
-                'Chequing': 'bg-primary text-white',
-                'Savings': 'bg-success text-white',
-                'Credit': 'bg-danger text-white'
+                'Chequing': 'bg-success bg-opacity-75 text-white',  // Green
+                'Savings': 'bg-info bg-opacity-75 text-white',      // Blue
+                'Credit': 'bg-dark bg-opacity-75 text-white'        // Aesthetic black
             };
             
             pageTransactions.forEach(transaction => {
@@ -473,13 +473,18 @@
                 const formattedAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
                 
                 // Get account type style
-                const accountTypeClass = accountTypeColors[transaction['Account Type']] || '';
+                const accountTypeClass = accountTypeColors[transaction['Account Type']] || 'bg-secondary';
+                
+                // Get category color from the global categoryColors object
+                const categoryColor = window.categoryColors && window.categoryColors[transaction.Classification]
+                    ? window.categoryColors[transaction.Classification]
+                    : '#6c757d'; // Default grey if no color found
                 
                 row.innerHTML = `
                     <td>${formattedDate}</td>
                     <td>${transaction.Details || ''}</td>
                     <td class="${amount < 0 ? 'text-danger' : 'text-success'}">${formattedAmount}</td>
-                    <td>${transaction.Classification || 'Uncategorized'}</td>
+                    <td><span class="badge" style="background-color: ${categoryColor}">${transaction.Classification || 'Uncategorized'}</span></td>
                     <td><span class="badge ${accountTypeClass}">${transaction['Account Type'] || ''}</span></td>
                     <td>${transaction.account_balance !== null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(transaction.account_balance) : '-'}</td>
                     <td>${transaction.running_balance !== null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(transaction.running_balance) : '-'}</td>
