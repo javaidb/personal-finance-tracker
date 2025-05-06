@@ -738,7 +738,7 @@ class PDFReader(GeneralHelperFns):
         """
         Combines transactions from all accounts and calculates running balances.
         For fixed accounts (Chequing/Savings), uses the sum of their balances.
-        For credit accounts, calculates running balance based on the last fixed balance point.
+        For credit accounts, sets account_balance to 0 and calculates running balance based on the last fixed balance point.
         """
         df = df_in.copy()
         
@@ -753,6 +753,9 @@ class PDFReader(GeneralHelperFns):
         # Rename original Balance column to account_balance and ensure it's numeric
         df = df.rename(columns={'Balance': 'account_balance'})
         df['account_balance'] = pd.to_numeric(df['account_balance'].astype(str).str.replace(',', ''), errors='coerce')
+        
+        # Set credit account balances to 0
+        df.loc[df['Account Type'] == 'Credit', 'account_balance'] = 0
         
         # Initialize running_balance column
         df['running_balance'] = None
