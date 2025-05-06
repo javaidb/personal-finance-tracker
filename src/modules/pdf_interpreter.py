@@ -699,8 +699,6 @@ class PDFReader(GeneralHelperFns):
         print(f"Recalibrating amounts in bank statements.")
 
         df = df_in.copy()
-        
-        # Process each account type separately
         for account_type in df['Account Type'].unique():
             mask = df['Account Type'] == account_type
             account_df = df[mask].copy()
@@ -711,6 +709,27 @@ class PDFReader(GeneralHelperFns):
             elif account_type in ['Chequing', 'Savings']:
                 # For fixed accounts, use balance changes to determine amount sign
                 account_df = account_df.sort_values('DateTime')
+                
+                # Calculate balance differences
+                account_df['balance_diff'] = account_df['Balance'].diff()
+                
+                # Update amount signs based on balance differences
+                account_df['Amount'] = account_df.apply(
+                    lambda row: (
+                        # If balance decreased, amount should be negative
+                        -abs(row['Amount']) if row['balance_diff'] is not None and row['balance_diff'] < 0
+                        # If balance increased, amount should be positive
+                        else abs(row['Amount']) if row['balance_diff'] is not None and row['balance_diff'] > 0
+                        # If no balance difference (first row), keep original sign
+                        else row['Amount']
+                    ),
+                    axis=1
+                )
+                
+                # Drop temporary column
+                account_df.drop(columns=['balance_diff'], inplace=True)
+                
+                # Update the main dataframe
                 df.loc[mask] = account_df
             
         return df
