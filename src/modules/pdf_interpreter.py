@@ -938,15 +938,22 @@ class PDFReader(GeneralHelperFns):
 
     def __apply_custom_conditinos(self, df):
         """
-        Previously adjusted the 'Amount' column based on Transaction Type.
-        Now just returns the DataFrame as is to preserve original amounts.
+        Adjusts the 'Amount' column in the DataFrame based on the 'Transaction Type' column.
+        
+        If 'Transaction Type' is 'Withdrawal', the corresponding 'Amount' is made negative.
+        If 'Transaction Type' is 'Deposit', the corresponding 'Amount' is made positive.
         
         Parameters:
         df (pd.DataFrame): Input DataFrame with 'Transaction Type' and 'Amount' columns.
         
         Returns:
-        pd.DataFrame: Unmodified DataFrame.
+        pd.DataFrame: Modified DataFrame with adjusted Amounts.
         """
+        # Make withdrawals negative and deposits positive
+        df['Amount'] = df.apply(
+            lambda row: -abs(row['Amount']) if row['Transaction Type'] == 'Withdrawal' else abs(row['Amount']) if row['Transaction Type'] == 'Deposit' else row['Amount'],
+            axis=1
+        )
         return df
 
     def import_json(self):
