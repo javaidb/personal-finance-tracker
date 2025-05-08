@@ -28,11 +28,50 @@ class TransactionService:
                 with open(self.databank_path, 'r') as f:
                     databank = json.load(f)
                     self.categories = list(databank.get('categories', {}).keys())
+                    self.category_patterns = databank.get('categories', {})
             else:
-                self.categories = []
+                # Initialize with default categories from app.py
+                from ..app import CATEGORY_COLORS
+                self.categories = list(CATEGORY_COLORS.keys())
+                self.category_patterns = {
+                    category: {
+                        'patterns': [],
+                        'color': color,
+                        'totalMatches': 0
+                    }
+                    for category, color in CATEGORY_COLORS.items()
+                }
+                # Save the default categories to databank.json
+                os.makedirs(os.path.dirname(self.databank_path), exist_ok=True)
+                with open(self.databank_path, 'w') as f:
+                    json.dump({'categories': self.category_patterns}, f, indent=4)
         except Exception as e:
             print(f"Error loading categories: {str(e)}")
             self.categories = []
+            self.category_patterns = {}
+
+    def categorize_transaction(self, description: str) -> str:
+        """Automatically categorize a transaction based on its description and stored patterns."""
+        if not description or not self.category_patterns:
+            return 'Uncategorized'
+        
+        description = description.lower()
+        best_match = None
+        highest_match_count = 0
+        
+        for category, data in self.category_patterns.items():
+            for pattern in data.get('patterns', []):
+                terms = pattern.get('terms', [])
+                if not terms:
+                    continue
+                
+                # Count how many terms from the pattern appear in the description
+                match_count = sum(1 for term in terms if term.lower() in description)
+                if match_count > highest_match_count:
+                    highest_match_count = match_count
+                    best_match = category
+        
+        return best_match if best_match else 'Uncategorized'
 
     def process_statements(self) -> bool:
         """Process bank statements and store the result."""
@@ -43,6 +82,11 @@ class TransactionService:
                 
             # Process the statements using cached data where possible
             self.processed_df = self.pdf_reader.process_raw_df()
+            
+            # Apply automatic categorization
+            if self.processed_df is not None and not self.processed_df.empty:
+                self.processed_df['Classification'] = self.processed_df['Details'].apply(self.categorize_transaction)
+            
             return True if self.processed_df is not None and not self.processed_df.empty else False
         except Exception as e:
             print(f"Error processing statements: {str(e)}")
@@ -578,4 +622,43 @@ class TransactionService:
 
         df_filtered = df[df['details_str'].apply(lambda x: exclude_rows(x, substring_exclusion_list))]
         df_filtered = df_filtered.drop(columns=['details_str'])
-        return self.sort_df(df_filtered) 
+        return self.sort_df(df_filtered)
+
+    def recategorize_transactions(self) -> bool:
+        """Recategorize all transactions after merchant updates."""
+        try:
+            if self.processed_df is None:
+                return False
+            
+            # Create a copy of the DataFrame
+            df = self.processed_df.copy()
+            
+            # Initialize merchant categorizer
+            merchant_categorizer = MerchantCategorizer(self.base_path)
+            
+            def categorize_transaction(row):
+                details = row['Details']
+                transaction_type = row.get('Transaction Type', '')
+                
+                if pd.isna(details):
+                    return 'Uncategorized'
+                
+                # Process details similar to __process_transaction_details
+                concat_details = f"{details} {transaction_type}"
+                processed_details = re.sub(r'[^a-zA-Z\s&]', '', concat_details)
+                
+                # Try merchant-based categorization
+                category, _ = merchant_categorizer.categorize_transaction(processed_details)
+                return category
+            
+            # Apply categorization
+            df['Classification'] = df.apply(categorize_transaction, axis=1)
+            
+            # Update the processed DataFrame
+            self.processed_df = df
+            
+            print(f"Recategorized {len(df)} transactions")
+            return True
+        except Exception as e:
+            print(f"Error recategorizing transactions: {str(e)}")
+            return False 
