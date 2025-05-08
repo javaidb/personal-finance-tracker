@@ -32,13 +32,34 @@ def index():
                                 message="Merchant service not initialized",
                                 show_details=False)
 
-        # Get merchant statistics
-        merchant_stats = merchant_service.get_merchant_statistics()
-        uncharacterized = merchant_service.get_uncharacterized_merchants()
+        # Get all required data
+        stats = merchant_service.get_merchant_stats()
+        categories = merchant_service.get_categories()
+        has_uncharacterized = merchant_service.has_uncharacterized_merchants()
+        
+        # Get category colors
+        category_colors = {
+            'Groceries': '#4CAF50',
+            'Dining': '#FF9800',
+            'Transport': '#2196F3',
+            'Shopping': '#E91E63',
+            'Bills': '#9C27B0',
+            'Entertainment': '#00BCD4',
+            'Activities': '#FFEB3B',
+            'Online': '#795548',
+            'Income': '#4CAF50',
+            'Rent': '#F44336',
+            'Investment': '#009688',
+            'Transfer': '#607D8B',
+            'Uncategorized': '#9E9E9E'
+        }
 
-        return render_template('merchants/index.html',
-                            merchant_stats=merchant_stats,
-                            uncharacterized=uncharacterized)
+        return render_template('merchants.html',
+                            merchant_count=stats.get('merchant_count', 0),
+                            alias_count=stats.get('alias_count', 0),
+                            categories=categories,
+                            has_review_data=has_uncharacterized,
+                            categoryColors=category_colors)
     except Exception as e:
         logger.error(f"Error in merchants index route: {str(e)}", exc_info=True)
         return render_template('error.html',
@@ -57,7 +78,7 @@ def get_statistics() -> Dict[str, Any]:
                 "error": "Merchant service not initialized"
             }), 500
 
-        stats = merchant_service.get_merchant_statistics()
+        stats = merchant_service.get_merchant_stats()
         return jsonify({
             "success": True,
             "data": stats
@@ -159,10 +180,13 @@ def get_merchants() -> Tuple[Dict[str, Any], int]:
         search_term = request.args.get('search', '')
         merchants = merchant_service.search_merchants(search_term) if search_term else merchant_service.get_all_merchants()
         
+        # Format merchants list to match frontend expectations
+        formatted_merchants = [{"name": m["name"], "category": m["category"]} for m in merchants]
+        
         return jsonify({
             "success": True,
-            "merchants": merchants,
-            "count": len(merchants)
+            "merchants": formatted_merchants,
+            "count": len(formatted_merchants)
         }), 200
     except Exception as e:
         logger.error(f"Error in get_merchants: {str(e)}", exc_info=True)
@@ -268,4 +292,20 @@ def get_uncharacterized_count() -> Tuple[Dict[str, Any], int]:
         }), 200
     except Exception as e:
         logger.error(f"Error in get_uncharacterized_count: {str(e)}", exc_info=True)
+        return handle_service_error(e)
+
+@merchants_bp.route('/api/merchants/<merchant_name>', methods=['DELETE'])
+def delete_merchant(merchant_name: str) -> Tuple[Dict[str, Any], int]:
+    """API endpoint to delete a merchant."""
+    try:
+        success = merchant_service.merchant_categorizer.delete_merchant(merchant_name)
+        if not success:
+            raise ServiceError(f"Failed to delete merchant {merchant_name}")
+        
+        return jsonify({
+            "success": True,
+            "message": f"Successfully deleted merchant {merchant_name}"
+        }), 200
+    except Exception as e:
+        logger.error(f"Error in delete_merchant: {str(e)}", exc_info=True)
         return handle_service_error(e) 
