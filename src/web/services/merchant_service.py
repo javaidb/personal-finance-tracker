@@ -16,6 +16,11 @@ class MerchantService:
         self.merchant_categorizer = MerchantCategorizer(base_path=base_path)
         self.databank_path = os.path.join(base_path, 'cached_data', 'databank.json')
         self.review_path = os.path.join(base_path, 'cached_data', 'uncharacterized_merchants.json')
+        self.default_categories = [
+            "Groceries", "Dining", "Transport", "Shopping", "Bills",
+            "Entertainment", "Activities", "Online", "Income", "Rent",
+            "Investment", "Transfer", "Uncategorized"
+        ]
         self.load_databank()
 
     def load_databank(self):
@@ -25,20 +30,13 @@ class MerchantService:
                 with open(self.databank_path, 'r') as f:
                     self.databank = json.load(f)
             else:
-                # Create initial databank structure
+                # Create initial databank structure with default categories
                 self.databank = {
                     "categories": {
-                        "Groceries": {"totalMatches": 0, "patterns": []},
-                        "Dining": {"totalMatches": 0, "patterns": []},
-                        "Transport": {"totalMatches": 0, "patterns": []},
-                        "Shopping": {"totalMatches": 0, "patterns": []},
-                        "Bills": {"totalMatches": 0, "patterns": []},
-                        "Entertainment": {"totalMatches": 0, "patterns": []},
-                        "Activities": {"totalMatches": 0, "patterns": []},
-                        "Online": {"totalMatches": 0, "patterns": []},
-                        "Income": {"totalMatches": 0, "patterns": []},
-                        "Rent": {"totalMatches": 0, "patterns": []},
-                        "Investment": {"totalMatches": 0, "patterns": []}
+                        category: {
+                            "totalMatches": 0,
+                            "patterns": []
+                        } for category in self.default_categories
                     }
                 }
                 self.save_databank()
@@ -58,7 +56,22 @@ class MerchantService:
         """Get all merchants with their categories."""
         try:
             merchants = self.merchant_categorizer.get_all_merchants()
-            return [{"name": name, "category": category} for name, category in merchants.items()]
+            logger.debug(f"Raw merchants from categorizer: {merchants}")
+            
+            if not merchants:
+                logger.warning("No merchants found in database")
+                return []
+            
+            formatted_merchants = []
+            for name, category in merchants.items():
+                if name != "metadata":  # Skip metadata entries
+                    formatted_merchants.append({
+                        "name": name,
+                        "category": category
+                    })
+            
+            logger.debug(f"Formatted merchants: {formatted_merchants}")
+            return formatted_merchants
         except Exception as e:
             logger.error(f"Error getting all merchants: {str(e)}", exc_info=True)
             return []
@@ -76,7 +89,11 @@ class MerchantService:
         """Add or update a merchant's category."""
         try:
             # First verify category exists in databank
+            logger.debug(f"Adding merchant: {merchant_name} with category: {category}")
+            logger.debug(f"Available categories: {list(self.databank.get('categories', {}).keys())}")
+            
             if category not in self.databank.get('categories', {}):
+                logger.error(f"Category {category} not found in databank")
                 return False
 
             # Add merchant to database
@@ -92,6 +109,14 @@ class MerchantService:
                 }
                 self.databank['categories'][category]['patterns'].append(pattern)
                 self.save_databank()
+                logger.debug(f"Successfully added merchant {merchant_name} to category {category}")
+                
+                # Trigger transaction recategorization
+                from ..services.transaction_service import TransactionService
+                transaction_service = TransactionService(base_path=self.base_path)
+                transaction_service.recategorize_transactions()
+            else:
+                logger.error(f"Failed to add merchant {merchant_name} to database")
             return success
         except Exception as e:
             logger.error(f"Error adding merchant: {str(e)}", exc_info=True)
@@ -117,9 +142,20 @@ class MerchantService:
     def get_merchant_stats(self) -> Dict[str, int]:
         """Get merchant and alias counts."""
         try:
+            merchants = self.merchant_categorizer.get_all_merchants()
+            aliases = self.merchant_categorizer.get_all_aliases()
+            
+            if merchants is None:
+                logger.error("Failed to get merchants from categorizer")
+                return {"merchant_count": 0, "alias_count": 0}
+            
+            if aliases is None:
+                logger.error("Failed to get aliases from categorizer")
+                return {"merchant_count": len(merchants), "alias_count": 0}
+            
             return {
-                "merchant_count": len(self.merchant_categorizer.get_all_merchants()),
-                "alias_count": len(self.merchant_categorizer.get_all_aliases())
+                "merchant_count": len(merchants),
+                "alias_count": len(aliases)
             }
         except Exception as e:
             logger.error(f"Error getting merchant stats: {str(e)}", exc_info=True)
@@ -251,4 +287,85 @@ class MerchantService:
             return success
         except Exception as e:
             logger.error(f"Error categorizing merchant: {str(e)}", exc_info=True)
+            return False
+
+    def add_category(self, category_name: str) -> bool:
+        """Add a new category."""
+        try:
+            if category_name in self.databank.get('categories', {}):
+                return False
+            
+            self.databank['categories'][category_name] = {
+                "totalMatches": 0,
+                "patterns": []
+            }
+            self.save_databank()
+            return True
+        except Exception as e:
+            logger.error(f"Error adding category: {str(e)}", exc_info=True)
+            return False
+
+    def rename_category(self, old_name: str, new_name: str) -> bool:
+        """Rename a category."""
+        try:
+            if old_name not in self.databank.get('categories', {}) or new_name in self.databank.get('categories', {}):
+                return False
+            
+            # Get all merchants with this category
+            merchants = self.get_all_merchants()
+            affected_merchants = [m['name'] for m in merchants if m['category'] == old_name]
+            
+            # Update category in databank
+            self.databank['categories'][new_name] = self.databank['categories'].pop(old_name)
+            self.save_databank()
+            
+            # Update all merchants with this category
+            for merchant_name in affected_merchants:
+                self.merchant_categorizer.add_merchant(merchant_name, new_name)
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error renaming category: {str(e)}", exc_info=True)
+            return False
+
+    def delete_category(self, category_name: str) -> bool:
+        """Delete a category."""
+        try:
+            # Don't allow deletion of the Uncategorized category
+            if category_name.lower() == "uncategorized":
+                logger.error("Cannot delete the Uncategorized category as it is required by the system")
+                return False
+            
+            # Case-insensitive check for category existence
+            category_actual_name = None
+            for cat in self.databank.get('categories', {}):
+                if cat.lower() == category_name.lower():
+                    category_actual_name = cat
+                    break
+            
+            if not category_actual_name:
+                logger.error(f"Category {category_name} not found")
+                return False
+            
+            # Get all merchants with this category
+            merchants = self.get_all_merchants()
+            affected_merchants = [m['name'] for m in merchants if m['category'].lower() == category_name.lower()]
+            
+            # Delete category from databank
+            del self.databank['categories'][category_actual_name]
+            self.save_databank()
+            
+            # Update all merchants with this category to "Uncategorized"
+            success = True
+            for merchant_name in affected_merchants:
+                if not self.merchant_categorizer.add_merchant(merchant_name, "Uncategorized"):
+                    logger.error(f"Failed to update merchant {merchant_name} to Uncategorized")
+                    success = False
+            
+            if not success:
+                logger.warning("Some merchants could not be updated to Uncategorized")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting category: {str(e)}", exc_info=True)
             return False 
