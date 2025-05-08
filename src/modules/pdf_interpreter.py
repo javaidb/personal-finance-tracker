@@ -55,14 +55,16 @@ class PDFReader(GeneralHelperFns):
         filtered_df = self.recalibrate_amounts(filtered_df)
         print(f"DEBUG: After recalibrating amounts: {len(filtered_df)} rows")
         
-        # filtered_df = self.account_for_investments(filtered_df)
-        # print(f"DEBUG: After handling investments: {len(filtered_df)} rows")
-        
         filtered_df = self.combine_balances_across_accounts(filtered_df)
         print(f"DEBUG: After combining balances: {len(filtered_df)} rows")
         
-        # filtered_df = self.tabulate_gap_balances(filtered_df)
-        # print(f"DEBUG: After tabulating gap balances: {len(filtered_df)} rows")
+        # Detect and remove duplicates
+        duplicate_mask = self.__detect_duplicates(filtered_df)
+        duplicate_count = duplicate_mask.sum()
+        if duplicate_count > 0:
+            print(f"DEBUG: Found {duplicate_count} duplicate transactions")
+            filtered_df = filtered_df[~duplicate_mask]
+            print(f"DEBUG: After removing duplicates: {len(filtered_df)} rows")
         
         self.filtered_df = self.df_postprocessing(filtered_df)
         print(f"DEBUG: Final processed DataFrame size: {len(self.filtered_df)} rows")
@@ -308,6 +310,17 @@ class PDFReader(GeneralHelperFns):
         
     def __save_to_cache(self, pdf_hash, transactions, metadata):
         """Save processed transactions to cache with pretty formatting"""
+        # Convert transactions to DataFrame to check for duplicates
+        df = pd.DataFrame(transactions)
+        if not df.empty and 'DateTime' in df.columns and 'account_balance' in df.columns and 'Amount' in df.columns:
+            # Detect duplicates
+            duplicate_mask = self.__detect_duplicates(df)
+            if duplicate_mask.any():
+                print(f"DEBUG: Removing {duplicate_mask.sum()} duplicate transactions before caching")
+                # Keep only non-duplicate transactions
+                df = df[~duplicate_mask]
+                transactions = df.to_dict('records')
+        
         cache_data = {
             "metadata": {
                 "account_type": metadata['account_type'],
@@ -883,13 +896,11 @@ class PDFReader(GeneralHelperFns):
             # Use default empty list if config not available
             df = self.__identify_rent_payments(df, [])
             
-        df = self.__apply_custom_conditinos(df)
+        df = self.__apply_custom_conditions(df)
 
-        substring_exclusion_list = ['mb credit', 'mb transfer', 'opening balance', 'closing balance']
-        fullstring_exclusion_list = ['from']
-        # mask = ~df['Processed Details'].apply(
-        #     lambda x: any(any(substring in item for item in x) for substring in substrings_to_remove)
-        # )
+        # Modified exclusion list to only exclude balance entries
+        substring_exclusion_list = ['opening balance', 'closing balance']
+        fullstring_exclusion_list = []
         
         df['details_str'] = df['Processed Details'].apply(lambda x: ' '.join(x).lower())
 
@@ -905,7 +916,29 @@ class PDFReader(GeneralHelperFns):
 
         df_filtered = df[df['details_str'].apply(lambda x: exclude_rows(x, substring_exclusion_list))]
         df_filtered = df_filtered.drop(columns=['details_str'])
-        return self.sort_df(df_filtered)
+        
+        # After all processing is done, filter out transfer transactions
+        def is_transfer(row):
+            details_lower = str(row['Details']).lower()
+            transaction_type_lower = str(row['Transaction Type']).lower()
+            
+            # Check for various types of transfers
+            transfer_indicators = [
+                'mb-transfer',
+                'transfer to',
+                'transfer from',
+                'mb-credit card/loc pay',
+                'credit card payment'
+            ]
+            
+            return any(indicator in details_lower for indicator in transfer_indicators)
+        
+        # Create a non-transfer version of the DataFrame
+        df_no_transfers = df_filtered[~df_filtered.apply(is_transfer, axis=1)]
+        
+        # Store both versions in the object
+        self.df_with_transfers = self.sort_df(df_filtered)  # Keep full version for internal use
+        return self.sort_df(df_no_transfers)  # Return version without transfers
 
     def __identify_rent_payments(self, df_in, rent_ranges):
         df = df_in.copy()
@@ -936,24 +969,51 @@ class PDFReader(GeneralHelperFns):
         
         return df
 
-    def __apply_custom_conditinos(self, df):
+    def __apply_custom_conditions(self, df):
         """
-        Adjusts the 'Amount' column in the DataFrame based on the 'Transaction Type' column.
-        
-        If 'Transaction Type' is 'Withdrawal', the corresponding 'Amount' is made negative.
-        If 'Transaction Type' is 'Deposit', the corresponding 'Amount' is made positive.
+        Adjusts the 'Amount' column in the DataFrame based on the transaction details and type.
         
         Parameters:
-        df (pd.DataFrame): Input DataFrame with 'Transaction Type' and 'Amount' columns.
+        df (pd.DataFrame): Input DataFrame with transaction details.
         
         Returns:
         pd.DataFrame: Modified DataFrame with adjusted Amounts.
         """
-        # Make withdrawals negative and deposits positive
-        df['Amount'] = df.apply(
-            lambda row: -abs(row['Amount']) if row['Transaction Type'] == 'Withdrawal' else abs(row['Amount']) if row['Transaction Type'] == 'Deposit' else row['Amount'],
-            axis=1
-        )
+        df = df.copy()
+        
+        def determine_amount_sign(row):
+            details_lower = str(row['Details']).lower()
+            transaction_type_lower = str(row['Transaction Type']).lower()
+            amount = row['Amount']
+            
+            # Handle special deposit types - these should always be positive
+            if any(deposit_type in transaction_type_lower for deposit_type in ['payroll dep', 'deposit']):
+                return abs(amount)
+            
+            # Handle transfers
+            if 'transfer' in details_lower or 'mb-transfer' in details_lower:
+                # If it's a transfer to another account, it should be negative
+                if 'to' in details_lower:
+                    return -abs(amount)
+                # If it's a transfer from another account, it should be positive
+                elif 'from' in details_lower:
+                    return abs(amount)
+            
+            # Handle withdrawals
+            if transaction_type_lower == 'withdrawal':
+                return -abs(amount)
+            
+            # Handle point of sale purchases
+            if transaction_type_lower == 'point of sale purchase':
+                return -abs(amount)
+            
+            # Handle government payments - these should be positive
+            if any(payment in details_lower for payment in ['gst', 'climate action incentive', 'provincial payment']):
+                return abs(amount)
+            
+            return amount
+        
+        df['Amount'] = df.apply(determine_amount_sign, axis=1)
         return df
 
     def import_json(self):
@@ -1110,3 +1170,23 @@ class PDFReader(GeneralHelperFns):
                         df.loc[idx, 'Amount'] = -abs(df.loc[idx, 'Amount'])
         
         return df
+
+    def __detect_duplicates(self, df):
+        """
+        Detect duplicate transactions based on datetime, account balance and absolute amount.
+        Returns a boolean mask where True indicates a duplicate entry.
+        """
+        # Create a copy of Amount column with absolute values
+        df['abs_amount'] = df['Amount'].abs()
+        
+        # Group by DateTime, account_balance, and absolute amount
+        # Keep the first occurrence (False) and mark others as duplicates (True)
+        duplicate_mask = df.duplicated(
+            subset=['DateTime', 'account_balance', 'abs_amount'],
+            keep='first'
+        )
+        
+        # Drop the temporary column
+        df.drop('abs_amount', axis=1, inplace=True)
+        
+        return duplicate_mask
