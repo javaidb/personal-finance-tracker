@@ -320,9 +320,12 @@
                 <section id="categories" class="mb-5">
                     <h2>Spending Categories</h2>
                     <div class="card mt-4">
+                        <div class="card-header">
+                            <h5>All Categories</h5>
+                        </div>
                         <div class="card-body">
-                            <div id="categories-container" class="d-flex flex-wrap">
-                                <p class="text-center w-100">Loading categories...</p>
+                            <div id="categories-container" class="d-flex flex-wrap gap-2">
+                                <!-- Categories will be populated here -->
                             </div>
                         </div>
                     </div>
@@ -372,6 +375,8 @@
             </div>
         </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -436,6 +441,215 @@
             
             // Initialize pagination
             initPagination();
+
+            // Category Management Functions
+            loadCategoryTable();
+
+            // Event Listeners for Category Management
+            document.getElementById('saveCategoryBtn').addEventListener('click', async () => {
+                const name = document.getElementById('categoryName').value.trim();
+                const patterns = document.getElementById('categoryPatterns').value
+                    .split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+                
+                if (!name) {
+                    alert('Category name is required');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/api/categories', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            name: name,
+                            patterns: patterns.map(p => ({
+                                terms: p.split(' '),
+                                dateAdded: new Date().toISOString(),
+                                lastUpdated: new Date().toISOString(),
+                                matchCount: 0
+                            }))
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to add category');
+                    }
+                    
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addCategoryModal'));
+                    modal.hide();
+                    document.getElementById('categoryName').value = '';
+                    document.getElementById('categoryPatterns').value = '';
+                    await Promise.all([
+                        loadCategoryTable(),
+                        fetchCategories()
+                    ]);
+                } catch (error) {
+                    console.error('Error saving category:', error);
+                    alert('Error saving category');
+                }
+            });
+
+            document.getElementById('updateCategoryBtn').addEventListener('click', async () => {
+                const id = document.getElementById('editCategoryId').value;
+                const name = document.getElementById('editCategoryName').value.trim();
+                const patterns = document.getElementById('editCategoryPatterns').value
+                    .split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+                
+                if (!name) {
+                    alert('Category name is required');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            name: name,
+                            patterns: patterns.map(p => ({
+                                terms: p.split(' '),
+                                dateAdded: new Date().toISOString(),
+                                lastUpdated: new Date().toISOString(),
+                                matchCount: 0
+                            }))
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to update category');
+                    }
+                    
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editCategoryModal'));
+                    modal.hide();
+                    await Promise.all([
+                        loadCategoryTable(),
+                        fetchCategories()
+                    ]);
+                } catch (error) {
+                    console.error('Error updating category:', error);
+                    alert('Error updating category');
+                }
+            });
+
+            document.getElementById('deleteCategoryBtn').addEventListener('click', async () => {
+                const id = document.getElementById('editCategoryId').value;
+                if (!confirm(`Are you sure you want to delete the category "${id}"?`)) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to delete category');
+                    }
+                    
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editCategoryModal'));
+                    modal.hide();
+                    await Promise.all([
+                        loadCategoryTable(),
+                        fetchCategories()
+                    ]);
+                } catch (error) {
+                    console.error('Error deleting category:', error);
+                    alert('Error deleting category');
+                }
+            });
+
+            // Load categories into quick keyword select
+            async function loadQuickCategorySelect() {
+                try {
+                    const response = await fetch('/api/categories/details');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch categories');
+                    }
+                    const data = await response.json();
+                    const select = document.getElementById('quickCategorySelect');
+                    select.innerHTML = '<option value="">Select a category...</option>';
+                    
+                    Object.keys(data.categories).forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category;
+                        option.textContent = category;
+                        select.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Error loading categories:', error);
+                }
+            }
+
+            // Handle quick keyword form submission
+            document.getElementById('quickKeywordForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const category = document.getElementById('quickCategorySelect').value;
+                const keyword = document.getElementById('quickKeyword').value.trim();
+                
+                if (!category || !keyword) {
+                    alert('Please select a category and enter a keyword');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/api/categories/${encodeURIComponent(category)}`);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch category details');
+                    }
+                    
+                    const data = await response.json();
+                    const patterns = data.patterns || [];
+                    
+                    // Add new pattern
+                    patterns.push({
+                        terms: keyword.split(' '),
+                        dateAdded: new Date().toISOString(),
+                        lastUpdated: new Date().toISOString(),
+                        matchCount: 0
+                    });
+                    
+                    // Update category
+                    const updateResponse = await fetch(`/api/categories/${encodeURIComponent(category)}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            name: category,
+                            patterns: patterns
+                        })
+                    });
+                    
+                    if (!updateResponse.ok) {
+                        throw new Error('Failed to update category');
+                    }
+                    
+                    // Clear form and show success message
+                    document.getElementById('quickKeyword').value = '';
+                    alert('Keyword added successfully!');
+                    
+                    // Refresh categories
+                    await Promise.all([
+                        loadCategoryTable(),
+                        fetchCategories()
+                    ]);
+                } catch (error) {
+                    console.error('Error adding keyword:', error);
+                    alert('Error adding keyword');
+                }
+            });
+
+            // Load quick category select on page load
+            loadQuickCategorySelect();
         });
         
         // Debounce function for search input
@@ -841,28 +1055,28 @@
         
         function renderCategories(categories, categoryColors) {
             const container = document.getElementById('categories-container');
-            container.innerHTML = '';
+            if (!container) {
+                console.error('Categories container not found');
+                return;
+            }
             
             if (Object.keys(categories).length === 0) {
                 container.innerHTML = '<p class="text-center w-100">No categories found</p>';
                 return;
             }
             
-            // Use provided colors from API instead of predefined colors
-            let index = 0;
+            let html = '';
             for (const category in categories) {
-                const badge = document.createElement('div');
                 const bgColor = categoryColors && categoryColors[category] ? categoryColors[category] : '#607D8B';
-                
-                // Apply the color directly as inline style
-                badge.className = 'category-badge';
-                badge.style.backgroundColor = bgColor;
-                badge.style.color = 'white';
-                badge.innerHTML = `${category}: ${categories[category]}`;
-                
-                container.appendChild(badge);
-                index++;
+                const count = categories[category];
+                html += `
+                    <div class="category-badge" style="background-color: ${bgColor}; color: white; padding: 5px 10px; border-radius: 15px; margin: 3px; font-size: 0.9rem;">
+                        ${category}: ${count}
+                    </div>
+                `;
             }
+            
+            container.innerHTML = html;
         }
         
         function renderCategoryChart(categoryData, categoryColors) {
@@ -1817,6 +2031,123 @@
                 console.error('Error loading data:', error);
                 document.getElementById('balanceChart').innerHTML = `<div class="alert alert-danger">Error loading data: ${error.message}</div>`;
                 document.getElementById('milestoneChart').innerHTML = `<div class="alert alert-danger">Error loading data: ${error.message}</div>`;
+            }
+        }
+
+        // Category Management Functions
+        async function loadCategoryTable() {
+            const container = document.getElementById('categoryTableContainer');
+            try {
+                const response = await fetch('/api/categories/details');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                if (!data.categories) {
+                    throw new Error('No categories data received');
+                }
+
+                // Create table structure
+                let tableHtml = `
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Category Name</th>
+                                <th>Keywords</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                // Add each category to the table
+                for (const [name, details] of Object.entries(data.categories)) {
+                    const keywords = details.patterns ? details.patterns.join(', ') : '';
+                    tableHtml += `
+                        <tr>
+                            <td>${name}</td>
+                            <td>${keywords}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary edit-category" data-category="${name}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger delete-category" data-category="${name}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                tableHtml += `
+                        </tbody>
+                    </table>
+                `;
+
+                container.innerHTML = tableHtml;
+
+                // Add event listeners for edit and delete buttons
+                container.querySelectorAll('.edit-category').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const category = button.dataset.category;
+                        const details = data.categories[category];
+                        document.getElementById('editCategoryId').value = category;
+                        document.getElementById('editCategoryName').value = category;
+                        document.getElementById('editCategoryKeywords').value = details.patterns ? details.patterns.join(', ') : '';
+                        $('#editCategoryModal').modal('show');
+                    });
+                });
+
+                container.querySelectorAll('.delete-category').forEach(button => {
+                    button.addEventListener('click', async () => {
+                        const category = button.dataset.category;
+                        if (confirm(`Are you sure you want to delete the category "${category}"?`)) {
+                            try {
+                                const response = await fetch(`/api/categories/${encodeURIComponent(category)}`, {
+                                    method: 'DELETE'
+                                });
+                                if (!response.ok) {
+                                    const errorData = await response.json();
+                                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                                }
+                                await loadCategoryTable();
+                                await loadQuickCategorySelect();
+                            } catch (error) {
+                                console.error('Error deleting category:', error);
+                                alert(`Error deleting category: ${error.message}`);
+                            }
+                        }
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error loading categories:', error);
+                container.innerHTML = `<div class="alert alert-danger">Error loading categories: ${error.message}</div>`;
+            }
+        }
+        
+        loadCategoryTable();
+
+        async function openEditCategoryModal(category) {
+            try {
+                const response = await fetch(`/api/categories/${encodeURIComponent(category)}`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch category details');
+                }
+                const data = await response.json();
+                
+                document.getElementById('editCategoryId').value = category;
+                document.getElementById('editCategoryName').value = category;
+                document.getElementById('editCategoryPatterns').value = 
+                    data.patterns.map(p => p.terms.join(' ')).join('\n');
+                
+                const modal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
+                modal.show();
+            } catch (error) {
+                console.error('Error loading category details:', error);
+                alert('Error loading category details');
             }
         }
     </script>
