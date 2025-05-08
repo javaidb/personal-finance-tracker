@@ -189,6 +189,39 @@
             </div>
         </div>
 
+        <!-- Categories List -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5>Available Categories</h5>
+                    <button class="btn btn-sm btn-primary" id="add-category-btn">
+                        Add Category
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    {% for category in categories %}
+                    <div class="category-item">
+                        <span class="category-badge" style="background-color: {% if category in categoryColors %}{{ categoryColors[category] }}{% else %}#607D8B{% endif %}">
+                            {{ category }}
+                            <button class="btn btn-sm btn-link text-white p-0 ms-2 edit-category-btn" 
+                                    data-category="{{ category }}"
+                                    style="text-decoration: none;">
+                                ✏️
+                            </button>
+                            <button class="btn btn-sm btn-link text-white p-0 ms-1 delete-category-btn" 
+                                    data-category="{{ category }}"
+                                    style="text-decoration: none;">
+                                ❌
+                            </button>
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <div class="d-flex justify-content-between align-items-center">
@@ -226,12 +259,12 @@
                 <div class="modal-body">
                     <form id="edit-merchant-form">
                         <div class="mb-3">
-                            <label for="merchant-name" class="form-label">Merchant Name</label>
-                            <input type="text" class="form-control" id="merchant-name" readonly>
+                            <label for="edit-merchant-name" class="form-label">Merchant Name</label>
+                            <input type="text" class="form-control" id="edit-merchant-name" readonly>
                         </div>
                         <div class="mb-3">
-                            <label for="merchant-category" class="form-label">Category</label>
-                            <select class="form-select" id="merchant-category">
+                            <label for="edit-merchant-category" class="form-label">Category</label>
+                            <select class="form-select" id="edit-merchant-category">
                                 {% for category in categories %}
                                 <option value="{{ category }}">{{ category }}</option>
                                 {% endfor %}
@@ -241,7 +274,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="save-merchant-btn">Save Changes</button>
+                    <button type="button" class="btn btn-primary" id="save-edit-merchant-btn">Save Changes</button>
                 </div>
             </div>
         </div>
@@ -288,11 +321,12 @@
                     <form id="add-merchant-form">
                         <div class="mb-3">
                             <label for="new-merchant-name" class="form-label">Merchant Name</label>
-                            <input type="text" class="form-control" id="new-merchant-name" placeholder="Enter merchant name">
+                            <input type="text" class="form-control" id="new-merchant-name" required>
                         </div>
                         <div class="mb-3">
                             <label for="new-merchant-category" class="form-label">Category</label>
-                            <select class="form-select" id="new-merchant-category">
+                            <select class="form-select" id="new-merchant-category" required>
+                                <option value="">Select a category...</option>
                                 {% for category in categories %}
                                 <option value="{{ category }}">{{ category }}</option>
                                 {% endfor %}
@@ -302,36 +336,84 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="add-new-merchant-btn">Add Merchant</button>
+                    <button type="button" class="btn btn-primary" id="save-new-merchant-btn">Add Merchant</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Category Modal -->
+    <div class="modal fade" id="addCategoryModal" tabindex="-1" aria-labelledby="addCategoryModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addCategoryModalLabel">Add New Category</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-category-form">
+                        <div class="mb-3">
+                            <label for="new-category-name" class="form-label">Category Name</label>
+                            <input type="text" class="form-control" id="new-category-name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-new-category-btn">Add Category</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Category Modal -->
+    <div class="modal fade" id="editCategoryModal" tabindex="-1" aria-labelledby="editCategoryModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editCategoryModalLabel">Edit Category</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-category-form">
+                        <input type="hidden" id="old-category-name">
+                        <div class="mb-3">
+                            <label for="edit-category-name" class="form-label">Category Name</label>
+                            <input type="text" class="form-control" id="edit-category-name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-edit-category-btn">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success/Error Toast -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div id="successToast" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+        <div id="errorToast" class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Global variables
+        // Initialize variables
+        const merchantsContainer = document.getElementById('merchants-container');
         let merchants = [];
-        let categoryColors = {
-            'Groceries': '#4CAF50',
-            'Dining': '#FF9800',
-            'Transport': '#2196F3',
-            'Shopping': '#9C27B0',
-            'Bills': '#F44336',
-            'Entertainment': '#FFD700',
-            'Travel': '#8B4513',
-            'Healthcare': '#00BCD4',
-            'Education': '#3F51B5',
-            'Housing': '#E91E63',
-            'Income': '#2E7D32',
-            'Salary': '#1B5E20',
-            'Investments': '#388E3C',
-            'Transfers': '#424242',
-            'Utilities': '#F57C00',
-            'Insurance': '#D32F2F',
-            'Subscription': '#7B1FA2',
-            'Uncategorized': '#607D8B'
-        };
+        let categories = [];
+        const categoryColors = {{ categoryColors|tojson|safe }};
 
         // Utility function to generate color for category
         function getCategoryColor(category) {
@@ -353,164 +435,350 @@
         }
 
         // DOM elements
-        const merchantsContainer = document.getElementById('merchants-container');
         const merchantSearch = document.getElementById('merchant-search');
         const editMerchantModal = new bootstrap.Modal(document.getElementById('editMerchantModal'));
         const addAliasModal = new bootstrap.Modal(document.getElementById('addAliasModal'));
         const addMerchantModal = new bootstrap.Modal(document.getElementById('addMerchantModal'));
 
         // Load merchants on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadMerchants();
-            
-            // Search functionality
-            merchantSearch.addEventListener('input', function() {
-                const searchTerm = this.value.trim();
-                if (searchTerm.length > 0) {
-                    searchMerchants(searchTerm);
-                } else {
-                    renderMerchants(merchants);
-                }
-            });
-            
-            // Save merchant changes
-            document.getElementById('save-merchant-btn').addEventListener('click', function() {
-                const merchantName = document.getElementById('merchant-name').value;
-                const category = document.getElementById('merchant-category').value;
-                updateMerchant(merchantName, category);
-            });
-            
-            // Add alias
-            document.getElementById('save-alias-btn').addEventListener('click', function() {
-                const merchantName = document.getElementById('merchant-for-alias').value;
-                const aliasName = document.getElementById('alias-name').value;
-                addAlias(aliasName, merchantName);
-            });
-            
-            // Add merchant
-            document.getElementById('add-merchant-btn').addEventListener('click', function() {
-                document.getElementById('new-merchant-name').value = '';
-                addMerchantModal.show();
-            });
-            
-            // Save new merchant
-            document.getElementById('add-new-merchant-btn').addEventListener('click', function() {
-                const merchantName = document.getElementById('new-merchant-name').value.trim();
-                const category = document.getElementById('new-merchant-category').value;
+        async function loadMerchants() {
+            try {
+                console.log('Loading merchants...');
+                merchantsContainer.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
                 
-                if (!merchantName) {
-                    alert('Please enter a merchant name');
+                const response = await fetch('/api/merchants');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                console.log('Received merchants data:', data);
+                
+                if (data.success) {
+                    merchants = data.merchants;
+                } else if (Array.isArray(data)) {
+                    merchants = data;
+                } else {
+                    throw new Error('Invalid data format received');
+                }
+                
+                    renderMerchants(merchants);
+            } catch (error) {
+                console.error('Error loading merchants:', error);
+                showError('Failed to load merchants. Please try again.');
+            }
+        }
+
+        // Load categories for dropdowns
+        async function loadCategories() {
+            try {
+                const response = await fetch('/api/merchants/categories');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch categories');
+                }
+                categories = await response.json();
+                
+                // Update categories list in UI
+                const categoriesContainer = document.querySelector('.card-body .d-flex.flex-wrap.gap-2');
+                if (categoriesContainer) {
+                    categoriesContainer.innerHTML = categories.map(category => `
+                        <div class="category-item">
+                            <span class="category-badge" style="background-color: ${getCategoryColor(category)}">
+                                ${category}
+                                ${category.toLowerCase() !== 'uncategorized' ? `
+                                    <button class="btn btn-sm btn-link text-white p-0 ms-2 edit-category-btn" 
+                                            data-category="${category}"
+                                            style="text-decoration: none;">
+                                        ✏️
+                                    </button>
+                                    <button class="btn btn-sm btn-link text-white p-0 ms-1 delete-category-btn" 
+                                            data-category="${category}"
+                                            style="text-decoration: none;">
+                                        ❌
+                                    </button>
+                                ` : ''}
+                            </span>
+                        </div>
+                    `).join('');
+                }
+                
+                // Update category count
+                const categoryCountEl = document.getElementById('category-count');
+                if (categoryCountEl) {
+                    categoryCountEl.textContent = categories.length.toString();
+                }
+                
+                // Populate category dropdowns
+                const categorySelects = ['new-merchant-category', 'edit-merchant-category'];
+                categorySelects.forEach(selectId => {
+                    const select = document.getElementById(selectId);
+                    if (!select) {
+                        console.error(`Select element with id ${selectId} not found`);
                     return;
                 }
-                
-                updateMerchant(merchantName, category, true);
+                    select.innerHTML = '<option value="">Select a category...</option>';
+                    categories.forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category;
+                        option.textContent = category;
+                        select.appendChild(option);
             });
         });
-
-        // Load all merchants
-        function loadMerchants() {
-            merchantsContainer.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-            
-            fetch('/api/merchants')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        merchants = data.merchants;
-                        renderMerchants(merchants);
-                    } else {
-                        showError('Failed to load merchants: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showError('Failed to load merchants. Please try again.');
-                });
+            } catch (error) {
+                console.error('Error loading categories:', error);
+                showError('Failed to load categories. Please try again.');
+            }
         }
 
         // Search merchants
-        function searchMerchants(term) {
+        async function searchMerchants(term) {
+            try {
             merchantsContainer.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
             
-            fetch(`/api/merchants?search=${encodeURIComponent(term)}`)
-                .then(response => response.json())
-                .then(data => {
+                const response = await fetch(`/api/merchants/search?q=${encodeURIComponent(term)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
                     if (data.success) {
                         renderMerchants(data.merchants);
+                } else if (Array.isArray(data)) {
+                    renderMerchants(data);
                     } else {
-                        showError('Failed to search merchants: ' + data.error);
+                    throw new Error('Invalid search results format');
                     }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
+            } catch (error) {
+                console.error('Error searching merchants:', error);
                     showError('Failed to search merchants. Please try again.');
-                });
+            }
         }
 
-        // Update merchant category
-        function updateMerchant(merchantName, category, isNew = false) {
-            fetch('/api/merchants', {
+        // Add new merchant
+        async function addMerchant(name, category) {
+            try {
+                const response = await fetch('/api/merchants', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    merchant: merchantName,
+                        name: name,
                     category: category
                 })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        editMerchantModal.hide();
-                        addMerchantModal.hide();
-                        loadMerchants();
-                        showSuccess(`${isNew ? 'Added' : 'Updated'} merchant ${merchantName} to category ${category}`);
-                    } else {
-                        showError('Failed to update merchant: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showError('Failed to update merchant. Please try again.');
                 });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (!data.success && !data.message) {
+                    throw new Error(data.error || 'Failed to add merchant');
+                }
+
+                // Hide modal and clear form
+                const modal = bootstrap.Modal.getInstance(document.getElementById('addMerchantModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                const nameInput = document.getElementById('new-merchant-name');
+                const categorySelect = document.getElementById('new-merchant-category');
+                if (nameInput) nameInput.value = '';
+                if (categorySelect) categorySelect.value = '';
+
+                // Show success message
+                showSuccess(`Successfully added merchant "${name}"`);
+
+                // Reload merchants list
+                await loadMerchants();
+            } catch (error) {
+                console.error('Error adding merchant:', error);
+                showError(`Failed to add merchant: ${error.message}`);
+            }
         }
 
-        // Add alias for a merchant
-        function addAlias(alias, merchantName) {
-            alias = alias.trim();
-            if (!alias) {
-                alert('Please enter a valid alias name');
-                return;
-            }
-            
-            fetch('/api/aliases', {
+        // Update merchant
+        async function updateMerchant(name, category) {
+            try {
+                const response = await fetch('/api/merchants', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    alias: alias,
-                    merchant: merchantName
-                })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        addAliasModal.hide();
-                        loadMerchants();
-                        showSuccess(`Added alias "${alias}" for merchant "${merchantName}"`);
-                    } else {
-                        showError('Failed to add alias: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showError('Failed to add alias. Please try again.');
+                        name: name,
+                        category: category
+                    })
                 });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                }
+
+                // Hide modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editMerchantModal'));
+                if (modal) {
+                    modal.hide();
+                }
+
+                // Show success message
+                showSuccess(`Successfully updated merchant "${name}"`);
+
+                // Reload merchants list
+                await loadMerchants();
+            } catch (error) {
+                console.error('Error updating merchant:', error);
+                showError(`Failed to update merchant: ${error.message}`);
+            }
         }
+
+        // Delete merchant
+        async function deleteMerchant(name) {
+            if (!confirm(`Are you sure you want to delete the merchant "${name}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/merchants/${encodeURIComponent(name)}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                }
+
+                // Hide modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editMerchantModal'));
+                if (modal) {
+                    modal.hide();
+                }
+
+                // Show success message
+                showSuccess(`Successfully deleted merchant "${name}"`);
+
+                // Reload merchants list
+                await loadMerchants();
+            } catch (error) {
+                console.error('Error deleting merchant:', error);
+                showError(`Failed to delete merchant: ${error.message}`);
+            }
+        }
+
+        // Event Listeners for Merchant Management
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Bootstrap components
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+
+            // Load initial data
+            Promise.all([
+                loadMerchants(),
+                loadCategories()
+            ]).catch(error => {
+                console.error('Error loading initial data:', error);
+                showError('Failed to load initial data. Please refresh the page.');
+            });
+
+            // Search functionality with debounce
+            let searchTimeout;
+            const searchInput = document.getElementById('merchant-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    clearTimeout(searchTimeout);
+                    const searchTerm = this.value.trim();
+                    searchTimeout = setTimeout(() => {
+                        if (searchTerm.length > 0) {
+                            searchMerchants(searchTerm);
+                    } else {
+                            loadMerchants();
+                        }
+                    }, 300);
+                });
+            }
+
+            // Add merchant button
+            const addMerchantBtn = document.getElementById('add-merchant-btn');
+            if (addMerchantBtn) {
+                addMerchantBtn.addEventListener('click', function() {
+                    const nameInput = document.getElementById('new-merchant-name');
+                    const categorySelect = document.getElementById('new-merchant-category');
+                    if (nameInput) nameInput.value = '';
+                    if (categorySelect) categorySelect.value = '';
+                    const modal = new bootstrap.Modal(document.getElementById('addMerchantModal'));
+                    modal.show();
+                });
+            }
+
+            // Save new merchant
+            const saveNewMerchantBtn = document.getElementById('save-new-merchant-btn');
+            if (saveNewMerchantBtn) {
+                saveNewMerchantBtn.addEventListener('click', function() {
+                    const nameInput = document.getElementById('new-merchant-name');
+                    const categorySelect = document.getElementById('new-merchant-category');
+                    
+                    if (!nameInput || !categorySelect) {
+                        showError('Form elements not found');
+                        return;
+                    }
+                    
+                    const name = nameInput.value.trim();
+                    const category = categorySelect.value;
+                    
+                    if (!name || !category) {
+                        showError('Please fill in all required fields');
+                        return;
+                    }
+                    
+                    addMerchant(name, category);
+                });
+            }
+
+            // Edit merchant
+            const saveEditMerchantBtn = document.getElementById('save-edit-merchant-btn');
+            if (saveEditMerchantBtn) {
+                saveEditMerchantBtn.addEventListener('click', function() {
+                    const nameInput = document.getElementById('edit-merchant-name');
+                    const categorySelect = document.getElementById('edit-merchant-category');
+                    
+                    if (!nameInput || !categorySelect) {
+                        showError('Form elements not found');
+                        return;
+                    }
+                    
+                    const name = nameInput.value;
+                    const category = categorySelect.value;
+                    
+                    if (!name || !category) {
+                        showError('Please select a category');
+                        return;
+                    }
+                    
+                    updateMerchant(name, category);
+                });
+            }
+
+            // Delete merchant
+            const deleteMerchantBtn = document.getElementById('delete-merchant-btn');
+            if (deleteMerchantBtn) {
+                deleteMerchantBtn.addEventListener('click', function() {
+                    const nameInput = document.getElementById('edit-merchant-name');
+                    if (!nameInput) {
+                        showError('Merchant name not found');
+                        return;
+                    }
+                    deleteMerchant(nameInput.value);
+                });
+            }
+        });
 
         // Render merchants table
         function renderMerchants(merchantList) {
+            console.log('Rendering merchants:', merchantList);
             if (!merchantList || merchantList.length === 0) {
                 merchantsContainer.innerHTML = `
                     <div class="empty-state">
@@ -537,23 +805,29 @@
             
             merchantList.forEach(merchant => {
                 const categoryColor = getCategoryColor(merchant.category);
+                const merchantName = merchant.name || merchant;
+                const merchantCategory = merchant.category || 'Uncategorized';
                 
                 tableHTML += `
                     <tr>
-                        <td>${merchant.name}</td>
+                        <td>${merchantName}</td>
                         <td>
                             <span class="category-badge" style="background-color: ${categoryColor}">
-                                ${merchant.category}
+                                ${merchantCategory}
                             </span>
                         </td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary me-1 edit-btn" 
-                                    data-merchant="${merchant.name}" 
-                                    data-category="${merchant.category}">
+                                    data-merchant="${merchantName}" 
+                                    data-category="${merchantCategory}">
                                 Edit
                             </button>
+                            <button class="btn btn-sm btn-outline-danger me-1 delete-btn" 
+                                    data-merchant="${merchantName}">
+                                Delete
+                            </button>
                             <button class="btn btn-sm btn-outline-secondary alias-btn" 
-                                    data-merchant="${merchant.name}">
+                                    data-merchant="${merchantName}">
                                 Add Alias
                             </button>
                         </td>
@@ -574,10 +848,19 @@
                     const merchantName = this.getAttribute('data-merchant');
                     const category = this.getAttribute('data-category');
                     
-                    document.getElementById('merchant-name').value = merchantName;
-                    document.getElementById('merchant-category').value = category;
+                    document.getElementById('edit-merchant-name').value = merchantName;
+                    document.getElementById('edit-merchant-category').value = category;
                     
-                    editMerchantModal.show();
+                    const modal = new bootstrap.Modal(document.getElementById('editMerchantModal'));
+                    modal.show();
+                });
+            });
+            
+            // Add event listeners for delete buttons
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const merchantName = this.getAttribute('data-merchant');
+                    deleteMerchant(merchantName);
                 });
             });
             
@@ -585,60 +868,244 @@
             document.querySelectorAll('.alias-btn').forEach(button => {
                 button.addEventListener('click', function() {
                     const merchantName = this.getAttribute('data-merchant');
-                    
                     document.getElementById('merchant-for-alias').value = merchantName;
                     document.getElementById('alias-name').value = '';
-                    
-                    addAliasModal.show();
+                    const modal = new bootstrap.Modal(document.getElementById('addAliasModal'));
+                    modal.show();
                 });
             });
         }
 
         // Show success message
         function showSuccess(message) {
-            const alertHTML = `
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    ${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            `;
-            
-            const alertContainer = document.createElement('div');
-            alertContainer.innerHTML = alertHTML;
-            
-            document.querySelector('.container').insertBefore(alertContainer, document.querySelector('.card'));
-            
-            // Auto-dismiss after 3 seconds
-            setTimeout(() => {
-                const alert = document.querySelector('.alert');
-                if (alert) {
-                    const bsAlert = new bootstrap.Alert(alert);
-                    bsAlert.close();
-                }
-            }, 3000);
+            const toast = document.getElementById('successToast');
+            const toastBody = toast.querySelector('.toast-body');
+            toastBody.textContent = message;
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
         }
 
         // Show error message
         function showError(message) {
-            const alertHTML = `
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    ${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            `;
-            
-            const alertContainer = document.createElement('div');
-            alertContainer.innerHTML = alertHTML;
-            
-            document.querySelector('.container').insertBefore(alertContainer, document.querySelector('.card'));
-            
-            // Reset merchants container
-            merchantsContainer.innerHTML = `
-                <div class="empty-state">
-                    <p>Error loading data. Please try again.</p>
-                </div>
-            `;
+            const toast = document.getElementById('errorToast');
+            const toastBody = toast.querySelector('.toast-body');
+            toastBody.textContent = message;
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
         }
+
+        // Category Management Functions
+        async function addCategory(name) {
+            try {
+                const response = await fetch('/api/merchants/categories', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name
+                    })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                }
+
+                // Hide modal and clear form
+                const modal = bootstrap.Modal.getInstance(document.getElementById('addCategoryModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                const nameInput = document.getElementById('new-category-name');
+                if (nameInput) nameInput.value = '';
+
+                // Show success message
+                showSuccess(`Successfully added category "${name}"`);
+
+                // Reload categories
+                await loadCategories();
+                
+                // Update category dropdowns
+                const categorySelects = ['new-merchant-category', 'edit-merchant-category'];
+                categorySelects.forEach(selectId => {
+                    const select = document.getElementById(selectId);
+                    if (select) {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = name;
+                        select.appendChild(option);
+                    }
+                });
+            } catch (error) {
+                console.error('Error adding category:', error);
+                showError(`Failed to add category: ${error.message}`);
+            }
+        }
+
+        async function renameCategory(oldName, newName) {
+            try {
+                const response = await fetch(`/api/merchants/categories/${encodeURIComponent(oldName)}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: newName
+                    })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                }
+
+                // Hide modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editCategoryModal'));
+                if (modal) {
+                    modal.hide();
+                }
+
+                // Show success message
+                showSuccess(`Successfully renamed category "${oldName}" to "${newName}"`);
+
+                // Reload categories and merchants
+                await Promise.all([
+                    loadCategories(),
+                    loadMerchants()
+                ]);
+            } catch (error) {
+                console.error('Error renaming category:', error);
+                showError(`Failed to rename category: ${error.message}`);
+            }
+        }
+
+        async function deleteCategory(name) {
+            if (name.toLowerCase() === 'uncategorized') {
+                showError('The Uncategorized category cannot be deleted as it is required by the system');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete the category "${name}"? All merchants in this category will be moved to "Uncategorized".`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/merchants/categories/${encodeURIComponent(name)}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                }
+
+                // Show success message
+                showSuccess(`Successfully deleted category "${name}"`);
+
+                // Remove the category from the UI
+                const categoryItem = document.querySelector(`[data-category="${name}"]`).closest('.category-item');
+                if (categoryItem) {
+                    categoryItem.remove();
+                }
+
+                // Remove the category from dropdowns
+                const categorySelects = ['new-merchant-category', 'edit-merchant-category'];
+                categorySelects.forEach(selectId => {
+                    const select = document.getElementById(selectId);
+                    if (select) {
+                        const option = Array.from(select.options).find(opt => opt.value === name);
+                        if (option) {
+                            select.removeChild(option);
+                        }
+                    }
+                });
+
+                // Update category count
+                const categoryCountEl = document.getElementById('category-count');
+                if (categoryCountEl) {
+                    categoryCountEl.textContent = (parseInt(categoryCountEl.textContent) - 1).toString();
+                }
+
+                // Reload merchants to show updated categories
+                await loadMerchants();
+            } catch (error) {
+                console.error('Error deleting category:', error);
+                showError(`Failed to delete category: ${error.message}`);
+            }
+        }
+
+        // Event Listeners for Category Management
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add category button
+            const addCategoryBtn = document.getElementById('add-category-btn');
+            if (addCategoryBtn) {
+                addCategoryBtn.addEventListener('click', function() {
+                    const nameInput = document.getElementById('new-category-name');
+                    if (nameInput) nameInput.value = '';
+                    const modal = new bootstrap.Modal(document.getElementById('addCategoryModal'));
+                    modal.show();
+                });
+            }
+
+            // Save new category
+            const saveNewCategoryBtn = document.getElementById('save-new-category-btn');
+            if (saveNewCategoryBtn) {
+                saveNewCategoryBtn.addEventListener('click', function() {
+                    const nameInput = document.getElementById('new-category-name');
+                    
+                    if (!nameInput) {
+                        showError('Form elements not found');
+                        return;
+                    }
+                    
+                    const name = nameInput.value.trim();
+                    
+                    if (!name) {
+                        showError('Please enter a category name');
+                        return;
+                    }
+                    
+                    addCategory(name);
+                });
+            }
+
+            // Edit category buttons
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('edit-category-btn')) {
+                    const category = e.target.getAttribute('data-category');
+                    document.getElementById('old-category-name').value = category;
+                    document.getElementById('edit-category-name').value = category;
+                    const modal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
+                    modal.show();
+                }
+            });
+
+            // Save category edit
+            const saveEditCategoryBtn = document.getElementById('save-edit-category-btn');
+            if (saveEditCategoryBtn) {
+                saveEditCategoryBtn.addEventListener('click', function() {
+                    const oldName = document.getElementById('old-category-name').value;
+                    const newName = document.getElementById('edit-category-name').value.trim();
+                    
+                    if (!newName) {
+                        showError('Please enter a category name');
+                        return;
+                    }
+                    
+                    renameCategory(oldName, newName);
+                });
+            }
+
+            // Delete category buttons
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('delete-category-btn')) {
+                    const category = e.target.getAttribute('data-category');
+                    deleteCategory(category);
+                }
+            });
+        });
     </script>
 </body>
 </html> 
