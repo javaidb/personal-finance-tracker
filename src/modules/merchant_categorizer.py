@@ -75,6 +75,24 @@ class MerchantCategorizer:
             print(f"Error adding merchant: {str(e)}")
             return False
 
+    def delete_merchant(self, merchant_name: str) -> bool:
+        """Delete a merchant from the database."""
+        try:
+            merchant_name = merchant_name.lower()
+            if merchant_name in self.merchant_db:
+                del self.merchant_db[merchant_name]
+                self.save_merchant_db()
+                
+                # Also remove any aliases for this merchant
+                self.alias_db = {alias: merchant for alias, merchant in self.alias_db.items() 
+                               if merchant != merchant_name}
+                self.save_alias_db()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error deleting merchant: {str(e)}")
+            return False
+
     def add_alias(self, alias: str, merchant: str) -> bool:
         """Add an alias for a merchant."""
         try:
@@ -121,35 +139,49 @@ class MerchantCategorizer:
         # Return the cleaned string as the merchant name
         return cleaned_str if cleaned_str else None
 
-    def categorize_transaction(self, transaction_details: list) -> tuple:
+    def categorize_transaction(self, transaction_details, default_category="uncharacterized"):
         """
-        Categorize a transaction based on its details.
+        Categorize a transaction based on merchant matching
         
         Args:
-            transaction_details (list): List of strings containing transaction details.
+            transaction_details: The transaction details (string or list)
+            default_category: Category to use if no match is found
             
         Returns:
-            tuple: (category, merchant_name) - Category and merchant name that matched.
+            tuple: (category, merchant_name)
         """
-        if not transaction_details:
-            return "uncharacterized", "Unknown"
+        # Convert transaction details to string and lowercase
+        if isinstance(transaction_details, list):
+            details = ' '.join(transaction_details).lower()
+        else:
+            details = str(transaction_details).lower()
         
-        # Join all details into a single string and convert to lowercase
-        details_str = ' '.join(transaction_details).lower()
+        # Clean up the details
+        details = re.sub(r'[^a-z\s&]', '', details)
         
-        # First try exact matches in merchant database
+        # Check for exact merchant matches
         for merchant, category in self.merchant_db.items():
-            if merchant.lower() in details_str:
+            merchant_lower = merchant.lower()
+            if merchant_lower in details or details in merchant_lower:
                 return category, merchant
         
-        # Then try alias matches
+        # Check for alias matches
         for alias, merchant in self.alias_db.items():
-            if alias.lower() in details_str and merchant in self.merchant_db:
+            alias_lower = alias.lower()
+            if (alias_lower in details or details in alias_lower) and merchant in self.merchant_db:
                 return self.merchant_db[merchant], merchant
         
-        # If no match found, extract potential merchant name
-        merchant_name = self.extract_merchant_name(transaction_details)
-        return "uncharacterized", merchant_name if merchant_name else "Unknown"
+        # Try word-by-word matching for merchants
+        details_words = set(details.split())
+        for merchant, category in self.merchant_db.items():
+            merchant_words = set(merchant.lower().split())
+            # If all words in the merchant name are found in the details
+            if merchant_words.issubset(details_words) or details_words.issubset(merchant_words):
+                return category, merchant
+        
+        # Extract merchant name for unmatched transactions
+        merchant = self.extract_merchant(details)
+        return default_category, merchant
 
     def extract_merchant(self, transaction_details):
         """Extract the likely merchant name from transaction details"""
@@ -212,32 +244,6 @@ class MerchantCategorizer:
             
             # Default to first 3 words if no merchant word found
             return ' '.join(words[:3]).strip()
-    
-    def categorize_transaction(self, transaction_details, default_category="uncharacterized"):
-        """
-        Categorize a transaction based on merchant matching
-        
-        Args:
-            transaction_details: The transaction details (string or list)
-            default_category: Category to use if no match is found
-            
-        Returns:
-            tuple: (category, merchant_name)
-        """
-        # Extract merchant
-        merchant = self.extract_merchant(transaction_details)
-        
-        # Check if we have this exact merchant
-        if merchant in self.merchant_db:
-            return self.merchant_db[merchant], merchant
-        
-        # Check if this is an alias
-        if merchant in self.alias_db:
-            canonical_name = self.alias_db[merchant]
-            return self.merchant_db[canonical_name], canonical_name
-        
-        # No match found
-        return default_category, merchant
     
     def save_db(self):
         """Save the merchant database to disk"""
