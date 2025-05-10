@@ -607,11 +607,21 @@ class TransactionService:
 
         try:
             from src.config import config
-            df = self.__identify_rent_payments(df, config.rent_ranges)
+            # Only identify rent payments for transactions that aren't already categorized by merchants
+            uncategorized_mask = df['Classification'].str.lower() == 'uncategorized'
+            if uncategorized_mask.any():
+                uncategorized_df = df[uncategorized_mask].copy()
+                uncategorized_df = self.__identify_rent_payments(uncategorized_df, config.rent_ranges)
+                # Update only the uncategorized transactions
+                df.loc[uncategorized_mask, 'Classification'] = uncategorized_df['Classification']
         except (ImportError, AttributeError) as e:
             print(f"Warning: Could not load rent ranges from config: {e}")
             # Use default empty list if config not available
-            df = self.__identify_rent_payments(df, [])
+            uncategorized_mask = df['Classification'].str.lower() == 'uncategorized'
+            if uncategorized_mask.any():
+                uncategorized_df = df[uncategorized_mask].copy()
+                uncategorized_df = self.__identify_rent_payments(uncategorized_df, [])
+                df.loc[uncategorized_mask, 'Classification'] = uncategorized_df['Classification']
             
         df = self.__apply_custom_conditinos(df)
 
@@ -645,6 +655,11 @@ class TransactionService:
             def categorize_transaction(row):
                 details = row['Details']
                 transaction_type = row.get('Transaction Type', '')
+                current_category = row['Classification']
+                
+                # If it's already categorized as Rent, preserve that categorization
+                if current_category == 'Rent':
+                    return current_category
                 
                 if pd.isna(details):
                     return 'Uncategorized'
@@ -655,7 +670,16 @@ class TransactionService:
                 
                 # Try merchant-based categorization
                 category, _ = merchant_categorizer.categorize_transaction(processed_details)
-                return category
+                
+                # If merchant categorization found something, use it
+                if category != "uncharacterized":
+                    return category
+                
+                # If no merchant match and already has a non-Uncategorized category, preserve it
+                if current_category != 'Uncategorized':
+                    return current_category
+                
+                return 'Uncategorized'
             
             # Apply categorization
             df['Classification'] = df.apply(categorize_transaction, axis=1)

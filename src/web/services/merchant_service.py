@@ -111,10 +111,13 @@ class MerchantService:
                 self.save_databank()
                 logger.debug(f"Successfully added merchant {merchant_name} to category {category}")
                 
-                # Trigger transaction recategorization
-                from ..services.transaction_service import TransactionService
-                transaction_service = TransactionService(base_path=self.base_path)
-                transaction_service.recategorize_transactions()
+                # Trigger transaction recategorization using global service
+                from ..routes.api import init_transaction_service
+                transaction_service = init_transaction_service()
+                if transaction_service:
+                    transaction_service.recategorize_transactions()
+                else:
+                    logger.warning("Could not initialize transaction service for recategorization")
             else:
                 logger.error(f"Failed to add merchant {merchant_name} to database")
             return success
