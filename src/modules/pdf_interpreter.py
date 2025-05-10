@@ -29,7 +29,7 @@ class PDFReader(GeneralHelperFns):
         super().__init__(base_path=base_path)
         self.base_path = base_path
         self.databank_path = os.path.join(base_path, "cached_data", "databank.json")
-        self.uncharacterized_path = os.path.join(base_path, "cached_data", "uncharacterized_merchants.json")
+        self.uncategorized_path = os.path.join(base_path, "cached_data", "uncategorized_merchants.json")
         
         # Create cached_data directory if it doesn't exist
         os.makedirs(os.path.join(base_path, "cached_data"), exist_ok=True)
@@ -575,10 +575,10 @@ class PDFReader(GeneralHelperFns):
         uncategorized = 0
         
         # For collecting training data
-        uncharacterized_merchants = {}
+        uncategorized_merchants = {}
 
         def categorize_strings(row, categories=imported_json):
-            nonlocal merchant_matches, pattern_matches, uncategorized, uncharacterized_merchants
+            nonlocal merchant_matches, pattern_matches, uncategorized, uncategorized_merchants
             
             processed_details = row['Processed Details']
             
@@ -586,7 +586,7 @@ class PDFReader(GeneralHelperFns):
             category, merchant = merchant_categorizer.categorize_transaction(processed_details)
             
             # If we got a match from the merchant categorizer, use that
-            if category != "uncharacterized":
+            if category != "uncategorized":
                 merchant_matches += 1
                 return pd.Series([category, f"Merchant: {merchant}"])
             
@@ -611,22 +611,22 @@ class PDFReader(GeneralHelperFns):
 
             # Now assign category/associated match keywords
             if not found_categories:
-                found_category = "uncharacterized"
+                found_category = "uncategorized"
                 matched_keyword = None
                 uncategorized += 1
                 
-                # Store uncharacterized merchants for later review
+                # Store uncategorized merchants for later review
                 if merchant != "Unknown":
                     # Extract amount from the row
                     amount = abs(row['Amount']) if isinstance(row['Amount'], (int, float)) else 0
                     # Group similar merchants
-                    if merchant in uncharacterized_merchants:
-                        uncharacterized_merchants[merchant]["count"] += 1
-                        uncharacterized_merchants[merchant]["total_amount"] += amount
-                        if len(uncharacterized_merchants[merchant]["examples"]) < 5:  # Store up to 5 examples
-                            uncharacterized_merchants[merchant]["examples"].append(s)
+                    if merchant in uncategorized_merchants:
+                        uncategorized_merchants[merchant]["count"] += 1
+                        uncategorized_merchants[merchant]["total_amount"] += amount
+                        if len(uncategorized_merchants[merchant]["examples"]) < 5:  # Store up to 5 examples
+                            uncategorized_merchants[merchant]["examples"].append(s)
                     else:
-                        uncharacterized_merchants[merchant] = {
+                        uncategorized_merchants[merchant] = {
                             "count": 1,
                             "total_amount": amount,
                             "examples": [s]
@@ -643,7 +643,7 @@ class PDFReader(GeneralHelperFns):
                 pattern_matches += 1
                 
                 # Auto-learn this merchant-category mapping
-                if found_category != "uncharacterized":
+                if found_category != "uncategorized":
                     merchant_categorizer.auto_learn(processed_details, found_category)
             
             # Save updated databank
@@ -657,9 +657,9 @@ class PDFReader(GeneralHelperFns):
 
         df[['Classification', 'Matched Keyword']] = df.apply(categorize_strings, axis=1)
         
-        # Save uncharacterized merchants to a review file
+        # Save uncategorized merchants to a review file
         if uncategorized > 0:
-            self.__save_uncharacterized_merchants(uncharacterized_merchants)
+            self.__save_uncategorized_merchants(uncategorized_merchants)
         
         # Report classification stats
         total = len(df)
@@ -669,19 +669,19 @@ class PDFReader(GeneralHelperFns):
         
         return df
         
-    def __save_uncharacterized_merchants(self, merchants):
-        """Save uncharacterized merchants to a file for later review."""
+    def __save_uncategorized_merchants(self, merchants):
+        """Save uncategorized merchants to a file for later review."""
         try:
-            # Load existing uncharacterized merchants
+            # Load existing uncategorized merchants
             existing_merchants = {}
-            if os.path.exists(self.uncharacterized_path):
+            if os.path.exists(self.uncategorized_path):
                 try:
-                    with open(self.uncharacterized_path, 'r') as f:
+                    with open(self.uncategorized_path, 'r') as f:
                         content = f.read().strip()
                         if content:
                             existing_merchants = json.loads(content)
                 except Exception as e:
-                    print(f"Error loading existing uncharacterized merchants file: {str(e)}")
+                    print(f"Error loading existing uncategorized merchants file: {str(e)}")
 
             # Merge with new merchants
             for merchant, data in merchants.items():
@@ -697,11 +697,11 @@ class PDFReader(GeneralHelperFns):
                     existing_merchants[merchant] = data
 
             # Save merged data
-            with open(self.uncharacterized_path, 'w') as f:
+            with open(self.uncategorized_path, 'w') as f:
                 json.dump(existing_merchants, f, indent=2)
-            print(f"Saved {len(existing_merchants)} uncharacterized merchants to {self.uncharacterized_path}")
+            print(f"Saved {len(existing_merchants)} uncategorized merchants to {self.uncategorized_path}")
         except Exception as e:
-            print(f"Error saving uncharacterized merchants: {str(e)}")
+            print(f"Error saving uncategorized merchants: {str(e)}")
 
     def recalibrate_amounts(self, df_in):
         """

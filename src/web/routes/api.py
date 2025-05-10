@@ -189,15 +189,21 @@ def add_merchant():
         
         # Initialize services
         merchant_service = MerchantService(base_path=base_path)
+        
+        # Initialize transaction service first to ensure it exists
         transaction_service = init_transaction_service()
+        if not transaction_service:
+            return jsonify({
+                "success": False,
+                "error": "Could not initialize transaction service"
+            }), 500
         
         # Add merchant
         success = merchant_service.add_merchant(data['name'], data['category'])
         
         if success:
             # Force transaction service to reload data
-            if transaction_service:
-                transaction_service.recategorize_transactions()
+            transaction_service.recategorize_transactions()
             
             return jsonify({
                 "success": True,
@@ -275,40 +281,40 @@ def get_merchant_stats():
     stats = merchant_service.get_merchant_stats()
     return jsonify(stats)
 
-@api_bp.route('/merchants/uncharacterized')
-def get_uncharacterized_merchants():
-    """Get uncharacterized merchants."""
+@api_bp.route('/merchants/uncategorized')
+def get_uncategorized_merchants():
+    """Get uncategorized merchants."""
     page = int(request.args.get('page', 1))
     limit = int(request.args.get('limit', 10))
     
     base_path = Path(current_app.root_path).parent.parent
     merchant_service = MerchantService(base_path=base_path)
-    merchants = merchant_service.get_uncharacterized_merchants(page, limit)
+    merchants = merchant_service.get_uncategorized_merchants(page, limit)
     return jsonify(merchants)
 
-@api_bp.route('/merchants/uncharacterized', methods=['POST'])
-def categorize_uncharacterized_merchant():
-    """Categorize an uncharacterized merchant."""
+@api_bp.route('/merchants/uncategorized', methods=['POST'])
+def categorize_uncategorized_merchant():
+    """Categorize an uncategorized merchant."""
     data = request.get_json()
     if not data or 'merchant' not in data or 'category' not in data:
         return jsonify({"error": "Missing required fields"}), 400
     
     base_path = Path(current_app.root_path).parent.parent
     merchant_service = MerchantService(base_path=base_path)
-    success = merchant_service.categorize_uncharacterized_merchant(data['merchant'], data['category'])
+    success = merchant_service.categorize_uncategorized_merchant(data['merchant'], data['category'])
     
     if success:
         return jsonify({"message": "Merchant categorized successfully"})
     else:
         return jsonify({"error": "Failed to categorize merchant"}), 500
 
-@api_bp.route('/merchants/has-uncharacterized')
-def has_uncharacterized_merchants():
-    """Check if there are any uncharacterized merchants."""
+@api_bp.route('/merchants/has-uncategorized')
+def has_uncategorized_merchants():
+    """Check if there are any uncategorized merchants."""
     base_path = Path(current_app.root_path).parent.parent
     merchant_service = MerchantService(base_path=base_path)
-    has_uncharacterized = merchant_service.has_uncharacterized_merchants()
-    return jsonify({"has_uncharacterized": has_uncharacterized})
+    has_uncategorized = merchant_service.has_uncategorized_merchants()
+    return jsonify({"has_uncategorized": has_uncategorized})
 
 @api_bp.route('/clear_cache', methods=['POST'])
 def clear_cache():
@@ -388,4 +394,46 @@ def delete_merchant_category(name):
     if success:
         return jsonify({"message": "Category deleted successfully"})
     else:
-        return jsonify({"error": "Category not found or failed to delete"}), 400 
+        return jsonify({"error": "Category not found or failed to delete"}), 400
+
+@api_bp.route('/merchants/categories/color', methods=['POST'])
+def update_category_color():
+    """Update a category's color."""
+    try:
+        data = request.get_json()
+        if not data or 'name' not in data or 'color' not in data:
+            return jsonify({
+                "success": False,
+                "error": "Missing required fields: name and color"
+            }), 400
+        
+        category_name = data['name']
+        color = data['color']
+        
+        # Validate color format
+        if not color.startswith('#') or len(color) != 7:
+            return jsonify({
+                "success": False,
+                "error": "Invalid color format. Must be a hex color (e.g., #FF0000)"
+            }), 400
+        
+        # Update the color in our central storage
+        from ..constants.categories import update_category_color
+        success = update_category_color(category_name, color)
+        if not success:
+            return jsonify({
+                "success": False,
+                "error": f"Failed to update color for category {category_name}"
+            }), 500
+        
+        return jsonify({
+            "success": True,
+            "category": category_name,
+            "color": color
+        })
+    except Exception as e:
+        print(f"Error updating category color: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500 

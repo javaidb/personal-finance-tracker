@@ -32,7 +32,7 @@ class CategoryService:
                         "Entertainment": {"totalMatches": 0, "patterns": []},
                         "Income": {"totalMatches": 0, "patterns": []},
                         "Transfer": {"totalMatches": 0, "patterns": []},
-                        "uncharacterized": {"totalMatches": 0, "patterns": []}
+                        "uncategorized": {"totalMatches": 0, "patterns": []}
                     }
                 }
                 self.save_databank()

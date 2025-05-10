@@ -507,10 +507,10 @@ class CategoryUpdater(GeneralHelperFns):
     def update_pie_chart(self, setup=False):
         
         status_counts = self.pristine_df['Classification'].value_counts(dropna=False)
-        none_count = status_counts.get('uncharacterized', 0)
+        none_count = status_counts.get('uncategorized', 0)
         other_count = len(self.pristine_df) - none_count
         
-        labels = ['Uncharacterized', 'Characterized']
+        labels = ['uncategorized', 'categorized']
         values = [none_count, other_count]
 
         if setup:

@@ -15,7 +15,7 @@ class MerchantService:
         self.base_path = base_path
         self.merchant_categorizer = MerchantCategorizer(base_path=base_path)
         self.databank_path = os.path.join(base_path, 'cached_data', 'databank.json')
-        self.review_path = os.path.join(base_path, 'cached_data', 'uncharacterized_merchants.json')
+        self.review_path = os.path.join(base_path, 'cached_data', 'uncategorized_merchants.json')
         self.default_categories = [
             "Groceries", "Dining", "Transport", "Shopping", "Bills",
             "Entertainment", "Activities", "Online", "Income", "Rent",
@@ -164,8 +164,8 @@ class MerchantService:
             logger.error(f"Error getting merchant stats: {str(e)}", exc_info=True)
             return {"merchant_count": 0, "alias_count": 0}
 
-    def has_uncharacterized_merchants(self) -> bool:
-        """Check if there are any uncharacterized merchants."""
+    def has_uncategorized_merchants(self) -> bool:
+        """Check if there are any uncategorized merchants."""
         try:
             if not os.path.exists(self.review_path):
                 return False
@@ -176,11 +176,11 @@ class MerchantService:
                 merchants_data = json.loads(content)
                 return len(merchants_data) > 0
         except Exception as e:
-            logger.error(f"Error checking uncharacterized merchants: {str(e)}", exc_info=True)
+            logger.error(f"Error checking uncategorized merchants: {str(e)}", exc_info=True)
             return False
 
-    def get_uncharacterized_count(self) -> int:
-        """Get the count of uncharacterized merchants."""
+    def get_uncategorized_count(self) -> int:
+        """Get the count of uncategorized merchants."""
         try:
             if not os.path.exists(self.review_path):
                 return 0
@@ -191,11 +191,11 @@ class MerchantService:
                 merchants_data = json.loads(content)
                 return len(merchants_data)
         except Exception as e:
-            logger.error(f"Error getting uncharacterized count: {str(e)}", exc_info=True)
+            logger.error(f"Error getting uncategorized count: {str(e)}", exc_info=True)
             return 0
 
-    def get_uncharacterized_merchants(self, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get paginated uncharacterized merchants."""
+    def get_uncategorized_merchants(self, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get paginated uncategorized merchants."""
         try:
             if not os.path.exists(self.review_path):
                 return {
@@ -245,7 +245,7 @@ class MerchantService:
                 "pages": total_pages
             }
         except Exception as e:
-            logger.error(f"Error getting uncharacterized merchants: {str(e)}", exc_info=True)
+            logger.error(f"Error getting uncategorized merchants: {str(e)}", exc_info=True)
             return {
                 "merchants": [],
                 "total": 0,
@@ -254,8 +254,8 @@ class MerchantService:
                 "pages": 0
             }
 
-    def categorize_uncharacterized_merchant(self, merchant_name: str, category: str) -> bool:
-        """Categorize an uncharacterized merchant."""
+    def categorize_uncategorized_merchant(self, merchant_name: str, category: str) -> bool:
+        """Categorize an uncategorized merchant."""
         try:
             # First verify category exists in databank
             if category not in self.databank.get('categories', {}):
@@ -276,7 +276,7 @@ class MerchantService:
                 self.databank['categories'][category]['patterns'].append(pattern)
                 self.save_databank()
 
-                # Remove from uncharacterized list
+                # Remove from uncategorized list
                 if os.path.exists(self.review_path):
                     with open(self.review_path, 'r') as f:
                         merchants_data = json.load(f)
@@ -371,4 +371,24 @@ class MerchantService:
             return True
         except Exception as e:
             logger.error(f"Error deleting category: {str(e)}", exc_info=True)
-            return False 
+            return False
+
+    def categorize_transaction(self, processed_details: Dict[str, Any]) -> str:
+        """Categorize a transaction based on its details."""
+        try:
+            # Try merchant-based categorization
+            category, _ = self.merchant_categorizer.categorize_transaction(processed_details)
+            
+            # If merchant categorization found something, use it
+            if category != "Uncategorized":
+                return category
+            
+            # If no merchant match and already has a non-Uncategorized category, preserve it
+            current_category = processed_details.get('category', 'Uncategorized')
+            if current_category != 'Uncategorized':
+                return current_category
+            
+            return 'Uncategorized'
+        except Exception as e:
+            logger.error(f"Error categorizing transaction: {str(e)}", exc_info=True)
+            return 'Uncategorized' 

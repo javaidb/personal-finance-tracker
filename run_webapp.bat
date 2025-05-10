@@ -21,7 +21,7 @@ mkdir logs 2>nul
 echo.
 echo Creating sample databank.json file if it doesn't exist...
 if not exist "cached_data\databank.json" (
-  echo { "categories": { "Groceries": { "patterns": [], "totalMatches": 0 }, "Dining": { "patterns": [], "totalMatches": 0 }, "Transport": { "patterns": [], "totalMatches": 0 }, "Bills": { "patterns": [], "totalMatches": 0 }, "Shopping": { "patterns": [], "totalMatches": 0 }, "Entertainment": { "patterns": [], "totalMatches": 0 }, "Income": { "patterns": [], "totalMatches": 0 }, "Transfer": { "patterns": [], "totalMatches": 0 }, "uncharacterized": { "patterns": [], "totalMatches": 0 } } } > cached_data\databank.json
+  echo { "categories": { "Groceries": { "patterns": [], "totalMatches": 0 }, "Dining": { "patterns": [], "totalMatches": 0 }, "Transport": { "patterns": [], "totalMatches": 0 }, "Bills": { "patterns": [], "totalMatches": 0 }, "Shopping": { "patterns": [], "totalMatches": 0 }, "Entertainment": { "patterns": [], "totalMatches": 0 }, "Income": { "patterns": [], "totalMatches": 0 }, "Transfer": { "patterns": [], "totalMatches": 0 }, "uncategorized": { "patterns": [], "totalMatches": 0 } } } > cached_data\databank.json
 )
 
 echo.

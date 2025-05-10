@@ -160,7 +160,7 @@
                 <div>
                     <a href="/" class="btn btn-outline-light">Back to Home</a>
                     {% if has_review_data %}
-                    <a href="/merchants/review" class="btn btn-warning ms-2">Review Uncharacterized</a>
+                    <a href="/merchants/review" class="btn btn-warning ms-2">Review uncategorized</a>
                     {% endif %}
                 </div>
             </div>
@@ -381,6 +381,14 @@
                             <label for="edit-category-name" class="form-label">Category Name</label>
                             <input type="text" class="form-control" id="edit-category-name" required>
                         </div>
+                        <div class="mb-3">
+                            <label for="edit-category-color" class="form-label">Category Color</label>
+                            <div class="input-group">
+                                <input type="color" class="form-control form-control-color" id="edit-category-color" required>
+                                <input type="text" class="form-control" id="edit-category-color-hex" placeholder="#000000" pattern="^#[0-9A-Fa-f]{6}$" required>
+                            </div>
+                            <div class="form-text">Choose a color for this category</div>
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -413,7 +421,7 @@
         const merchantsContainer = document.getElementById('merchants-container');
         let merchants = [];
         let categories = [];
-        const categoryColors = {{ categoryColors|tojson|safe }};
+        const categoryColors = JSON.parse('{{ categoryColors|tojson|safe }}');
 
         // Utility function to generate color for category
         function getCategoryColor(category) {
@@ -983,7 +991,7 @@
 
         async function deleteCategory(name) {
             if (name.toLowerCase() === 'uncategorized') {
-                showError('The Uncategorized category cannot be deleted as it is required by the system');
+                showError('The uncategorized category cannot be deleted as it is required by the system');
                 return;
             }
 
@@ -1036,6 +1044,44 @@
             }
         }
 
+        async function updateCategoryColor(categoryName, color) {
+            try {
+                const response = await fetch('/api/merchants/categories/color', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: categoryName,
+                        color: color
+                    })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to update category color');
+                }
+
+                // Update the color in the local categoryColors object
+                categoryColors[categoryName] = color;
+
+                // Update all instances of this category's color in the UI
+                document.querySelectorAll(`.category-badge[data-category="${categoryName}"]`).forEach(badge => {
+                    badge.style.backgroundColor = color;
+                });
+
+                return true;
+            } catch (error) {
+                console.error('Error updating category color:', error);
+                throw error;
+            }
+        }
+
         // Event Listeners for Category Management
         document.addEventListener('DOMContentLoaded', function() {
             // Add category button
@@ -1077,24 +1123,67 @@
                     const category = e.target.getAttribute('data-category');
                     document.getElementById('old-category-name').value = category;
                     document.getElementById('edit-category-name').value = category;
+                    
+                    // Set initial color values
+                    const currentColor = categoryColors[category] || '#000000';
+                    document.getElementById('edit-category-color').value = currentColor;
+                    document.getElementById('edit-category-color-hex').value = currentColor;
+                    
                     const modal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
                     modal.show();
                 }
             });
 
+            // Sync color picker and hex input
+            const colorPicker = document.getElementById('edit-category-color');
+            const colorHex = document.getElementById('edit-category-color-hex');
+            
+            if (colorPicker && colorHex) {
+                colorPicker.addEventListener('input', function() {
+                    colorHex.value = this.value;
+                });
+                
+                colorHex.addEventListener('input', function() {
+                    if (this.value.match(/^#[0-9A-Fa-f]{6}$/)) {
+                        colorPicker.value = this.value;
+                    }
+                });
+            }
+
             // Save category edit
             const saveEditCategoryBtn = document.getElementById('save-edit-category-btn');
             if (saveEditCategoryBtn) {
-                saveEditCategoryBtn.addEventListener('click', function() {
+                saveEditCategoryBtn.addEventListener('click', async function() {
                     const oldName = document.getElementById('old-category-name').value;
                     const newName = document.getElementById('edit-category-name').value.trim();
+                    const newColor = document.getElementById('edit-category-color').value;
                     
                     if (!newName) {
                         showError('Please enter a category name');
                         return;
                     }
                     
-                    renameCategory(oldName, newName);
+                    try {
+                        // First update the color if it changed
+                        if (newColor !== categoryColors[oldName]) {
+                            await updateCategoryColor(oldName, newColor);
+                        }
+                        
+                        // Then rename the category if the name changed
+                        if (newName !== oldName) {
+                            await renameCategory(oldName, newName);
+                        } else {
+                            // If only color was changed, just hide the modal
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('editCategoryModal'));
+                            if (modal) {
+                                modal.hide();
+                            }
+                            showSuccess(`Successfully updated category "${oldName}"`);
+                        }
+                    } catch (error) {
+                        console.error('Error updating category:', error);
+                        showError(`Failed to update category: ${error.message}`);
+                    }
                 });
             }
 

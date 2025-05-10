@@ -24,7 +24,7 @@ class Config:
         self.MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
         self.DATABANK_PATH = os.path.join(self.root_dir, 'cached_data', 'databank.json')
         self.MERCHANT_DB_PATH = os.path.join(self.root_dir, 'cached_data', 'merchant_db.json')
-        self.UNCHARACTERIZED_MERCHANTS_PATH = os.path.join(self.root_dir, 'cached_data', 'uncharacterized_merchants.json')
+        self.UNCATEGORIZED_MERCHANTS_PATH = os.path.join(self.root_dir, 'cached_data', 'uncategorized_merchants.json')
 
 class DevelopmentConfig(Config):
     """Development configuration."""

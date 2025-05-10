@@ -139,7 +139,7 @@ class MerchantCategorizer:
         # Return the cleaned string as the merchant name
         return cleaned_str if cleaned_str else None
 
-    def categorize_transaction(self, transaction_details, default_category="uncharacterized"):
+    def categorize_transaction(self, transaction_details, default_category="uncategorized"):
         """
         Categorize a transaction based on merchant matching
         
@@ -319,7 +319,7 @@ class MerchantCategorizer:
         Returns:
             bool: True if a new merchant mapping was added, False otherwise
         """
-        if category == "uncharacterized":
+        if category == "uncategorized":
             return False
             
         # Extract merchant
