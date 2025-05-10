@@ -332,4 +332,67 @@ class MerchantCategorizer:
             self.add_merchant(merchant, category)
             return True
             
-        return False 
+        return False
+
+class ManualTransactionCategorizer:
+    """
+    A class for handling manual category assignments for specific transactions.
+    """
+    
+    def __init__(self, base_path=None):
+        """Initialize the manual transaction categorizer with optional base path."""
+        if base_path is None:
+            base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        self.base_path = base_path
+        self.manual_categories_path = os.path.join(base_path, "cached_data", "manual_categories.json")
+        
+        # Create cached_data directory if it doesn't exist
+        os.makedirs(os.path.join(base_path, "cached_data"), exist_ok=True)
+        
+        # Load or create manual categories database
+        self.manual_categories = self.load_manual_categories()
+        
+    def load_manual_categories(self):
+        """Load the manual categories database from file."""
+        try:
+            if os.path.exists(self.manual_categories_path):
+                with open(self.manual_categories_path, 'r') as f:
+                    return json.load(f)
+            return {}
+        except Exception as e:
+            print(f"Error loading manual categories database: {str(e)}")
+            return {}
+
+    def save_manual_categories(self):
+        """Save the manual categories database to file."""
+        try:
+            with open(self.manual_categories_path, 'w') as f:
+                json.dump(self.manual_categories, f, indent=2)
+        except Exception as e:
+            print(f"Error saving manual categories database: {str(e)}")
+
+    def add_manual_category(self, transaction_id: str, category: str) -> bool:
+        """Add a manual category for a specific transaction."""
+        try:
+            self.manual_categories[transaction_id] = category
+            self.save_manual_categories()
+            return True
+        except Exception as e:
+            print(f"Error adding manual category: {str(e)}")
+            return False
+
+    def get_manual_category(self, transaction_id: str) -> str:
+        """Get the manual category for a specific transaction if it exists."""
+        return self.manual_categories.get(transaction_id)
+
+    def remove_manual_category(self, transaction_id: str) -> bool:
+        """Remove a manual category for a specific transaction."""
+        try:
+            if transaction_id in self.manual_categories:
+                del self.manual_categories[transaction_id]
+                self.save_manual_categories()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error removing manual category: {str(e)}")
+            return False 

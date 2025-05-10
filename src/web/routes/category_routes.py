@@ -106,6 +106,27 @@ class CategoryService:
 category_service = CategoryService()
 
 @category_bp.route('/categories/details', methods=['GET'])
+def get_categories_details():
+    """Return all categories and their details (patterns, etc) for UI dropdowns and management."""
+    service = CategoryService()
+    try:
+        categories = service.databank.get('categories', {})
+        # Convert patterns to a simple list of strings for each category for easier frontend use
+        categories_out = {}
+        for name, details in categories.items():
+            categories_out[name] = {
+                'patterns': [
+                    ' '.join(p['terms']) if isinstance(p, dict) and 'terms' in p else str(p)
+                    for p in details.get('patterns', [])
+                ],
+                'totalMatches': details.get('totalMatches', 0)
+            }
+        return jsonify({'categories': categories_out})
+    except Exception as e:
+        print(f"Error in /categories/details: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@category_bp.route('/categories', methods=['GET'])
 def get_categories():
     """Get all categories with their details"""
     try:

@@ -436,4 +436,82 @@ def update_category_color():
         return jsonify({
             "success": False,
             "error": str(e)
+        }), 500
+
+@api_bp.route('/transactions/manual-category', methods=['POST'])
+def set_manual_category():
+    """Set a manual category for a specific transaction."""
+    try:
+        data = request.get_json()
+        if not data or 'transaction_id' not in data or 'category' not in data:
+            return jsonify({
+                "success": False,
+                "error": "Missing required fields: transaction_id, category"
+            }), 400
+        
+        base_path = Path(current_app.root_path).parent.parent
+        transaction_service = init_transaction_service()
+        
+        if not transaction_service:
+            return jsonify({
+                "success": False,
+                "error": "Could not initialize transaction service"
+            }), 500
+        
+        success = transaction_service.set_manual_category(data['transaction_id'], data['category'])
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Manual category set successfully"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to set manual category"
+            }), 500
+    except Exception as e:
+        print(f"Error in set_manual_category: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@api_bp.route('/transactions/manual-category', methods=['DELETE'])
+def remove_manual_category():
+    """Remove a manual category for a specific transaction."""
+    try:
+        data = request.get_json()
+        if not data or 'transaction_id' not in data:
+            return jsonify({
+                "success": False,
+                "error": "Missing required field: transaction_id"
+            }), 400
+        
+        base_path = Path(current_app.root_path).parent.parent
+        transaction_service = init_transaction_service()
+        
+        if not transaction_service:
+            return jsonify({
+                "success": False,
+                "error": "Could not initialize transaction service"
+            }), 500
+        
+        success = transaction_service.remove_manual_category(data['transaction_id'])
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Manual category removed successfully"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to remove manual category"
+            }), 500
+    except Exception as e:
+        print(f"Error in remove_manual_category: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
         }), 500 

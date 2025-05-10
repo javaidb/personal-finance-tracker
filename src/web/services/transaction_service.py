@@ -5,7 +5,7 @@ from ..models.transaction import Transaction
 from src.modules.pdf_interpreter import PDFReader
 from src.modules.helper_fns import GeneralHelperFns
 import numpy as np
-from src.modules.merchant_categorizer import MerchantCategorizer
+from src.modules.merchant_categorizer import MerchantCategorizer, ManualTransactionCategorizer
 import json
 import os
 import re
@@ -20,6 +20,7 @@ class TransactionService:
         self.helper = GeneralHelperFns()
         self.processed_df = None
         self.databank_path = os.path.join(base_path, "cached_data", "databank.json")
+        self.manual_categorizer = ManualTransactionCategorizer(base_path=base_path)
         self.load_categories()
 
     def load_categories(self):
@@ -51,8 +52,14 @@ class TransactionService:
             self.categories = []
             self.category_patterns = {}
 
-    def categorize_transaction(self, description: str) -> str:
+    def categorize_transaction(self, description: str, transaction_id: str = None) -> str:
         """Automatically categorize a transaction based on its description and stored patterns."""
+        # First check for manual category
+        if transaction_id:
+            manual_category = self.manual_categorizer.get_manual_category(transaction_id)
+            if manual_category:
+                return manual_category
+
         if not description or not self.category_patterns:
             return 'Uncategorized'
         
@@ -74,26 +81,102 @@ class TransactionService:
         
         return best_match if best_match else 'Uncategorized'
 
+    def set_manual_category(self, transaction_id: str, category: str) -> bool:
+        """Set a manual category for a specific transaction."""
+        try:
+            print(f"[DEBUG] set_manual_category called with transaction_id={transaction_id}, category={category}")
+            if self.processed_df is None:
+                print("[DEBUG] processed_df is None")
+                return False
+
+            # Create composite key from DateTime and Amount if not already in that format
+            if '_' not in transaction_id:
+                print(f"[DEBUG] Invalid transaction_id format: {transaction_id}")
+                return False
+
+            # Split the composite key
+            date_time, amount = transaction_id.split('_')
+            amount = float(amount)
+
+            # Find the matching transaction
+            mask = (self.processed_df['DateTime'] == date_time) & (self.processed_df['Amount'] == amount)
+            matching_transactions = self.processed_df[mask]
+
+            if matching_transactions.empty:
+                print(f"[DEBUG] No matching transaction found for {transaction_id}")
+                return False
+
+            # Get the first matching transaction's index
+            transaction_idx = matching_transactions.index[0]
+
+            # Add manual category
+            success = self.manual_categorizer.add_manual_category(transaction_id, category)
+            if success:
+                # Update the DataFrame
+                self.processed_df.at[transaction_idx, 'Classification'] = category
+            return success
+        except Exception as e:
+            print(f"Error setting manual category: {str(e)}")
+            return False
+
+    def remove_manual_category(self, transaction_id: str) -> bool:
+        """Remove a manual category for a specific transaction."""
+        try:
+            if self.processed_df is None:
+                return False
+
+            # Create composite key from DateTime and Amount if not already in that format
+            if '_' not in transaction_id:
+                print(f"[DEBUG] Invalid transaction_id format: {transaction_id}")
+                return False
+
+            # Split the composite key
+            date_time, amount = transaction_id.split('_')
+            amount = float(amount)
+
+            # Find the matching transaction
+            mask = (self.processed_df['DateTime'] == date_time) & (self.processed_df['Amount'] == amount)
+            matching_transactions = self.processed_df[mask]
+
+            if matching_transactions.empty:
+                print(f"[DEBUG] No matching transaction found for {transaction_id}")
+                return False
+
+            # Get the first matching transaction's index
+            transaction_idx = matching_transactions.index[0]
+            
+            # Remove manual category
+            success = self.manual_categorizer.remove_manual_category(transaction_id)
+            if success:
+                # Recategorize the transaction
+                description = self.processed_df.at[transaction_idx, 'Details']
+                new_category = self.categorize_transaction(description)
+                self.processed_df.at[transaction_idx, 'Classification'] = new_category
+            return success
+        except Exception as e:
+            print(f"Error removing manual category: {str(e)}")
+            return False
+
     def process_statements(self) -> bool:
         """Process bank statements and store the result."""
         try:
             # Check if we already have processed data in memory
             if self.processed_df is not None:
                 return True
-                
             # Process the statements using cached data where possible
             self.processed_df = self.pdf_reader.process_raw_df()
-            
+            # Set index to id as string if id column exists
+            if self.processed_df is not None and 'id' in self.processed_df.columns:
+                self.processed_df['id'] = self.processed_df['id'].astype(str)
+                self.processed_df.set_index('id', inplace=True)
             # Apply automatic categorization only to uncategorized transactions
             if self.processed_df is not None and not self.processed_df.empty:
                 # Fill NaN classifications with 'Uncategorized'
                 self.processed_df['Classification'] = self.processed_df['Classification'].fillna('Uncategorized')
-                
                 # Only apply categorization to uncategorized transactions
                 uncategorized_mask = self.processed_df['Classification'] == 'Uncategorized'
                 self.processed_df.loc[uncategorized_mask, 'Classification'] = \
                     self.processed_df.loc[uncategorized_mask, 'Details'].apply(self.categorize_transaction)
-            
             return True if self.processed_df is not None and not self.processed_df.empty else False
         except Exception as e:
             print(f"Error processing statements: {str(e)}")
