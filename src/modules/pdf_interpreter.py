@@ -720,11 +720,19 @@ class PDFReader(GeneralHelperFns):
                 # For credit accounts, ensure all amounts are negative
                 df.loc[mask, 'Amount'] = -abs(df.loc[mask, 'Amount'])
             elif account_type in ['Chequing', 'Savings']:
-                # For fixed accounts, use balance changes to determine amount sign
-                account_df = account_df.sort_values('DateTime')
-                
-                # Calculate balance differences
+                # Add a temporary column for the index
+                account_df['__orig_index'] = account_df.index
+                account_df = account_df.sort_values(['DateTime', '__orig_index'])
+                # Calculate balance differences using Balance (not account_balance)
                 account_df['balance_diff'] = account_df['Balance'].diff()
+                # Drop the temporary column
+                account_df = account_df.drop(columns=['__orig_index'])
+
+                # Debug print for the date range in question
+                debug_rows = account_df[(account_df['DateTime'] >= '2025-01-15') & (account_df['DateTime'] <= '2025-01-17')]
+                if not debug_rows.empty:
+                    print('\nDEBUG: recalibrate_amounts rows for Chequing/Ultimate Package 2025-01-15 to 2025-01-17:')
+                    print(debug_rows[['DateTime', 'Account Name', 'Balance', 'Amount', 'balance_diff']])
                 
                 # Update amount signs based on balance differences
                 account_df['Amount'] = account_df.apply(
