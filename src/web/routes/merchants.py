@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, Tuple
 from ..services.merchant_service import MerchantService
 from ..utils.error_handlers import handle_service_error, ServiceError
+from ..constants.categories import CATEGORY_COLORS, update_category_color
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -35,31 +36,14 @@ def index():
         # Get all required data
         stats = merchant_service.get_merchant_stats()
         categories = merchant_service.get_categories()
-        has_uncharacterized = merchant_service.has_uncharacterized_merchants()
-        
-        # Get category colors
-        category_colors = {
-            'Groceries': '#4CAF50',
-            'Dining': '#FF9800',
-            'Transport': '#2196F3',
-            'Shopping': '#E91E63',
-            'Bills': '#9C27B0',
-            'Entertainment': '#00BCD4',
-            'Activities': '#FFEB3B',
-            'Online': '#795548',
-            'Income': '#4CAF50',
-            'Rent': '#F44336',
-            'Investment': '#009688',
-            'Transfer': '#607D8B',
-            'Uncategorized': '#9E9E9E'
-        }
+        has_uncategorized = merchant_service.has_uncategorized_merchants()
 
         return render_template('merchants.html',
                             merchant_count=stats.get('merchant_count', 0),
                             alias_count=stats.get('alias_count', 0),
                             categories=categories,
-                            has_review_data=has_uncharacterized,
-                            categoryColors=category_colors)
+                            has_review_data=has_uncategorized,
+                            categoryColors=CATEGORY_COLORS)
     except Exception as e:
         logger.error(f"Error in merchants index route: {str(e)}", exc_info=True)
         return render_template('error.html',
@@ -90,9 +74,9 @@ def get_statistics() -> Dict[str, Any]:
             "error": "Failed to get merchant statistics"
         }), 500
 
-@merchants_bp.route('/api/uncharacterized')
-def get_uncharacterized() -> Dict[str, Any]:
-    """Get list of uncharacterized merchants."""
+@merchants_bp.route('/api/uncategorized')
+def get_uncategorized() -> Dict[str, Any]:
+    """Get list of uncategorized merchants."""
     try:
         global merchant_service
         if merchant_service is None:
@@ -101,21 +85,21 @@ def get_uncharacterized() -> Dict[str, Any]:
                 "error": "Merchant service not initialized"
             }), 500
 
-        merchants = merchant_service.get_uncharacterized_merchants()
+        merchants = merchant_service.get_uncategorized_merchants()
         return jsonify({
             "success": True,
             "data": merchants
         })
     except Exception as e:
-        logger.error(f"Error getting uncharacterized merchants: {str(e)}", exc_info=True)
+        logger.error(f"Error getting uncategorized merchants: {str(e)}", exc_info=True)
         return jsonify({
             "success": False,
-            "error": "Failed to get uncharacterized merchants"
+            "error": "Failed to get uncategorized merchants"
         }), 500
 
-@merchants_bp.route('/api/characterize', methods=['POST'])
-def characterize_merchant() -> Dict[str, Any]:
-    """Characterize a merchant with a category."""
+@merchants_bp.route('/api/categorize', methods=['POST'])
+def categorize_merchant() -> Dict[str, Any]:
+    """Categorize a merchant with a category."""
     try:
         global merchant_service
         if merchant_service is None:
@@ -135,32 +119,32 @@ def characterize_merchant() -> Dict[str, Any]:
         category = data['category']
         pattern = data.get('pattern', merchant)  # Optional pattern, defaults to merchant name
 
-        success = merchant_service.characterize_merchant(merchant, category, pattern)
+        success = merchant_service.categorize_merchant(merchant, category, pattern)
         if success:
             return jsonify({
                 "success": True,
-                "message": f"Successfully characterized {merchant} as {category}"
+                "message": f"Successfully categorized {merchant} as {category}"
             })
         else:
             return jsonify({
                 "success": False,
-                "error": "Failed to characterize merchant"
+                "error": "Failed to categorize merchant"
             }), 500
     except Exception as e:
         logger.error(f"Error characterizing merchant: {str(e)}", exc_info=True)
         return jsonify({
             "success": False,
-            "error": "Failed to characterize merchant"
+            "error": "Failed to categorize merchant"
         }), 500
 
 @merchants_bp.route('/review')
 def merchants_review() -> str:
-    """Render the page for reviewing uncharacterized merchants."""
+    """Render the page for reviewing uncategorized merchants."""
     try:
-        if not merchant_service.has_uncharacterized_merchants():
+        if not merchant_service.has_uncategorized_merchants():
             return redirect(url_for('merchants.merchants_dashboard'))
         
-        merchant_count = merchant_service.get_uncharacterized_count()
+        merchant_count = merchant_service.get_uncategorized_count()
         categories = merchant_service.get_categories()
         
         if merchant_count == 0:
@@ -243,23 +227,23 @@ def add_alias() -> Tuple[Dict[str, Any], int]:
         logger.error(f"Error in add_alias: {str(e)}", exc_info=True)
         return handle_service_error(e)
 
-@merchants_bp.route('/api/merchants/uncharacterized')
-def get_uncharacterized_merchants() -> Tuple[Dict[str, Any], int]:
-    """API endpoint to get uncharacterized merchants for review."""
+@merchants_bp.route('/api/merchants/uncategorized')
+def get_uncategorized_merchants() -> Tuple[Dict[str, Any], int]:
+    """API endpoint to get uncategorized merchants for review."""
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 10))
         
-        result = merchant_service.get_uncharacterized_merchants(page=page, limit=limit)
+        result = merchant_service.get_uncategorized_merchants(page=page, limit=limit)
         result['success'] = True
         return jsonify(result), 200
     except Exception as e:
-        logger.error(f"Error in get_uncharacterized_merchants: {str(e)}", exc_info=True)
+        logger.error(f"Error in get_uncategorized_merchants: {str(e)}", exc_info=True)
         return handle_service_error(e)
 
-@merchants_bp.route('/api/merchants/uncharacterized', methods=['POST'])
-def categorize_uncharacterized_merchant() -> Tuple[Dict[str, Any], int]:
-    """API endpoint to categorize an uncharacterized merchant."""
+@merchants_bp.route('/api/merchants/uncategorized', methods=['POST'])
+def categorize_uncategorized_merchant() -> Tuple[Dict[str, Any], int]:
+    """API endpoint to categorize an uncategorized merchant."""
     try:
         data = request.get_json()
         if not data or 'merchant' not in data or 'category' not in data:
@@ -268,7 +252,7 @@ def categorize_uncharacterized_merchant() -> Tuple[Dict[str, Any], int]:
         merchant_name = data['merchant']
         category = data['category']
         
-        success = merchant_service.categorize_uncharacterized_merchant(merchant_name, category)
+        success = merchant_service.categorize_uncategorized_merchant(merchant_name, category)
         if not success:
             raise ServiceError(f"Failed to categorize merchant {merchant_name}")
         
@@ -278,20 +262,20 @@ def categorize_uncharacterized_merchant() -> Tuple[Dict[str, Any], int]:
             "category": category
         }), 200
     except Exception as e:
-        logger.error(f"Error in categorize_uncharacterized_merchant: {str(e)}", exc_info=True)
+        logger.error(f"Error in categorize_uncategorized_merchant: {str(e)}", exc_info=True)
         return handle_service_error(e)
 
-@merchants_bp.route('/api/merchants/uncharacterized/count')
-def get_uncharacterized_count() -> Tuple[Dict[str, Any], int]:
-    """API endpoint to get the count of uncharacterized merchants."""
+@merchants_bp.route('/api/merchants/uncategorized/count')
+def get_uncategorized_count() -> Tuple[Dict[str, Any], int]:
+    """API endpoint to get the count of uncategorized merchants."""
     try:
-        count = merchant_service.get_uncharacterized_count()
+        count = merchant_service.get_uncategorized_count()
         return jsonify({
             "success": True,
             "count": count
         }), 200
     except Exception as e:
-        logger.error(f"Error in get_uncharacterized_count: {str(e)}", exc_info=True)
+        logger.error(f"Error in get_uncategorized_count: {str(e)}", exc_info=True)
         return handle_service_error(e)
 
 @merchants_bp.route('/api/merchants/<merchant_name>', methods=['DELETE'])

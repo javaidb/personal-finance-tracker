@@ -9,6 +9,7 @@ from src.modules.merchant_categorizer import MerchantCategorizer
 import json
 import os
 import re
+from ..constants.categories import CATEGORY_COLORS, get_category_color
 
 class TransactionService:
     """Service class for handling transaction-related operations."""
@@ -89,7 +90,7 @@ class TransactionService:
                 self.processed_df['Classification'] = self.processed_df['Classification'].fillna('Uncategorized')
                 
                 # Only apply categorization to uncategorized transactions
-                uncategorized_mask = self.processed_df['Classification'].str.lower() == 'uncategorized'
+                uncategorized_mask = self.processed_df['Classification'] == 'Uncategorized'
                 self.processed_df.loc[uncategorized_mask, 'Classification'] = \
                     self.processed_df.loc[uncategorized_mask, 'Details'].apply(self.categorize_transaction)
             
@@ -218,7 +219,7 @@ class TransactionService:
             category_colors = {}
             all_categories = set(list(category_counts.keys()) + list(category_spending.keys()))
             for category in all_categories:
-                category_colors[category] = self.get_category_color(category)
+                category_colors[category] = get_category_color(category)
             
             return {
                 "counts": category_counts,
@@ -239,21 +240,7 @@ class TransactionService:
 
     def get_category_color(self, category: str) -> str:
         """Get a consistent color for a category."""
-        colors = {
-            'Groceries': '#4CAF50',
-            'Dining': '#FF9800',
-            'Transport': '#2196F3',
-            'Shopping': '#E91E63',
-            'Bills': '#9C27B0',
-            'Entertainment': '#00BCD4',
-            'Activities': '#FFEB3B',
-            'Online': '#795548',
-            'Income': '#4CAF50',
-            'Rent': '#F44336',
-            'Investment': '#009688',
-            'Uncategorized': '#9E9E9E'
-        }
-        return colors.get(category, '#9E9E9E')
+        return get_category_color(category)
 
     def get_balance_chart_data(self) -> Dict[str, Any]:
         """Get balance chart data."""
@@ -672,7 +659,7 @@ class TransactionService:
                 category, _ = merchant_categorizer.categorize_transaction(processed_details)
                 
                 # If merchant categorization found something, use it
-                if category != "uncharacterized":
+                if category != "uncategorized":
                     return category
                 
                 # If no merchant match and already has a non-Uncategorized category, preserve it
