@@ -943,7 +943,7 @@ class PDFReader(GeneralHelperFns):
     def __identify_rent_payments(self, df_in, rent_ranges):
         """
         Identifies rent payments by looking for common transactions that occur around month transitions.
-        Only one transaction per 4-day period is allowed, and transactions are only compared with
+        Only one transaction per RENT_PERIOD_DAYS period is allowed, and transactions are only compared with
         adjacent months (month before or after).
         
         Args:
@@ -957,26 +957,29 @@ class PDFReader(GeneralHelperFns):
         df = df.sort_values('DateTime')
         
         # Constants for rent identification
-        MIN_RENT_AMOUNT = 500.0  # Minimum amount to be considered rent
-        AMOUNT_BUFFER = 100.0    # Buffer for comparing transaction amounts
+        MIN_RENT_AMOUNT = 500.0    # Minimum amount to be considered rent
+        AMOUNT_BUFFER = 150.0      # Buffer for comparing transaction amounts
+        RENT_PERIOD_DAYS = 8       # Number of days to consider for rent period (centered around month transition)
+        DAYS_BEFORE_END = RENT_PERIOD_DAYS // 2  # Days before end of month
+        DAYS_AFTER_START = RENT_PERIOD_DAYS // 2  # Days after start of month
         
         # Convert DateTime to datetime if it's not already
         if not pd.api.types.is_datetime64_any_dtype(df['DateTime']):
             df['DateTime'] = pd.to_datetime(df['DateTime'])
             
-        # Extract month transition periods (last 2 days of each month + first 2 days of next month)
+        # Extract month transition periods
         df['month'] = df['DateTime'].dt.month
         df['year'] = df['DateTime'].dt.year
         df['day'] = df['DateTime'].dt.day
         df['days_in_month'] = df['DateTime'].dt.days_in_month
         df['year_month'] = df['DateTime'].dt.to_period('M')
         
-        # Create a mask for the 4-day periods around month transitions
+        # Create a mask for the periods around month transitions
         month_transition_mask = (
-            # Last 2 days of the month
-            (df['day'] >= df['days_in_month'] - 1) |
-            # First 2 days of the month
-            (df['day'] <= 2)
+            # Last DAYS_BEFORE_END days of the month
+            (df['day'] >= df['days_in_month'] - DAYS_BEFORE_END + 1) |
+            # First DAYS_AFTER_START days of the month
+            (df['day'] <= DAYS_AFTER_START)
         )
         
         # Get transactions in transition periods with amount >= MIN_RENT_AMOUNT (in absolute terms)
@@ -1044,9 +1047,9 @@ class PDFReader(GeneralHelperFns):
                 
                 # If we found a match in either adjacent month
                 if has_prev_match or has_next_match:
-                    # Find all transactions in the current 4-day period
-                    curr_period_start = curr_trans['DateTime'] - pd.Timedelta(days=2)
-                    curr_period_end = curr_trans['DateTime'] + pd.Timedelta(days=2)
+                    # Find all transactions in the current period
+                    curr_period_start = curr_trans['DateTime'] - pd.Timedelta(days=RENT_PERIOD_DAYS//2)
+                    curr_period_end = curr_trans['DateTime'] + pd.Timedelta(days=RENT_PERIOD_DAYS//2)
                     
                     period_mask = (
                         (df['DateTime'] >= curr_period_start) &
