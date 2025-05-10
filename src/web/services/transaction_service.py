@@ -83,9 +83,15 @@ class TransactionService:
             # Process the statements using cached data where possible
             self.processed_df = self.pdf_reader.process_raw_df()
             
-            # Apply automatic categorization
+            # Apply automatic categorization only to uncategorized transactions
             if self.processed_df is not None and not self.processed_df.empty:
-                self.processed_df['Classification'] = self.processed_df['Details'].apply(self.categorize_transaction)
+                # Fill NaN classifications with 'Uncategorized'
+                self.processed_df['Classification'] = self.processed_df['Classification'].fillna('Uncategorized')
+                
+                # Only apply categorization to uncategorized transactions
+                uncategorized_mask = self.processed_df['Classification'].str.lower() == 'uncategorized'
+                self.processed_df.loc[uncategorized_mask, 'Classification'] = \
+                    self.processed_df.loc[uncategorized_mask, 'Details'].apply(self.categorize_transaction)
             
             return True if self.processed_df is not None and not self.processed_df.empty else False
         except Exception as e:
