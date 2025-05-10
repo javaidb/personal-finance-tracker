@@ -941,31 +941,142 @@ class PDFReader(GeneralHelperFns):
         return self.sort_df(df_no_transfers)  # Return version without transfers
 
     def __identify_rent_payments(self, df_in, rent_ranges):
+        """
+        Identifies rent payments by looking for common transactions that occur around month transitions.
+        Only one transaction per 4-day period is allowed, and transactions are only compared with
+        adjacent months (month before or after).
+        
+        Args:
+            df_in (pd.DataFrame): Input DataFrame with transaction data
+            rent_ranges (list): Deprecated parameter, kept for backward compatibility
+            
+        Returns:
+            pd.DataFrame: DataFrame with rent payments identified
+        """
         df = df_in.copy()
-
-        # If no rent_ranges provided, return unchanged DataFrame
-        if not rent_ranges:
-            return df
-
         df = df.sort_values('DateTime')
-
-        df['day_of_month'] = df['DateTime'].dt.day
-        # print(df.head(4))
-        rent_mask = ((df['day_of_month'] <= 5) | (df['day_of_month'] >= 25) & 
-            (df['Details'].apply(lambda x: any('transfer' in word for word in x.lower().split())))
+        
+        # Constants for rent identification
+        MIN_RENT_AMOUNT = 500.0  # Minimum amount to be considered rent
+        AMOUNT_BUFFER = 100.0    # Buffer for comparing transaction amounts
+        
+        # Convert DateTime to datetime if it's not already
+        if not pd.api.types.is_datetime64_any_dtype(df['DateTime']):
+            df['DateTime'] = pd.to_datetime(df['DateTime'])
+            
+        # Extract month transition periods (last 2 days of each month + first 2 days of next month)
+        df['month'] = df['DateTime'].dt.month
+        df['year'] = df['DateTime'].dt.year
+        df['day'] = df['DateTime'].dt.day
+        df['days_in_month'] = df['DateTime'].dt.days_in_month
+        df['year_month'] = df['DateTime'].dt.to_period('M')
+        
+        # Create a mask for the 4-day periods around month transitions
+        month_transition_mask = (
+            # Last 2 days of the month
+            (df['day'] >= df['days_in_month'] - 1) |
+            # First 2 days of the month
+            (df['day'] <= 2)
         )
         
-        amount_mask = pd.Series(False, index=df.index)
-        for rent_per_property in rent_ranges:
-            amount_mask |= df['Amount'].abs().between(rent_per_property["min"], rent_per_property["max"])
+        # Get transactions in transition periods with amount >= MIN_RENT_AMOUNT (in absolute terms)
+        transition_transactions = df[
+            month_transition_mask & 
+            (df['Amount'].abs() >= MIN_RENT_AMOUNT)
+        ].copy()
         
-        rent_mask &= amount_mask
+        # Initialize rent mask
+        rent_mask = pd.Series(False, index=df.index)
         
-        # Update classification to 'rent' for these rows
+        # Process each month transition period
+        unique_year_months = sorted(transition_transactions['year_month'].unique())
+        
+        for i, current_month in enumerate(unique_year_months):
+            # Get adjacent months
+            prev_month = unique_year_months[i-1] if i > 0 else None
+            next_month = unique_year_months[i+1] if i < len(unique_year_months)-1 else None
+            
+            # Get transactions for current month transition period
+            current_month_trans = transition_transactions[
+                transition_transactions['year_month'] == current_month
+            ]
+            
+            # Skip if no transactions in current month
+            if current_month_trans.empty:
+                continue
+            
+            # For each transaction in current month
+            for _, curr_trans in current_month_trans.iterrows():
+                # Skip if we've already marked this as rent
+                if rent_mask.loc[curr_trans.name]:
+                    continue
+                    
+                # Skip positive amounts (rent payments are typically negative)
+                if curr_trans['Amount'] >= 0:
+                    continue
+                
+                # Check for similar transactions in adjacent months
+                similar_trans_mask = pd.Series(False, index=transition_transactions.index)
+                
+                # Function to check transactions in a month
+                def check_month_transactions(month):
+                    if month is None:
+                        return False
+                    
+                    month_trans = transition_transactions[
+                        transition_transactions['year_month'] == month
+                    ]
+                    
+                    if month_trans.empty:
+                        return False
+                    
+                    # Find similar transactions by amount
+                    amount_matches = month_trans[
+                        (month_trans['Amount'] >= curr_trans['Amount'] - AMOUNT_BUFFER) &
+                        (month_trans['Amount'] <= curr_trans['Amount'] + AMOUNT_BUFFER)
+                    ]
+                    
+                    return not amount_matches.empty
+                
+                # Check previous and next month
+                has_prev_match = check_month_transactions(prev_month)
+                has_next_match = check_month_transactions(next_month)
+                
+                # If we found a match in either adjacent month
+                if has_prev_match or has_next_match:
+                    # Find all transactions in the current 4-day period
+                    curr_period_start = curr_trans['DateTime'] - pd.Timedelta(days=2)
+                    curr_period_end = curr_trans['DateTime'] + pd.Timedelta(days=2)
+                    
+                    period_mask = (
+                        (df['DateTime'] >= curr_period_start) &
+                        (df['DateTime'] <= curr_period_end)
+                    )
+                    
+                    # Find similar transactions in this period
+                    amount_mask = (
+                        (df['Amount'] >= curr_trans['Amount'] - AMOUNT_BUFFER) &
+                        (df['Amount'] <= curr_trans['Amount'] + AMOUNT_BUFFER)
+                    )
+                    
+                    period_transactions = df[period_mask & amount_mask]
+                    
+                    # Take only the first transaction in this period
+                    if not period_transactions.empty:
+                        first_trans_idx = period_transactions.index[0]
+                        rent_mask.loc[first_trans_idx] = True
+                        
+                        # Debug logging
+                        print(f"\nIdentified rent transaction:")
+                        print(f"Date: {df.loc[first_trans_idx, 'DateTime'].date()}")
+                        print(f"Amount: {df.loc[first_trans_idx, 'Amount']}")
+                        print(f"Found match in: {prev_month if has_prev_match else next_month}")
+        
+        # Update classification to 'Rent' for identified transactions
         df.loc[rent_mask, 'Classification'] = 'Rent'
         
-        # Drop the helper column
-        df = df.drop(columns=['day_of_month'])
+        # Drop helper columns
+        df = df.drop(columns=['month', 'year', 'day', 'days_in_month', 'year_month'])
         
         return df
 
