@@ -4,7 +4,7 @@ from pathlib import Path
 from flask import Flask
 from .config import config
 from .config.logging_config import setup_logging
-from .routes import main_bp, api_bp, merchants_bp
+from .routes import main_bp, api_bp, merchants_bp, category_bp
 from .routes.merchants import init_merchant_service
 
 def create_app(config_name='default'):
@@ -29,5 +29,6 @@ def create_app(config_name='default'):
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(merchants_bp, url_prefix='/merchants')
+    app.register_blueprint(category_bp, url_prefix='/api')
     
     return app 
