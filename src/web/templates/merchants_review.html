@@ -228,6 +228,28 @@
         let totalPages = 1;
         let currentMerchants = [];
 
+        // Load category colors from the server
+        const categoryColors = JSON.parse('{{ categoryColors|tojson|safe }}');
+
+        // Utility function to get category color
+        function getCategoryColor(category) {
+            return categoryColors[category] || '#607D8B';
+        }
+
+        // Update category badge color
+        function updateCategoryBadge(badge, category) {
+            const color = getCategoryColor(category);
+            badge.style.backgroundColor = color;
+        }
+
+        // Update all category badges
+        function updateAllCategoryBadges() {
+            document.querySelectorAll('.category-badge').forEach(badge => {
+                const category = badge.textContent.trim();
+                updateCategoryBadge(badge, category);
+            });
+        }
+
         // Load merchants on page load
         document.addEventListener('DOMContentLoaded', function() {
             loaduncategorizedMerchants(1);
@@ -238,6 +260,8 @@
                 const category = document.getElementById('review-merchant-category').value;
                 categorizeMerchant(merchantName, category);
             });
+
+            updateAllCategoryBadges();
         });
 
         // Load uncategorized merchants
