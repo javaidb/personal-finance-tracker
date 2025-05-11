@@ -109,11 +109,18 @@ class TransactionService:
             # Get the first matching transaction's index
             transaction_idx = matching_transactions.index[0]
 
-            # Add manual category
+            # Add manual category with index
             success = self.manual_categorizer.add_manual_category(transaction_id, category)
             if success:
                 # Update the DataFrame
                 self.processed_df.at[transaction_idx, 'Classification'] = category
+                
+                # Update the index in the manual categories list
+                for entry in self.manual_categorizer.manual_categories:
+                    if entry['datetime'] == date_time and entry['amount'] == amount:
+                        entry['index'] = int(transaction_idx)
+                        break
+                self.manual_categorizer.save_manual_categories()
             return success
         except Exception as e:
             print(f"Error setting manual category: {str(e)}")

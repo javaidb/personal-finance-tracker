@@ -357,11 +357,24 @@ class ManualTransactionCategorizer:
         try:
             if os.path.exists(self.manual_categories_path):
                 with open(self.manual_categories_path, 'r') as f:
-                    return json.load(f)
-            return {}
+                    data = json.load(f)
+                    # Convert old format to new format if needed
+                    if isinstance(data, dict):
+                        new_data = []
+                        for transaction_id, category in data.items():
+                            date_time, amount = transaction_id.split('_')
+                            new_data.append({
+                                'datetime': date_time,
+                                'amount': float(amount),
+                                'category': category,
+                                'index': None  # Will be set when used
+                            })
+                        return new_data
+                    return data
+            return []
         except Exception as e:
             print(f"Error loading manual categories database: {str(e)}")
-            return {}
+            return []
 
     def save_manual_categories(self):
         """Save the manual categories database to file."""
@@ -374,7 +387,22 @@ class ManualTransactionCategorizer:
     def add_manual_category(self, transaction_id: str, category: str) -> bool:
         """Add a manual category for a specific transaction."""
         try:
-            self.manual_categories[transaction_id] = category
+            # Split the composite key
+            date_time, amount = transaction_id.split('_')
+            amount = float(amount)
+            
+            # Remove any existing entry for this transaction
+            self.manual_categories = [entry for entry in self.manual_categories 
+                                    if not (entry['datetime'] == date_time and entry['amount'] == amount)]
+            
+            # Add new entry
+            self.manual_categories.append({
+                'datetime': date_time,
+                'amount': amount,
+                'category': category,
+                'index': None  # Will be set when used
+            })
+            
             self.save_manual_categories()
             return True
         except Exception as e:
@@ -383,16 +411,30 @@ class ManualTransactionCategorizer:
 
     def get_manual_category(self, transaction_id: str) -> str:
         """Get the manual category for a specific transaction if it exists."""
-        return self.manual_categories.get(transaction_id)
+        try:
+            date_time, amount = transaction_id.split('_')
+            amount = float(amount)
+            
+            for entry in self.manual_categories:
+                if entry['datetime'] == date_time and entry['amount'] == amount:
+                    return entry['category']
+            return None
+        except Exception as e:
+            print(f"Error getting manual category: {str(e)}")
+            return None
 
     def remove_manual_category(self, transaction_id: str) -> bool:
         """Remove a manual category for a specific transaction."""
         try:
-            if transaction_id in self.manual_categories:
-                del self.manual_categories[transaction_id]
-                self.save_manual_categories()
-                return True
-            return False
+            date_time, amount = transaction_id.split('_')
+            amount = float(amount)
+            
+            # Remove matching entry
+            self.manual_categories = [entry for entry in self.manual_categories 
+                                    if not (entry['datetime'] == date_time and entry['amount'] == amount)]
+            
+            self.save_manual_categories()
+            return True
         except Exception as e:
             print(f"Error removing manual category: {str(e)}")
             return False 

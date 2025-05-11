@@ -890,8 +890,42 @@ class PDFReader(GeneralHelperFns):
         
         return df
 
-    def df_postprocessing(self, df_in):
+    def apply_manual_categories(self, df):
+        """
+        Apply manual categories from manual_categories.json to the DataFrame.
+        For each entry:
+          - If index is not null, update that row's Classification.
+          - If index is null, find row(s) matching datetime and amount, and update Classification.
+        """
+        import json
+        import os
+        manual_path = os.path.join(self.base_path, "cached_data", "manual_categories.json")
+        if not os.path.exists(manual_path):
+            return df
+        try:
+            with open(manual_path, 'r') as f:
+                manual_cats = json.load(f)
+        except Exception as e:
+            print(f"Error loading manual_categories.json: {e}")
+            return df
+        if not isinstance(manual_cats, list):
+            print("manual_categories.json is not a list; skipping manual category application.")
+            return df
+        for entry in manual_cats:
+            dt = entry.get('datetime')
+            amt = entry.get('amount')
+            cat = entry.get('category')
+            idx = entry.get('index')
+            if idx is not None and idx in df.index:
+                df.at[idx, 'Classification'] = cat
+            else:
+                # Try to match by DateTime and Amount
+                mask = (df['DateTime'].astype(str) == str(dt)) & (df['Amount'] == amt)
+                if mask.any():
+                    df.loc[mask, 'Classification'] = cat
+        return df
 
+    def df_postprocessing(self, df_in):
         print(f"Post-processing bank statements.")
 
         df = df_in.copy()
@@ -924,6 +958,9 @@ class PDFReader(GeneralHelperFns):
 
         df_filtered = df[df['details_str'].apply(lambda x: exclude_rows(x, substring_exclusion_list))]
         df_filtered = df_filtered.drop(columns=['details_str'])
+        
+        # Apply manual categories at the end
+        df_filtered = self.apply_manual_categories(df_filtered)
         
         # After all processing is done, filter out transfer transactions
         def is_transfer(row):
