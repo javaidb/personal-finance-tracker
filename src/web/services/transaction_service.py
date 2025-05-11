@@ -559,8 +559,9 @@ class TransactionService:
             category_data = []
             for month in months:
                 month_df = df[(df['Month'] == month) & (df['Classification'] == category)]
-                total_spending = abs(month_df[month_df['Amount'] < 0]['Amount'].sum())
-                category_data.append(float(total_spending))
+                # Calculate net amount (positive + negative) for this category in this month
+                net_amount = month_df['Amount'].sum()
+                category_data.append(float(net_amount))
             
             # Get color for category
             color = self.get_category_color(category)
@@ -572,21 +573,6 @@ class TransactionService:
                 'borderColor': color,
                 'borderWidth': 1
             })
-        
-        # Add total income dataset
-        income_data = []
-        for month in months:
-            month_df = df[df['Month'] == month]
-            total_income = month_df[month_df['Amount'] > 0]['Amount'].sum()
-            income_data.append(float(total_income))
-        
-        datasets.append({
-            'label': 'Income',
-            'data': income_data,
-            'backgroundColor': '#4CAF50',
-            'borderColor': '#4CAF50',
-            'borderWidth': 1
-        })
         
         return {
             'labels': months,
