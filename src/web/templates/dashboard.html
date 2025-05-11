@@ -1011,7 +1011,12 @@
                 if (Array.isArray(data)) {
                     // Apply amount filtering client-side for better UX
                     allTransactions = filterTransactionsByAmount(data, amountFilterType, amountFilterValue, amountFilterValue2);
-                    displayTransactions(1); // Reset to first page when filters change
+                    
+                    // Reset current page to 1 when filters change
+                    currentPage = 1;
+                    
+                    // Display transactions and update pagination
+                    displayTransactions(currentPage);
                     document.getElementById('transaction-count-display').innerText = 
                         `Showing ${Math.min(transactionsPerPage, allTransactions.length)} of ${allTransactions.length} transactions`;
                     updatePaginationButtons();
