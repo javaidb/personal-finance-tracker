@@ -16,11 +16,7 @@ class MerchantService:
         self.merchant_categorizer = MerchantCategorizer(base_path=base_path)
         self.databank_path = os.path.join(base_path, 'cached_data', 'databank.json')
         self.review_path = os.path.join(base_path, 'cached_data', 'uncategorized_merchants.json')
-        self.default_categories = [
-            "Groceries", "Dining", "Transport", "Shopping", "Bills",
-            "Entertainment", "Activities", "Online", "Income", "Rent",
-            "Investment", "Transfer", "Uncategorized"
-        ]
+        self.category_colors_path = os.path.join(base_path, 'cached_data', 'category_colors.json')
         self.load_databank()
 
     def load_databank(self):
@@ -30,15 +26,26 @@ class MerchantService:
                 with open(self.databank_path, 'r') as f:
                     self.databank = json.load(f)
             else:
-                # Create initial databank structure with default categories
-                self.databank = {
-                    "categories": {
-                        category: {
-                            "totalMatches": 0,
-                            "patterns": []
-                        } for category in self.default_categories
+                # On first run, load categories from category_colors.json
+                if os.path.exists(self.category_colors_path):
+                    with open(self.category_colors_path, 'r') as f:
+                        category_colors = json.load(f)
+                        # Create initial databank structure using categories from category_colors.json
+                        self.databank = {
+                            "categories": {
+                                category: {
+                                    "totalMatches": 0,
+                                    "patterns": []
+                                } for category in category_colors.keys()
+                            }
+                        }
+                else:
+                    # If category_colors.json doesn't exist, use minimal default categories
+                    self.databank = {
+                        "categories": {
+                            "Uncategorized": {"totalMatches": 0, "patterns": []}
+                        }
                     }
-                }
                 self.save_databank()
         except Exception as e:
             logger.error(f"Error loading databank: {str(e)}", exc_info=True)

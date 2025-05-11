@@ -92,13 +92,15 @@ def dashboard():
             if service:
                 success = service.process_statements()
                 if success:
-                    return render_template('dashboard.html')
+                    return render_template('dashboard.html', categoryColors={})
             
             return render_template('error.html',
                                 message="No transaction data found. Please upload some bank statements first.",
                                 show_details=False)
         
-        return render_template('dashboard.html')
+        # Get category colors from the service
+        category_colors = service.get_category_colors() if hasattr(service, 'get_category_colors') else {}
+        return render_template('dashboard.html', categoryColors=category_colors)
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()

@@ -32,18 +32,31 @@ class TransactionService:
                     self.categories = list(databank.get('categories', {}).keys())
                     self.category_patterns = databank.get('categories', {})
             else:
-                # Initialize with default categories from app.py
-                from ..app import CATEGORY_COLORS
-                self.categories = list(CATEGORY_COLORS.keys())
-                self.category_patterns = {
-                    category: {
-                        'patterns': [],
-                        'color': color,
-                        'totalMatches': 0
+                # On first run, load categories from category_colors.json
+                category_colors_path = os.path.join(self.base_path, 'cached_data', 'category_colors.json')
+                if os.path.exists(category_colors_path):
+                    with open(category_colors_path, 'r') as f:
+                        category_colors = json.load(f)
+                        self.categories = list(category_colors.keys())
+                        self.category_patterns = {
+                            category: {
+                                'patterns': [],
+                                'color': color,
+                                'totalMatches': 0
+                            }
+                            for category, color in category_colors.items()
+                        }
+                else:
+                    # If category_colors.json doesn't exist, use minimal default
+                    self.categories = ["Uncategorized"]
+                    self.category_patterns = {
+                        "Uncategorized": {
+                            'patterns': [],
+                            'color': '#607D8B',
+                            'totalMatches': 0
+                        }
                     }
-                    for category, color in CATEGORY_COLORS.items()
-                }
-                # Save the default categories to databank.json
+                # Save the categories to databank.json
                 os.makedirs(os.path.dirname(self.databank_path), exist_ok=True)
                 with open(self.databank_path, 'w') as f:
                     json.dump({'categories': self.category_patterns}, f, indent=4)
@@ -307,9 +320,20 @@ class TransactionService:
             
             # Create color mapping for each category
             category_colors = {}
-            all_categories = set(list(category_counts.keys()) + list(category_spending.keys()))
+            
+            # Get all categories from both transactions and databank
+            transaction_categories = set(list(category_counts.keys()) + list(category_spending.keys()))
+            databank_categories = set(self.categories)  # Get all categories from databank
+            all_categories = transaction_categories.union(databank_categories)  # Combine both sets
+            
+            # Initialize counts and spending for all categories
             for category in all_categories:
                 category_colors[category] = get_category_color(category)
+                # Initialize counts and spending for categories not in transactions
+                if category not in category_counts:
+                    category_counts[category] = 0
+                if category not in category_spending:
+                    category_spending[category] = 0
             
             return {
                 "counts": category_counts,

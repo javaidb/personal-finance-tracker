@@ -1122,74 +1122,39 @@ class PDFReader(GeneralHelperFns):
     def import_json(self):
         if hasattr(self, 'base_path') and self.base_path:
             json_file_path = os.path.join(self.base_path, "cached_data", "databank.json")
+            category_colors_path = os.path.join(self.base_path, "cached_data", "category_colors.json")
         else:
             # Use os.path.join for OS-independence
             json_file_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'databank.json')
+            category_colors_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'category_colors.json')
         
         # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(json_file_path), exist_ok=True)
         
         # Create a default databank.json if it doesn't exist
         if not os.path.exists(json_file_path):
-            default_categories = {
-                "categories": {
-                    "Groceries": {
-                        "totalMatches": 0,
-                        "patterns": [
-                            {
-                                "terms": ["grocery"],
-                                "dateAdded": "2023-01-01T00:00:00.000000Z",
-                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
-                                "matchCount": 0
-                            }
-                        ]
-                    },
-                    "Dining": {
-                        "totalMatches": 0,
-                        "patterns": [
-                            {
-                                "terms": ["restaurant"],
-                                "dateAdded": "2023-01-01T00:00:00.000000Z",
-                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
-                                "matchCount": 0
-                            }
-                        ]
-                    },
-                    "Transport": {
-                        "totalMatches": 0,
-                        "patterns": [
-                            {
-                                "terms": ["gas", "fuel"],
-                                "dateAdded": "2023-01-01T00:00:00.000000Z",
-                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
-                                "matchCount": 0
-                            }
-                        ]
-                    },
-                    "Bills": {
-                        "totalMatches": 0,
-                        "patterns": [
-                            {
-                                "terms": ["bill", "utility"],
-                                "dateAdded": "2023-01-01T00:00:00.000000Z",
-                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
-                                "matchCount": 0
-                            }
-                        ]
-                    },
-                    "Rent": {
-                        "totalMatches": 0,
-                        "patterns": [
-                            {
-                                "terms": ["rent"],
-                                "dateAdded": "2023-01-01T00:00:00.000000Z",
-                                "lastUpdated": "2023-01-01T00:00:00.000000Z",
-                                "matchCount": 0
-                            }
-                        ]
+            if os.path.exists(category_colors_path):
+                # Load categories from category_colors.json
+                with open(category_colors_path, 'r') as f:
+                    category_colors = json.load(f)
+                    default_categories = {
+                        "categories": {
+                            category: {
+                                "totalMatches": 0,
+                                "patterns": []
+                            } for category in category_colors.keys()
+                        }
+                    }
+            else:
+                # If category_colors.json doesn't exist, use minimal default
+                default_categories = {
+                    "categories": {
+                        "Uncategorized": {
+                            "totalMatches": 0,
+                            "patterns": []
+                        }
                     }
                 }
-            }
             with open(json_file_path, 'w') as json_file:
                 json.dump(default_categories, json_file, indent=2)
                 print(f"Created default databank.json at '{json_file_path}'.")

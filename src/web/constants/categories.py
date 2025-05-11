@@ -12,22 +12,9 @@ from typing import Dict, Optional
 # Path to store category colors
 CATEGORY_COLORS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'cached_data', 'category_colors.json')
 
-# Default color mapping for categories
+# Minimal default color mapping for categories (only used if category_colors.json doesn't exist)
 DEFAULT_CATEGORY_COLORS = {
-    'Groceries': '#4CAF50',        # Green
-    'Dining': '#FF9800',           # Orange
-    'Transport': '#2196F3',        # Blue
-    'Shopping': '#9C27B0',         # Purple
-    'Bills': '#F44336',            # Red
-    'Entertainment': '#FFD700',    # Gold
-    'Travel': '#8B4513',           # Brown
-    'Income': '#2E7D32',           # Dark Green
-    'Investments': '#388E3C',      # Medium Green
-    'Transfers': '#424242',        # Dark Grey
-    'Utilities': '#F57C00',        # Dark Orange
-    'Rent': '#D32F2F',            # Dark Red
-    'Subscription': '#7B1FA2',     # Dark Purple
-    'uncategorized': '#607D8B'     # Blue Grey
+    'Uncategorized': '#607D8B'  # Blue Grey
 }
 
 def load_category_colors() -> Dict[str, str]:
@@ -36,13 +23,12 @@ def load_category_colors() -> Dict[str, str]:
         if os.path.exists(CATEGORY_COLORS_FILE):
             with open(CATEGORY_COLORS_FILE, 'r') as f:
                 stored_colors = json.load(f)
-                # Merge with defaults to ensure all default categories have colors
                 # Only keep colors that match the format of DEFAULT_CATEGORY_COLORS
                 valid_colors = {
                     k: v for k, v in stored_colors.items()
                     if v.startswith('#') and len(v) == 7
                 }
-                return {**DEFAULT_CATEGORY_COLORS, **valid_colors}
+                return valid_colors
     except Exception as e:
         print(f"Error loading category colors: {str(e)}")
     return DEFAULT_CATEGORY_COLORS.copy()
