@@ -1693,7 +1693,7 @@
                     data: {
                         labels: ['Loading...'],
                         datasets: [{
-                            label: 'Monthly Spending',
+                            label: 'Monthly Net Transactions',
                             data: [0],
                             backgroundColor: '#cccccc'
                         }]
@@ -1714,18 +1714,13 @@
             // Apply consistent colors to datasets if available
             if (window.categoryColors) {
                 data.datasets.forEach(dataset => {
-                    // Only apply color if it's a category dataset (not income or net)
-                    if (dataset.label !== 'Income' && dataset.label !== 'Net' && window.categoryColors[dataset.label]) {
+                    if (window.categoryColors[dataset.label]) {
                         dataset.backgroundColor = window.categoryColors[dataset.label];
-                    }
-                    // Special case for Income
-                    if (dataset.label === 'Income' && window.categoryColors['Income']) {
-                        dataset.backgroundColor = window.categoryColors['Income'];
                     }
                 });
             }
             
-            // Create chart with real data
+            // Create chart with improved options
             new Chart(ctx, {
                 type: 'bar',
                 data: data,
@@ -1740,7 +1735,11 @@
                                 label: function(context) {
                                     const label = context.dataset.label || '';
                                     const value = context.raw || 0;
-                                    return `${label}: $${Math.abs(value).toFixed(2)}`;
+                                    const sign = value >= 0 ? '+' : '';
+                                    return `${label}: ${sign}${new Intl.NumberFormat('en-US', {
+                                        style: 'currency',
+                                        currency: 'USD'
+                                    }).format(value)}`;
                                 }
                             }
                         },
@@ -1749,13 +1748,10 @@
                             labels: {
                                 // Limit the number of legends displayed
                                 filter: function(legendItem, data) {
-                                    // Only show important categories and Income/Net
-                                    if (legendItem.text === 'Income' || 
-                                        legendItem.text === 'Net' || 
-                                        data.datasets[legendItem.datasetIndex].data.reduce((a, b) => Math.abs(a) + Math.abs(b), 0) > 100) {
-                                        return true;
-                                    }
-                                    return false;
+                                    // Only show categories with significant transactions
+                                    const dataset = data.datasets[legendItem.datasetIndex];
+                                    const total = dataset.data.reduce((a, b) => Math.abs(a) + Math.abs(b), 0);
+                                    return total > 100; // Only show categories with more than $100 total
                                 }
                             }
                         }
@@ -1771,10 +1767,33 @@
                         },
                         y: {
                             stacked: true,
-                            beginAtZero: true,
+                            beginAtZero: false, // Allow negative values
                             title: {
                                 display: true,
-                                text: 'Amount ($)'
+                                text: 'Net Amount ($)'
+                            },
+                            grid: {
+                                color: function(context) {
+                                    if (context.tick.value === 0) {
+                                        return 'rgba(0, 0, 0, 0.5)';
+                                    }
+                                    return 'rgba(0, 0, 0, 0.1)';
+                                },
+                                lineWidth: function(context) {
+                                    if (context.tick.value === 0) {
+                                        return 2;
+                                    }
+                                    return 1;
+                                }
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('en-US', {
+                                        style: 'currency',
+                                        currency: 'USD',
+                                        maximumFractionDigits: 0
+                                    }).format(value);
+                                }
                             }
                         }
                     }
