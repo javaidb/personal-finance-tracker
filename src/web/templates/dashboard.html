@@ -311,6 +311,24 @@
                         </div>
                         <div class="col-md-6">
                             <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5>Financial Milestones</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <div id="milestoneChartLoader" class="loading-chart">
+                                            <div class="loading-spinner"></div>
+                                        </div>
+                                        <canvas id="milestoneChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="card">
                                 <div class="card-header">
                                     <h5>Spending by Category</h5>
                                 </div>
@@ -324,22 +342,75 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- Milestones Section -->
-                    <div class="row mt-4">
-                        <div class="col-12">
+                        <div class="col-md-6">
                             <div class="card">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <h5>Financial Milestones</h5>
+                                <div class="card-header">
+                                    <h5>Income by Category</h5>
                                 </div>
                                 <div class="card-body">
                                     <div class="chart-container">
-                                        <div id="milestoneChartLoader" class="loading-chart">
+                                        <div id="incomeChartLoader" class="loading-chart">
                                             <div class="loading-spinner"></div>
                                         </div>
-                                        <canvas id="milestoneChart"></canvas>
+                                        <canvas id="incomeChart"></canvas>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Categories Section -->
+                <section id="categories" class="mb-5">
+                    <h2>Spending Categories</h2>
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5>All Categories</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="categories-container" class="d-flex flex-wrap gap-2">
+                                <!-- Categories will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Trends Section -->
+                <section id="trends" class="mb-5">
+                    <h2>Spending Trends</h2>
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5>Monthly Spending Trends</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="trendsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- PELT Trend Analysis -->
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5>Balance Trend Analysis (PELT Algorithm)</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">
+                                This chart uses the PELT algorithm to detect significant changes in your balance trend. Vertical lines indicate breakpoints between different financial periods.
+                            </p>
+                            <div class="chart-container">
+                                <canvas id="peltChart"></canvas>
+                            </div>
+                            <div class="mt-4">
+                                <h6>Rate of Change Analysis</h6>
+                                <div class="chart-container">
+                                    <canvas id="rateOfChangeChart"></canvas>
+                                </div>
+                                <div class="mt-3">
+                                    <small class="text-muted">
+                                        <span class="badge bg-success me-1">Green</span> Positive rate (increasing balance)
+                                        <span class="badge bg-danger ms-3 me-1">Red</span> Negative rate (decreasing balance)
+                                    </small>
                                 </div>
                             </div>
                         </div>
@@ -469,63 +540,6 @@
                                         <button id="prev-page-btn" class="btn btn-sm btn-outline-primary me-2" disabled>Previous</button>
                                         <button id="next-page-btn" class="btn btn-sm btn-outline-primary" disabled>Next</button>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Categories Section -->
-                <section id="categories" class="mb-5">
-                    <h2>Spending Categories</h2>
-                    <div class="card mt-4">
-                        <div class="card-header">
-                            <h5>All Categories</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="categories-container" class="d-flex flex-wrap gap-2">
-                                <!-- Categories will be populated here -->
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Trends Section -->
-                <section id="trends" class="mb-5">
-                    <h2>Spending Trends</h2>
-                    <div class="card mt-4">
-                        <div class="card-header">
-                            <h5>Monthly Spending Trends</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="chart-container">
-                                <canvas id="trendsChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- PELT Trend Analysis -->
-                    <div class="card mt-4">
-                        <div class="card-header">
-                            <h5>Balance Trend Analysis (PELT Algorithm)</h5>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted mb-3">
-                                This chart uses the PELT algorithm to detect significant changes in your balance trend. Vertical lines indicate breakpoints between different financial periods.
-                            </p>
-                            <div class="chart-container">
-                                <canvas id="peltChart"></canvas>
-                            </div>
-                            <div class="mt-4">
-                                <h6>Rate of Change Analysis</h6>
-                                <div class="chart-container">
-                                    <canvas id="rateOfChangeChart"></canvas>
-                                </div>
-                                <div class="mt-3">
-                                    <small class="text-muted">
-                                        <span class="badge bg-success me-1">Green</span> Positive rate (increasing balance)
-                                        <span class="badge bg-danger ms-3 me-1">Red</span> Negative rate (decreasing balance)
-                                    </small>
                                 </div>
                             </div>
                         </div>
@@ -1414,17 +1428,26 @@
                 // Render the categories list
                 renderCategories(categories.counts || {}, categories.colors || {});
                 
-                // Render the category chart with spending data
-                renderCategoryChart(categories.spending || {}, categories.colors || {});
+                // Render both spending and income charts
+                renderCategoryChart('categoryChart', categories.spending || {}, categories.colors || {}, 'Spending');
+                renderCategoryChart('incomeChart', categories.income || {}, categories.colors || {}, 'Income');
                 
-                // Show a message if there's no spending data but it was expected
+                // Show messages if there's no data
                 if (categories.has_spending_data === false) {
                     console.warn("No spending data available - check that you have transactions with negative amounts");
-                    // Add a small warning to the chart area
                     const chartContainer = document.querySelector('#categoryChart').parentNode;
                     const warningEl = document.createElement('div');
                     warningEl.className = 'small text-warning text-center mt-2';
                     warningEl.textContent = 'Note: No expense transactions found to display in chart';
+                    chartContainer.appendChild(warningEl);
+                }
+                
+                if (categories.has_income_data === false) {
+                    console.warn("No income data available - check that you have transactions with positive amounts");
+                    const chartContainer = document.querySelector('#incomeChart').parentNode;
+                    const warningEl = document.createElement('div');
+                    warningEl.className = 'small text-warning text-center mt-2';
+                    warningEl.textContent = 'Note: No income transactions found to display in chart';
                     chartContainer.appendChild(warningEl);
                 }
                 
@@ -1436,7 +1459,8 @@
                 console.error('Error fetching categories:', error);
                 document.getElementById('categories-container').innerHTML = 
                     '<div class="alert alert-danger w-100">Failed to load categories: ' + error.message + '</div>';
-                renderCategoryChart(null); // Ensure chart shows the "no data" state
+                renderCategoryChart('categoryChart', null); // Ensure spending chart shows the "no data" state
+                renderCategoryChart('incomeChart', null); // Ensure income chart shows the "no data" state
                 return false;
             }
         }
@@ -1467,8 +1491,8 @@
             container.innerHTML = html;
         }
         
-        function renderCategoryChart(categoryData, categoryColors) {
-            const ctx = document.getElementById('categoryChart').getContext('2d');
+        function renderCategoryChart(canvasId, categoryData, categoryColors, chartType) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
             
             // If we already have a chart, destroy it to prevent duplicates
             const existingChart = Chart.getChart(ctx.canvas);
@@ -1481,7 +1505,7 @@
                 new Chart(ctx, {
                     type: 'doughnut',
                     data: {
-                        labels: ['No spending data available'],
+                        labels: [`No ${chartType.toLowerCase()} data available`],
                         datasets: [{
                             data: [1],
                             backgroundColor: ['#f0f0f0'],
@@ -1516,7 +1540,7 @@
                             easing: 'easeOutQuart',
                             onComplete: function() {
                                 // Hide loader even for placeholder
-                                document.getElementById('categoryChartLoader').classList.add('hidden');
+                                document.getElementById(`${canvasId}Loader`).classList.add('hidden');
                             }
                         }
                     }
@@ -1524,7 +1548,7 @@
                 return;
             }
             
-            // Sort categories by spend amount (descending)
+            // Sort categories by amount (descending)
             const sortedEntries = Object.entries(categoryData)
                 .sort((a, b) => b[1] - a[1]);
             
@@ -1584,11 +1608,41 @@
                     animation: {
                         animateScale: true,
                         animateRotate: true,
-                        duration: 1500,
+                        duration: 1000,
                         easing: 'easeOutQuart',
                         onComplete: function() {
-                            // Hide loader when animation is complete
-                            document.getElementById('categoryChartLoader').classList.add('hidden');
+                            // Hide loader
+                            document.getElementById(`${canvasId}Loader`).classList.add('hidden');
+                            
+                            // Add total text in the center
+                            const chartArea = document.querySelector(`#${canvasId}`).parentNode;
+                            let centerText = chartArea.querySelector('.doughnut-center-text');
+                            
+                            if (!centerText) {
+                                centerText = document.createElement('div');
+                                centerText.className = 'doughnut-center-text';
+                                centerText.style.position = 'absolute';
+                                centerText.style.top = '50%';
+                                centerText.style.left = '50%';
+                                centerText.style.transform = 'translate(-50%, -50%)';
+                                centerText.style.textAlign = 'center';
+                                centerText.style.pointerEvents = 'none';
+                                centerText.style.fontFamily = 'Inter, sans-serif';
+                                
+                                chartArea.style.position = 'relative';
+                                chartArea.appendChild(centerText);
+                            }
+                            
+                            const formattedTotal = new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                maximumFractionDigits: 0
+                            }).format(total);
+                            
+                            centerText.innerHTML = `
+                                <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Total ${chartType}</div>
+                                <div style="font-size: 18px; font-weight: 600; color: #333;">${formattedTotal}</div>
+                            `;
                         }
                     },
                     plugins: {
@@ -1605,7 +1659,7 @@
                                 color: '#666',
                                 // Limit the number of legend items shown if there are too many
                                 filter: function(legendItem, data) {
-                                    // Only show top categories that make up 95% of spending plus "Other"
+                                    // Only show top categories that make up 95% of total plus "Other"
                                     const index = legendItem.index;
                                     const value = data.datasets[0].data[index];
                                     const percentage = (value / total) * 100;
@@ -1613,7 +1667,7 @@
                                     // Always show top 6 categories regardless of percentage
                                     if (index < 6) return true;
                                     
-                                    // Show categories with at least 3% of total spend
+                                    // Show categories with at least 1% of total
                                     return percentage >= 1;
                                 }
                             }
@@ -1646,40 +1700,6 @@
                     }
                 }
             });
-            
-            // Add total spending text in the center of the doughnut
-            if (total > 0) {
-                setTimeout(() => {
-                    const chartArea = document.querySelector('#categoryChart').parentNode;
-                    let centerText = chartArea.querySelector('.doughnut-center-text');
-                    
-                    if (!centerText) {
-                        centerText = document.createElement('div');
-                        centerText.className = 'doughnut-center-text';
-                        centerText.style.position = 'absolute';
-                        centerText.style.top = '50%';
-                        centerText.style.left = '50%';
-                        centerText.style.transform = 'translate(-50%, -50%)';
-                        centerText.style.textAlign = 'center';
-                        centerText.style.pointerEvents = 'none';
-                        centerText.style.fontFamily = 'Inter, sans-serif';
-                        
-                        chartArea.style.position = 'relative';
-                        chartArea.appendChild(centerText);
-                    }
-                    
-                    const formattedTotal = new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: 'USD',
-                        maximumFractionDigits: 0
-                    }).format(total);
-                    
-                    centerText.innerHTML = `
-                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Total Spending</div>
-                        <div style="font-size: 18px; font-weight: 600; color: #333;">${formattedTotal}</div>
-                    `;
-                }, 100);
-            }
         }
         
         function renderTrendsChart(data = null) {
