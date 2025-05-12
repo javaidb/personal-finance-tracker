@@ -290,14 +290,16 @@ class TransactionService:
             return []
 
     def get_category_data(self) -> Dict[str, Any]:
-        """Get category data including counts, spending, and colors."""
+        """Get category data including counts, spending, income, and colors."""
         if self.processed_df is None:
             return {
                 "error": "No data has been processed yet",
                 "counts": {},
                 "spending": {},
+                "income": {},
                 "colors": {},
-                "has_spending_data": False
+                "has_spending_data": False,
+                "has_income_data": False
             }
         
         try:
@@ -311,6 +313,9 @@ class TransactionService:
             # Calculate total spending by category (for negative amounts only - expenses)
             spending_df = df[df['Amount'] < 0]
             
+            # Calculate total income by category (for positive amounts only)
+            income_df = df[df['Amount'] > 0]
+            
             # Handle case where there are no negative amounts (expenses)
             if spending_df.empty:
                 category_spending = {}
@@ -318,28 +323,39 @@ class TransactionService:
             else:
                 category_spending = spending_df.groupby('Classification')['Amount'].sum().abs().to_dict()
             
+            # Handle case where there are no positive amounts (income)
+            if income_df.empty:
+                category_income = {}
+                print("Warning: No transactions with positive amounts found for income chart")
+            else:
+                category_income = income_df.groupby('Classification')['Amount'].sum().to_dict()
+            
             # Create color mapping for each category
             category_colors = {}
             
             # Get all categories from both transactions and databank
-            transaction_categories = set(list(category_counts.keys()) + list(category_spending.keys()))
+            transaction_categories = set(list(category_counts.keys()) + list(category_spending.keys()) + list(category_income.keys()))
             databank_categories = set(self.categories)  # Get all categories from databank
-            all_categories = transaction_categories.union(databank_categories)  # Combine both sets
+            all_categories = transaction_categories.union(databank_categories)
             
-            # Initialize counts and spending for all categories
+            # Initialize counts, spending, and income for all categories
             for category in all_categories:
                 category_colors[category] = get_category_color(category)
-                # Initialize counts and spending for categories not in transactions
+                # Initialize counts, spending, and income for categories not in transactions
                 if category not in category_counts:
                     category_counts[category] = 0
                 if category not in category_spending:
                     category_spending[category] = 0
+                if category not in category_income:
+                    category_income[category] = 0
             
             return {
                 "counts": category_counts,
                 "spending": category_spending,
+                "income": category_income,
                 "colors": category_colors,
-                "has_spending_data": len(category_spending) > 0
+                "has_spending_data": len(category_spending) > 0,
+                "has_income_data": len(category_income) > 0
             }
             
         except Exception as e:
@@ -348,8 +364,10 @@ class TransactionService:
                 "error": str(e),
                 "counts": {},
                 "spending": {},
+                "income": {},
                 "colors": {},
-                "has_spending_data": False
+                "has_spending_data": False,
+                "has_income_data": False
             }
 
     def get_category_color(self, category: str) -> str:
