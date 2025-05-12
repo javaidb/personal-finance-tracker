@@ -512,6 +512,12 @@ class PDFReader(GeneralHelperFns):
         # Classify transactions
         df = self.__classify_transactions(df)
         
+        # Categorize dining transactions
+        df = self.__categorize_food_transactions(df)
+        
+        # Categorize shopping transactions
+        df = self.__categorize_shopping_transactions(df)
+        
         return df
 
     def __process_transaction_details(self, df):
@@ -1258,3 +1264,422 @@ class PDFReader(GeneralHelperFns):
         df.drop('abs_amount', axis=1, inplace=True)
         
         return duplicate_mask
+
+    def __categorize_food_transactions(self, df):
+        """
+        Categorizes dining-related transactions using a predefined list of restaurant keywords
+        and optionally Yelp's business categories. This should be run after initial classification
+        but before post-processing.
+        """
+        print("Categorizing dining transactions...")
+        
+        # Path to dining keywords file
+        dining_keywords_path = os.path.join(self.base_path, "cached_data", "dining_keywords.json")
+        
+        # Create default dining keywords if file doesn't exist
+        if not os.path.exists(dining_keywords_path):
+            default_keywords = {
+                "restaurants": {
+                    "keywords": [
+                        # Restaurant Types
+                        "restaurant", "cafe", "coffee", "bistro", "diner", "eatery", "grill",
+                        "steakhouse", "pub", "bar", "brewery", "bakery", "patisserie", "deli",
+                        "food court", "food truck", "pop-up", "supper club", "supperclub",
+                        
+                        # Major Chains
+                        "starbucks", "tim hortons", "mcdonalds", "burger king", "wendys",
+                        "kfc", "popeyes", "dairy queen", "swiss chalet", "harveys", "a&w",
+                        "pizza pizza", "dominos", "pizza hut", "subway", "chipotle", "freshii",
+                        "pita pit", "pita land", "five guys", "shoppers drug mart", "walmart",
+                        "costco", "sobeys", "loblaws", "metro", "farm boy", "whole foods",
+                        "trader joes", "save on foods", "safeway", "superstore", "no frills",
+                        
+                        # Cuisine Types
+                        "american", "italian", "chinese", "japanese", "korean", "vietnamese",
+                        "thai", "indian", "mexican", "greek", "mediterranean", "middle eastern",
+                        "caribbean", "african", "french", "german", "spanish", "portuguese",
+                        "brazilian", "peruvian", "cuban", "jamaican", "ethiopian", "lebanese",
+                        "turkish", "russian", "ukrainian", "polish", "hungarian", "czech",
+                        "austrian", "swiss", "belgian", "dutch", "scandinavian", "fusion",
+                        
+                        # Food Types
+                        "burger", "pizza", "sandwich", "sub", "wrap", "salad", "soup",
+                        "noodles", "ramen", "pho", "curry", "taco", "burrito", "pasta",
+                        "fries", "chicken", "fish", "seafood", "sushi", "sashimi", "roll",
+                        "dumpling", "dim sum", "noodle", "rice", "bowl", "plate", "meal",
+                        
+                        # Meal Types
+                        "breakfast", "brunch", "lunch", "dinner", "supper", "snack",
+                        "dessert", "ice cream", "gelato", "donut", "pastry", "cake",
+                        "cookie", "muffin", "bagel", "croissant",
+                        
+                        # Restaurant Features
+                        "buffet", "all-you-can-eat", "takeout", "delivery", "catering",
+                        "fine dining", "casual dining", "fast casual", "fast food",
+                        "food truck", "pop-up", "supper club", "supperclub",
+                        
+                        # Common Restaurant Terms
+                        "kitchen", "chef", "cuisine", "dining", "eatery", "bistro",
+                        "cafe", "coffee shop", "bakery", "patisserie", "deli", "market",
+                        "grocery", "supermarket", "convenience", "corner store", "dollar store"
+                    ],
+                    "patterns": [
+                        # Restaurant Chains
+                        ["tim", "hortons"],
+                        ["starbucks", "coffee"],
+                        ["mcdonalds", "restaurant"],
+                        ["burger", "king"],
+                        ["wendys", "burger"],
+                        ["kfc", "chicken"],
+                        ["popeyes", "chicken"],
+                        ["dairy", "queen"],
+                        ["swiss", "chalet"],
+                        ["harveys", "burger"],
+                        ["a&w", "burger"],
+                        ["pizza", "pizza"],
+                        ["dominos", "pizza"],
+                        ["pizza", "hut"],
+                        ["subway", "sandwich"],
+                        ["chipotle", "mexican"],
+                        ["freshii", "healthy"],
+                        ["pita", "pit"],
+                        ["pita", "land"],
+                        ["five", "guys"],
+                        
+                        # Cuisine Types with Restaurant
+                        ["american", "restaurant"],
+                        ["italian", "restaurant"],
+                        ["chinese", "restaurant"],
+                        ["japanese", "restaurant"],
+                        ["korean", "restaurant"],
+                        ["vietnamese", "restaurant"],
+                        ["thai", "restaurant"],
+                        ["indian", "restaurant"],
+                        ["mexican", "restaurant"],
+                        ["greek", "restaurant"],
+                        ["mediterranean", "restaurant"],
+                        ["middle", "eastern", "restaurant"],
+                        ["caribbean", "restaurant"],
+                        ["african", "restaurant"],
+                        ["french", "restaurant"],
+                        ["german", "restaurant"],
+                        ["spanish", "restaurant"],
+                        ["portuguese", "restaurant"],
+                        ["brazilian", "restaurant"],
+                        ["peruvian", "restaurant"],
+                        ["cuban", "restaurant"],
+                        ["jamaican", "restaurant"],
+                        ["ethiopian", "restaurant"],
+                        ["lebanese", "restaurant"],
+                        ["turkish", "restaurant"],
+                        ["russian", "restaurant"],
+                        ["ukrainian", "restaurant"],
+                        ["polish", "restaurant"],
+                        ["hungarian", "restaurant"],
+                        ["czech", "restaurant"],
+                        ["austrian", "restaurant"],
+                        ["swiss", "restaurant"],
+                        ["belgian", "restaurant"],
+                        ["dutch", "restaurant"],
+                        ["scandinavian", "restaurant"],
+                        ["fusion", "restaurant"],
+                        
+                        # Common Food Combinations
+                        ["coffee", "shop"],
+                        ["ice", "cream"],
+                        ["food", "court"],
+                        ["food", "truck"],
+                        ["all", "you", "can", "eat"],
+                        ["fine", "dining"],
+                        ["casual", "dining"],
+                        ["fast", "casual"],
+                        ["fast", "food"],
+                        ["take", "out"],
+                        ["take", "away"],
+                        ["dine", "in"],
+                        ["eat", "in"],
+                        ["sit", "down"],
+                        ["sit-down"],
+                        ["sit down"],
+                        ["sitdown"],
+                        ["dine-in"],
+                        ["dine in"],
+                        ["dinein"]
+                    ]
+                }
+            }
+            
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(dining_keywords_path), exist_ok=True)
+            
+            # Save default keywords
+            with open(dining_keywords_path, 'w') as f:
+                json.dump(default_keywords, f, indent=2)
+            print(f"Created default dining keywords file at {dining_keywords_path}")
+        
+        # Load dining keywords
+        try:
+            with open(dining_keywords_path, 'r') as f:
+                dining_data = json.load(f)
+                restaurant_keywords = dining_data.get('restaurants', {}).get('keywords', [])
+                restaurant_patterns = dining_data.get('restaurants', {}).get('patterns', [])
+        except Exception as e:
+            print(f"Error loading dining keywords: {str(e)}")
+            return df
+        
+        # Function to check if transaction details match dining keywords
+        def is_dining_transaction(details_list):
+            # Convert details to lowercase string for matching
+            details_str = ' '.join(details_list).lower()
+            
+            # Check for exact keyword matches
+            for keyword in restaurant_keywords:
+                if keyword.lower() in details_str:
+                    return True
+            
+            # Check for pattern matches (all words in pattern must be present)
+            for pattern in restaurant_patterns:
+                if all(word.lower() in details_str for word in pattern):
+                    return True
+            
+            return False
+        
+        # Apply dining categorization to uncategorized transactions
+        uncategorized_mask = df['Classification'].str.lower() == 'uncategorized'
+        if uncategorized_mask.any():
+            # Get the uncategorized transactions
+            uncategorized_df = df[uncategorized_mask].copy()
+            
+            # Apply dining categorization
+            dining_mask = uncategorized_df['Processed Details'].apply(is_dining_transaction)
+            if dining_mask.any():
+                # Update classification for dining transactions
+                df.loc[uncategorized_df[dining_mask].index, 'Classification'] = 'Dining'
+                print(f"Identified {dining_mask.sum()} dining transactions")
+        
+        return df
+
+    def __categorize_shopping_transactions(self, df):
+        """
+        Categorizes shopping-related transactions using a predefined list of retail keywords.
+        Excludes supermarkets and grocery stores. This should be run after initial classification
+        but before post-processing.
+        """
+        print("Categorizing shopping transactions...")
+        
+        # Path to shopping keywords file
+        shopping_keywords_path = os.path.join(self.base_path, "cached_data", "shopping_keywords.json")
+        
+        # Create default shopping keywords if file doesn't exist
+        if not os.path.exists(shopping_keywords_path):
+            default_keywords = {
+                "retail": {
+                    "keywords": [
+                        # Department Stores
+                        "walmart", "target", "costco", "canadian tire", "home depot", "lowes",
+                        "ikea", "hudson's bay", "the bay", "sears", "winners", "marshalls",
+                        "home sense", "bed bath beyond", "bed bath & beyond", "bed bath and beyond",
+                        
+                        # Clothing & Fashion
+                        "h&m", "zara", "gap", "old navy", "banana republic", "roots", "lululemon",
+                        "nike", "adidas", "under armour", "puma", "reebok", "converse", "vans",
+                        "foot locker", "sport chek", "sporting life", "mec", "mountain equipment co-op",
+                        "aritzia", "anthropologie", "urban outfitters", "forever 21", "uniqlo",
+                        "mango", "guess", "tommy hilfiger", "ralph lauren", "calvin klein",
+                        "michael kors", "kate spade", "coach", "louis vuitton", "gucci", "prada",
+                        
+                        # Electronics & Technology
+                        "best buy", "future shop", "apple store", "microsoft store", "dell",
+                        "lenovo", "hp", "samsung", "sony", "lg", "asus", "acer", "logitech",
+                        "staples", "the source", "canada computers", "memory express",
+                        
+                        # Home & Furniture
+                        "structube", "leons", "the brick", "ashley", "ashley furniture",
+                        "sleep country", "sleep country canada", "wayfair", "west elm",
+                        "crate and barrel", "pottery barn", "williams-sonoma", "home hardware",
+                        "rona", "home depot", "lowes", "canadian tire",
+                        
+                        # Beauty & Cosmetics
+                        "sephora", "ulta", "shoppers drug mart", "london drugs", "rexall",
+                        "the body shop", "lush", "mac", "mac cosmetics", "l'oreal", "maybelline",
+                        "revlon", "clinique", "estee lauder", "lancome", "chanel", "dior",
+                        
+                        # Books & Media
+                        "chapters", "indigo", "coles", "coles books", "bookstore", "amazon",
+                        "ebay", "kijiji", "facebook marketplace", "walmart marketplace",
+                        
+                        # Sports & Outdoor
+                        "sport chek", "sporting life", "mec", "mountain equipment co-op",
+                        "atmosphere", "sail", "bass pro shops", "cabela's", "decathlon",
+                        
+                        # Pet Supplies
+                        "pet smart", "petsmart", "pet valu", "petvalue", "global pet foods",
+                        
+                        # Office Supplies
+                        "staples", "grand & toy", "business depot", "officedepot",
+                        
+                        # General Retail Terms
+                        "store", "shop", "boutique", "outlet", "mall", "plaza", "marketplace",
+                        "retail", "department store", "specialty store", "concept store",
+                        "flagship store", "pop-up", "popup", "pop up", "shop-in-shop",
+                        
+                        # Shopping Features
+                        "sale", "clearance", "discount", "outlet", "factory", "warehouse",
+                        "showroom", "gallery", "studio", "atelier", "workshop", "market",
+                        "bazaar", "emporium", "arcade", "complex", "center", "centre"
+                    ],
+                    "patterns": [
+                        # Department Stores
+                        ["the", "bay"],
+                        ["hudson's", "bay"],
+                        ["hudsons", "bay"],
+                        ["canadian", "tire"],
+                        ["home", "depot"],
+                        ["bed", "bath", "beyond"],
+                        ["bed", "bath", "&", "beyond"],
+                        ["bed", "bath", "and", "beyond"],
+                        
+                        # Clothing & Fashion
+                        ["h", "&", "m"],
+                        ["banana", "republic"],
+                        ["mountain", "equipment", "co-op"],
+                        ["mountain", "equipment", "coop"],
+                        ["mountain", "equipment", "co", "op"],
+                        ["sport", "chek"],
+                        ["sporting", "life"],
+                        ["urban", "outfitters"],
+                        ["forever", "21"],
+                        ["tommy", "hilfiger"],
+                        ["ralph", "lauren"],
+                        ["calvin", "klein"],
+                        ["michael", "kors"],
+                        ["kate", "spade"],
+                        ["louis", "vuitton"],
+                        
+                        # Electronics & Technology
+                        ["best", "buy"],
+                        ["future", "shop"],
+                        ["apple", "store"],
+                        ["microsoft", "store"],
+                        ["canada", "computers"],
+                        ["memory", "express"],
+                        
+                        # Home & Furniture
+                        ["sleep", "country"],
+                        ["crate", "and", "barrel"],
+                        ["pottery", "barn"],
+                        ["williams", "sonoma"],
+                        ["home", "hardware"],
+                        
+                        # Beauty & Cosmetics
+                        ["shoppers", "drug", "mart"],
+                        ["london", "drugs"],
+                        ["body", "shop"],
+                        ["mac", "cosmetics"],
+                        ["estee", "lauder"],
+                        
+                        # Books & Media
+                        ["chapters", "indigo"],
+                        ["coles", "books"],
+                        
+                        # Sports & Outdoor
+                        ["bass", "pro", "shops"],
+                        ["global", "pet", "foods"],
+                        
+                        # Office Supplies
+                        ["grand", "&", "toy"],
+                        ["business", "depot"],
+                        ["office", "depot"],
+                        
+                        # Shopping Features
+                        ["pop", "up", "store"],
+                        ["pop-up", "store"],
+                        ["popup", "store"],
+                        ["shop", "in", "shop"],
+                        ["shop-in-shop"],
+                        ["factory", "outlet"],
+                        ["warehouse", "sale"],
+                        ["clearance", "sale"],
+                        ["discount", "store"],
+                        ["outlet", "mall"],
+                        ["shopping", "center"],
+                        ["shopping", "centre"],
+                        ["shopping", "mall"],
+                        ["shopping", "plaza"],
+                        ["retail", "store"],
+                        ["department", "store"],
+                        ["specialty", "store"],
+                        ["concept", "store"],
+                        ["flagship", "store"]
+                    ],
+                    "exclude_keywords": [
+                        # Supermarkets and Grocery Stores to Exclude
+                        "supermarket", "super store", "superstore", "grocery", "groceries",
+                        "food basics", "no frills", "freshco", "foodland", "farm boy",
+                        "whole foods", "trader joes", "save on foods", "safeway", "sobeys",
+                        "loblaws", "metro", "longos", "longo's", "zehrs", "zehr's",
+                        "fortinos", "fortino's", "maxi", "maxi & cie", "maxi and cie",
+                        "provigo", "iga", "co-op", "coop", "co op", "co-operative",
+                        "cooperative", "co operative", "independent", "independent grocer",
+                        "independent grocers", "independent grocery", "independent groceries",
+                        "food store", "food market", "grocery store", "grocery market",
+                        "supermarket", "super market", "super store", "superstore"
+                    ]
+                }
+            }
+            
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(shopping_keywords_path), exist_ok=True)
+            
+            # Save default keywords
+            with open(shopping_keywords_path, 'w') as f:
+                json.dump(default_keywords, f, indent=2)
+            print(f"Created default shopping keywords file at {shopping_keywords_path}")
+        
+        # Load shopping keywords
+        try:
+            with open(shopping_keywords_path, 'r') as f:
+                shopping_data = json.load(f)
+                retail_keywords = shopping_data.get('retail', {}).get('keywords', [])
+                retail_patterns = shopping_data.get('retail', {}).get('patterns', [])
+                exclude_keywords = shopping_data.get('retail', {}).get('exclude_keywords', [])
+        except Exception as e:
+            print(f"Error loading shopping keywords: {str(e)}")
+            return df
+        
+        # Function to check if transaction details match retail keywords
+        def is_shopping_transaction(details_list):
+            # Convert details to lowercase string for matching
+            details_str = ' '.join(details_list).lower()
+            
+            # First check if it matches any exclude keywords
+            for keyword in exclude_keywords:
+                if keyword.lower() in details_str:
+                    return False
+            
+            # Check for exact keyword matches
+            for keyword in retail_keywords:
+                if keyword.lower() in details_str:
+                    return True
+            
+            # Check for pattern matches (all words in pattern must be present)
+            for pattern in retail_patterns:
+                if all(word.lower() in details_str for word in pattern):
+                    return True
+            
+            return False
+        
+        # Apply shopping categorization to uncategorized transactions
+        uncategorized_mask = df['Classification'].str.lower() == 'uncategorized'
+        if uncategorized_mask.any():
+            # Get the uncategorized transactions
+            uncategorized_df = df[uncategorized_mask].copy()
+            
+            # Apply shopping categorization
+            shopping_mask = uncategorized_df['Processed Details'].apply(is_shopping_transaction)
+            if shopping_mask.any():
+                # Update classification for shopping transactions
+                df.loc[uncategorized_df[shopping_mask].index, 'Classification'] = 'Shopping'
+                print(f"Identified {shopping_mask.sum()} shopping transactions")
+        
+        return df
