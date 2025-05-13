@@ -1299,23 +1299,42 @@
                 existingChart.destroy();
             }
 
-            // Gradient fill for the area below the line
-            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-            gradient.addColorStop(0, 'rgba(187, 37, 37, 0.3)');  // Semi-transparent red at top
-            gradient.addColorStop(1, 'rgba(187, 37, 37, 0.01)'); // Almost transparent at bottom
+            // Create gradients for both datasets
+            const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient1.addColorStop(0, 'rgba(187, 37, 37, 0.3)');  // Semi-transparent red at top
+            gradient1.addColorStop(1, 'rgba(187, 37, 37, 0.01)'); // Almost transparent at bottom
+
+            const gradient2 = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient2.addColorStop(0, 'rgba(76, 175, 80, 0.3)');  // Semi-transparent green at top
+            gradient2.addColorStop(1, 'rgba(76, 175, 80, 0.01)'); // Almost transparent at bottom
             
-            // Enhance the dataset with better styling
+            // Enhance the datasets with better styling
             if (data.datasets && data.datasets.length > 0) {
+                // Style for regular balance
                 data.datasets[0].borderColor = 'rgba(187, 37, 37, 0.8)';
-                data.datasets[0].backgroundColor = gradient;
+                data.datasets[0].backgroundColor = gradient1;
                 data.datasets[0].borderWidth = 2;
                 data.datasets[0].pointRadius = 0;
                 data.datasets[0].pointHoverRadius = 6;
                 data.datasets[0].pointHoverBackgroundColor = 'rgba(187, 37, 37, 1)';
                 data.datasets[0].pointHoverBorderColor = 'white';
                 data.datasets[0].pointHoverBorderWidth = 2;
-                data.datasets[0].tension = 0.3; // Add slight curve to the line
+                data.datasets[0].tension = 0.3;
                 data.datasets[0].fill = true;
+
+                // Style for balance + investments
+                if (data.datasets[1]) {
+                    data.datasets[1].borderColor = 'rgba(76, 175, 80, 0.8)';
+                    data.datasets[1].backgroundColor = gradient2;
+                    data.datasets[1].borderWidth = 2;
+                    data.datasets[1].pointRadius = 0;
+                    data.datasets[1].pointHoverRadius = 6;
+                    data.datasets[1].pointHoverBackgroundColor = 'rgba(76, 175, 80, 1)';
+                    data.datasets[1].pointHoverBorderColor = 'white';
+                    data.datasets[1].pointHoverBorderWidth = 2;
+                    data.datasets[1].tension = 0.3;
+                    data.datasets[1].fill = true;
+                }
             }
             
             // Create chart with improved options
@@ -1326,10 +1345,9 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: {
-                        duration: 1500, // Smoother animation
+                        duration: 1500,
                         easing: 'easeOutQuart',
                         onComplete: function() {
-                            // Hide loader when animation is complete
                             document.getElementById('balanceChartLoader').classList.add('hidden');
                         }
                     },
@@ -1386,7 +1404,17 @@
                     },
                     plugins: {
                         legend: {
-                            display: false
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    family: 'Inter',
+                                    size: 12
+                                },
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                padding: 20
+                            }
                         },
                         tooltip: {
                             backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -1400,7 +1428,7 @@
                             },
                             callbacks: {
                                 label: function(context) {
-                                    return 'Balance: ' + new Intl.NumberFormat('en-US', {
+                                    return context.dataset.label + ': ' + new Intl.NumberFormat('en-US', {
                                         style: 'currency',
                                         currency: 'USD'
                                     }).format(context.raw);

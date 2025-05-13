@@ -397,26 +397,37 @@ class TransactionService:
             df['DateTime'] = pd.to_datetime(df['DateTime'])
             df = df.sort_values('DateTime')
             
-            # Group by date to get daily balances using running_balance
+            # Group by date to get daily balances using running_balance and running_balance_plus_investments
             daily_df = df.groupby('DateTime').agg({
-                'running_balance': 'last'  # Take the last balance for each day
+                'running_balance': 'last',  # Take the last balance for each day
+                'running_balance_plus_investments': 'last'  # Take the last balance including investments
             }).reset_index()
             
             # Format dates as strings
             date_labels = daily_df['DateTime'].dt.strftime('%Y-%m-%d').tolist()
             balance_data = daily_df['running_balance'].apply(float).tolist()
+            balance_with_investments_data = daily_df['running_balance_plus_investments'].apply(float).tolist()
             
             print(f"Generated chart data with {len(balance_data)} points")
             
             chart_data = {
                 "labels": date_labels,
-                "datasets": [{
-                    "label": "Balance",
-                    "data": balance_data,
-                    "borderColor": "#BB2525",
-                    "pointRadius": 2,
-                    "fill": False
-                }]
+                "datasets": [
+                    {
+                        "label": "Balance",
+                        "data": balance_data,
+                        "borderColor": "#BB2525",
+                        "pointRadius": 2,
+                        "fill": False
+                    },
+                    {
+                        "label": "Balance + Investments",
+                        "data": balance_with_investments_data,
+                        "borderColor": "#4CAF50",
+                        "pointRadius": 2,
+                        "fill": False
+                    }
+                ]
             }
             
             return chart_data
