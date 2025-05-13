@@ -990,7 +990,43 @@ class PDFReader(GeneralHelperFns):
         
         # Store both versions in the object
         self.df_with_transfers = self.sort_df(df_filtered)  # Keep full version for internal use
-        return self.sort_df(df_no_transfers)  # Return version without transfers
+        
+        # Calculate running_balance_plus_investments
+        df_no_transfers = self.sort_df(df_no_transfers)
+        
+        # Create a copy of running balance
+        df_no_transfers['running_balance_plus_investments'] = df_no_transfers['running_balance'].copy()
+        
+        # Identify investment transactions
+        investment_mask = df_no_transfers['Classification'].str.lower().isin(['investment', 'investments'])
+        
+        # Add back investment amounts to create new running balance
+        if investment_mask.any():
+            # Sort by DateTime to ensure correct running balance calculation
+            df_no_transfers = df_no_transfers.sort_values('DateTime')
+            
+            # Calculate the difference between running balances
+            df_no_transfers['balance_diff'] = df_no_transfers['running_balance'].diff()
+            
+            # Initialize the investment adjustment
+            investment_adjustment = 0
+            
+            # Process each row in chronological order
+            for idx in df_no_transfers.index:
+                # If this is an investment transaction, update the adjustment
+                if investment_mask[idx]:
+                    # Subtract the investment amount to reverse its effect
+                    investment_adjustment -= df_no_transfers.loc[idx, 'Amount']
+                
+                # Apply the current investment adjustment to this row's running balance
+                df_no_transfers.loc[idx, 'running_balance_plus_investments'] = (
+                    df_no_transfers.loc[idx, 'running_balance'] + investment_adjustment
+                )
+            
+            # Drop the temporary column
+            df_no_transfers = df_no_transfers.drop(columns=['balance_diff'])
+        
+        return df_no_transfers  # Return version without transfers
 
     def __identify_rent_payments(self, df_in, rent_ranges):
         """
