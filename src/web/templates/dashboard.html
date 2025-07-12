@@ -225,6 +225,43 @@
         .form-control:focus + .input-group-text {
             border-color: #86b7fe;
         }
+
+        .timeline-marker {
+            width: 24px;
+            height: 24px;
+            background: white;
+            border: 3px solid #4285f4;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            transition: left 1s ease-in-out;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            cursor: grab;
+            user-select: none;
+            z-index: 20;
+        }
+        .timeline-marker:hover {
+            transform: translate(-50%, -50%) scale(1.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .timeline-marker.dragging {
+            cursor: grabbing;
+            transform: translate(-50%, -50%) scale(1.2);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+            transition: none;
+        }
+        .timeline-track {
+            height: 8px;
+            background: #eef2f7;
+            border-radius: 4px;
+            position: relative;
+            margin: 40px 0;
+            cursor: pointer;
+        }
+        .timeline-track:hover {
+            background: #e2e8f0;
+        }
     </style>
 </head>
 <body>
@@ -2198,6 +2235,83 @@
         let milestoneChart = null;
         const milestones = [10000, 50000, 100000, 250000, 500000, 1000000];
 
+        // Global function to calculate balance from progress percentage
+        const calculateBalanceFromProgress = (progressPercent, currentBalance) => {
+            const nextMilestone = milestones.find(m => m > currentBalance) || milestones[milestones.length - 1];
+            const previousMilestone = milestones.filter(m => m <= currentBalance).pop() || 0;
+            const milestoneRange = nextMilestone - previousMilestone;
+            return previousMilestone + (milestoneRange * progressPercent / 100);
+        };
+
+        // Global function to calculate time estimate
+        const calculateTimeEstimate = (trend) => {
+            const remainingAmount = nextMilestone - currentBalance;
+            const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
+            
+            // Convert weeks to months and years for display
+            const totalMonths = Math.ceil(weeksToMilestone / 4.33); // Average weeks per month
+            const years = Math.floor(totalMonths / 12);
+            const months = totalMonths % 12;
+
+            if (trend <= 0) {
+                return 'Trend is negative';
+            }
+            if (totalMonths > 36) {
+                return 'Over 3 years';
+            }
+            if (years === 0) {
+                return `${months} month${months !== 1 ? 's' : ''}`;
+            }
+            if (months === 0) {
+                return `${years} year${years !== 1 ? 's' : ''}`;
+            }
+            return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
+        };
+
+        // Global function to update time estimate display
+        const updateTimeEstimate = (trend, currentBalance) => {
+            const timeEstimateElement = document.getElementById('time-estimate-value');
+            const remainingAmountElement = document.getElementById('remaining-amount');
+            
+            // Get the current balance from the timeline marker position
+            const timelineMarker = document.querySelector('.timeline-marker');
+            let currentDraggedBalance = currentBalance;
+            if (timelineMarker) {
+                const markerLeft = parseFloat(timelineMarker.style.left) || 0;
+                currentDraggedBalance = calculateBalanceFromProgress(markerLeft, currentBalance);
+            }
+            
+            const nextMilestone = milestones.find(m => m > currentDraggedBalance) || milestones[milestones.length - 1];
+            const remainingAmount = nextMilestone - currentDraggedBalance;
+            
+            if (timeEstimateElement) {
+                // Calculate time estimate for the dragged balance
+                const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
+                const totalMonths = Math.ceil(weeksToMilestone / 4.33);
+                const years = Math.floor(totalMonths / 12);
+                const months = totalMonths % 12;
+
+                let timeEstimate;
+                if (trend <= 0) {
+                    timeEstimate = 'Trend is negative';
+                } else if (totalMonths > 36) {
+                    timeEstimate = 'Over 3 years';
+                } else if (years === 0) {
+                    timeEstimate = `${months} month${months !== 1 ? 's' : ''}`;
+                } else if (months === 0) {
+                    timeEstimate = `${years} year${years !== 1 ? 's' : ''}`;
+                } else {
+                    timeEstimate = `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
+                }
+                
+                timeEstimateElement.textContent = timeEstimate;
+            }
+            if (remainingAmountElement) {
+                remainingAmountElement.textContent = trend > 0 ? 
+                    `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(remainingAmount)} more` : '';
+            }
+        };
+
         function renderMilestoneChart(balanceData) {
             const ctx = document.getElementById('milestoneChart').getContext('2d');
             
@@ -2215,42 +2329,199 @@
             
             // Function to calculate time estimate based on trend
             const calculateTimeEstimate = (trend) => {
-                const remainingAmount = nextMilestone - currentBalance;
-                const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
-                
-                // Convert weeks to months and years for display
-                const totalMonths = Math.ceil(weeksToMilestone / 4.33); // Average weeks per month
-                const years = Math.floor(totalMonths / 12);
-                const months = totalMonths % 12;
+                    const remainingAmount = nextMilestone - currentBalance;
+                    const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
+                    
+                    // Convert weeks to months and years for display
+                    const totalMonths = Math.ceil(weeksToMilestone / 4.33); // Average weeks per month
+                    const years = Math.floor(totalMonths / 12);
+                    const months = totalMonths % 12;
 
-                if (trend <= 0) {
-                    return 'Trend is negative';
-                }
-                if (totalMonths > 36) {
-                    return 'Over 3 years';
-                }
-                if (years === 0) {
-                    return `${months} month${months !== 1 ? 's' : ''}`;
-                }
-                if (months === 0) {
-                    return `${years} year${years !== 1 ? 's' : ''}`;
-                }
-                return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
-            };
+                        if (trend <= 0) {
+                            return 'Trend is negative';
+                        }
+                        if (totalMonths > 36) {
+                            return 'Over 3 years';
+                        }
+                        if (years === 0) {
+                            return `${months} month${months !== 1 ? 's' : ''}`;
+                        }
+                        if (months === 0) {
+                            return `${years} year${years !== 1 ? 's' : ''}`;
+                        }
+                        return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
+                    };
 
             // Function to update the time estimate display
-            const updateTimeEstimate = (trend) => {
+            const updateTimeEstimate = (trend, passedBalance) => {
                 const timeEstimateElement = document.getElementById('time-estimate-value');
                 const remainingAmountElement = document.getElementById('remaining-amount');
-                const remainingAmount = nextMilestone - currentBalance;
+                
+                // Get the current balance from the timeline marker position
+                const timelineMarker = document.querySelector('.timeline-marker');
+                let currentDraggedBalance = passedBalance || currentBalance;
+                if (timelineMarker) {
+                    const markerLeft = parseFloat(timelineMarker.style.left) || 0;
+                    currentDraggedBalance = calculateBalanceFromProgress(markerLeft, currentBalance);
+                }
+                
+                const nextMilestone = milestones.find(m => m > currentDraggedBalance) || milestones[milestones.length - 1];
+                const remainingAmount = nextMilestone - currentDraggedBalance;
                 
                 if (timeEstimateElement) {
-                    timeEstimateElement.textContent = calculateTimeEstimate(trend);
+                    // Calculate time estimate for the dragged balance
+                    const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
+                    const totalMonths = Math.ceil(weeksToMilestone / 4.33);
+                    const years = Math.floor(totalMonths / 12);
+                    const months = totalMonths % 12;
+
+                    let timeEstimate;
+                    if (trend <= 0) {
+                        timeEstimate = 'Trend is negative';
+                    } else if (totalMonths > 36) {
+                        timeEstimate = 'Over 3 years';
+                    } else if (years === 0) {
+                        timeEstimate = `${months} month${months !== 1 ? 's' : ''}`;
+                    } else if (months === 0) {
+                        timeEstimate = `${years} year${years !== 1 ? 's' : ''}`;
+                    } else {
+                        timeEstimate = `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
+                    }
+                    
+                    timeEstimateElement.textContent = timeEstimate;
                 }
                 if (remainingAmountElement) {
                     remainingAmountElement.textContent = trend > 0 ? 
                         `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(remainingAmount)} more` : '';
                 }
+            };
+
+            // Function to reset timeline to actual balance
+            const resetToActualBalance = () => {
+                const timelineMarker = document.querySelector('.timeline-marker');
+                const progressBar = document.querySelector('.timeline-progress');
+                
+                if (timelineMarker && progressBar) {
+                    // Calculate the original progress percentage
+                    const originalProgress = ((currentBalance - previousMilestone) / (nextMilestone - previousMilestone)) * 100;
+                    
+                    // Reset marker and progress bar
+                    timelineMarker.style.left = `${originalProgress}%`;
+                    progressBar.style.width = `${originalProgress}%`;
+                    
+                    // Update milestone calculations
+                    updateMilestoneCalculations(currentBalance);
+                    
+                    // Update time estimate with current rate
+                    const rateInput = document.getElementById('weekly-rate-input');
+                    const currentRate = rateInput ? parseFloat(rateInput.value) || 0 : 0;
+                    updateTimeEstimate(currentRate, currentBalance);
+                }
+            };
+
+            // Function to calculate balance from progress percentage
+            const calculateBalanceFromProgress = (progressPercent) => {
+                const nextMilestone = milestones.find(m => m > currentBalance) || milestones[milestones.length - 1];
+                const previousMilestone = milestones.filter(m => m <= currentBalance).pop() || 0;
+                const milestoneRange = nextMilestone - previousMilestone;
+                return previousMilestone + (milestoneRange * progressPercent / 100);
+            };
+
+            // Function to handle timeline dragging
+            const setupTimelineDragging = () => {
+                const timelineTrack = document.querySelector('.timeline-track');
+                const timelineMarker = document.querySelector('.timeline-marker');
+                const progressBar = document.querySelector('.timeline-progress');
+                
+                if (!timelineTrack || !timelineMarker || !progressBar) return;
+                
+                let isDragging = false;
+                let startX, startLeft;
+                
+                const startDrag = (e) => {
+                    isDragging = true;
+                    startX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
+                    startLeft = parseFloat(timelineMarker.style.left) || 0;
+                    
+                    timelineMarker.style.cursor = 'grabbing';
+                    timelineTrack.style.cursor = 'grabbing';
+                    
+                    // Add dragging class for visual feedback
+                    timelineMarker.classList.add('dragging');
+                };
+                
+                const doDrag = (e) => {
+                    if (!isDragging) return;
+                    
+                    e.preventDefault();
+                    const clientX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
+                    const deltaX = clientX - startX;
+                    const timelineRect = timelineTrack.getBoundingClientRect();
+                    const timelineWidth = timelineRect.width;
+                    
+                    // Calculate new position as percentage
+                    const newLeftPercent = Math.max(0, Math.min(100, startLeft + (deltaX / timelineWidth) * 100));
+                    
+                    // Update marker position
+                    timelineMarker.style.left = `${newLeftPercent}%`;
+                    progressBar.style.width = `${newLeftPercent}%`;
+                    
+                    // Calculate and update balance
+                    const newBalance = calculateBalanceFromProgress(newLeftPercent, currentBalance);
+                    const currentBalanceValue = document.querySelector('.current-balance-value');
+                    if (currentBalanceValue) {
+                        currentBalanceValue.textContent = new Intl.NumberFormat('en-US', { 
+                            style: 'currency', 
+                            currency: 'USD', 
+                            maximumFractionDigits: 0 
+                        }).format(newBalance);
+                    }
+                    
+                    // Update milestone calculations
+                    updateMilestoneCalculations(newBalance);
+                };
+                
+                const stopDrag = () => {
+                    if (!isDragging) return;
+                    
+                    isDragging = false;
+                    timelineMarker.style.cursor = 'grab';
+                    timelineTrack.style.cursor = 'grab';
+                    timelineMarker.classList.remove('dragging');
+                };
+                
+                // Mouse events
+                timelineMarker.addEventListener('mousedown', startDrag);
+                document.addEventListener('mousemove', doDrag);
+                document.addEventListener('mouseup', stopDrag);
+                
+                // Touch events for mobile
+                timelineMarker.addEventListener('touchstart', startDrag);
+                document.addEventListener('touchmove', doDrag);
+                document.addEventListener('touchend', stopDrag);
+                
+                // Click on timeline to jump to position
+                timelineTrack.addEventListener('click', (e) => {
+                    const rect = timelineTrack.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    const clickPercent = (clickX / rect.width) * 100;
+                    const clampedPercent = Math.max(0, Math.min(100, clickPercent));
+                    
+                    timelineMarker.style.left = `${clampedPercent}%`;
+                    progressBar.style.width = `${clampedPercent}%`;
+                    
+                    const newBalance = calculateBalanceFromProgress(clampedPercent, currentBalance);
+                    const currentBalanceValue = document.querySelector('.current-balance-value');
+                    if (currentBalanceValue) {
+                        currentBalanceValue.textContent = new Intl.NumberFormat('en-US', { 
+                            style: 'currency', 
+                            currency: 'USD', 
+                            maximumFractionDigits: 0 
+                        }).format(newBalance);
+                    }
+                    
+                    updateMilestoneCalculations(newBalance);
+                });
             };
             
             // Fetch PELT analysis data for trend calculation
@@ -2306,6 +2577,30 @@
                                 transform: translate(-50%, -50%);
                                 transition: left 1s ease-in-out;
                                 box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                                cursor: grab;
+                                user-select: none;
+                                z-index: 20;
+                            }
+                            .timeline-marker:hover {
+                                transform: translate(-50%, -50%) scale(1.1);
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                            }
+                            .timeline-marker.dragging {
+                                cursor: grabbing;
+                                transform: translate(-50%, -50%) scale(1.2);
+                                box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+                                transition: none;
+                            }
+                            .timeline-track {
+                                height: 8px;
+                                background: #eef2f7;
+                                border-radius: 4px;
+                                position: relative;
+                                margin: 40px 0;
+                                cursor: pointer;
+                            }
+                            .timeline-track:hover {
+                                background: #e2e8f0;
                             }
                             .milestone-marker {
                                 position: absolute;
@@ -2417,6 +2712,81 @@
                                 margin-left: 10px;
                             }
                             .reset-button:hover {
+                                color: #1a73e8;
+                            }
+                            .balance-slider-container {
+                                margin-top: 20px;
+                                padding: 20px;
+                                background: #f8f9fa;
+                                border-radius: 12px;
+                                border: 1px solid #e1e8f0;
+                            }
+                            .balance-slider-label {
+                                display: flex;
+                                justify-content: space-between;
+                                align-items: center;
+                                margin-bottom: 15px;
+                            }
+                            .balance-slider-value {
+                                font-weight: 600;
+                                color: #1e293b;
+                                font-size: 1.1rem;
+                            }
+                            .balance-slider {
+                                width: 100%;
+                                height: 6px;
+                                border-radius: 3px;
+                                background: #e1e8f0;
+                                outline: none;
+                                -webkit-appearance: none;
+                                appearance: none;
+                            }
+                            .balance-slider::-webkit-slider-thumb {
+                                -webkit-appearance: none;
+                                appearance: none;
+                                width: 20px;
+                                height: 20px;
+                                border-radius: 50%;
+                                background: #4285f4;
+                                cursor: pointer;
+                                box-shadow: 0 2px 6px rgba(66, 133, 244, 0.3);
+                                transition: all 0.2s ease;
+                            }
+                            .balance-slider::-webkit-slider-thumb:hover {
+                                transform: scale(1.1);
+                                box-shadow: 0 4px 12px rgba(66, 133, 244, 0.4);
+                            }
+                            .balance-slider::-moz-range-thumb {
+                                width: 20px;
+                                height: 20px;
+                                border-radius: 50%;
+                                background: #4285f4;
+                                cursor: pointer;
+                                border: none;
+                                box-shadow: 0 2px 6px rgba(66, 133, 244, 0.3);
+                            }
+                            .balance-slider::-moz-range-thumb:hover {
+                                transform: scale(1.1);
+                                box-shadow: 0 4px 12px rgba(66, 133, 244, 0.4);
+                            }
+                            .balance-slider-range {
+                                display: flex;
+                                justify-content: space-between;
+                                margin-top: 10px;
+                                font-size: 0.8rem;
+                                color: #64748b;
+                            }
+                            .reset-balance-button {
+                                background: none;
+                                border: none;
+                                color: #4285f4;
+                                font-size: 0.8rem;
+                                cursor: pointer;
+                                text-decoration: underline;
+                                padding: 0;
+                                margin-top: 10px;
+                            }
+                            .reset-balance-button:hover {
                                 color: #1a73e8;
                             }
                         </style>
@@ -2476,6 +2846,7 @@
                                 <div class="small text-muted mt-2" id="remaining-amount">
                                     ${defaultTrend > 0 ? `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone - currentBalance)} more` : ''}
                                 </div>
+                                <button class="reset-button" id="reset-balance-btn" style="margin-top: 10px;">Reset to Actual Balance</button>
                             </div>
                         </div>
                     `;
@@ -2499,26 +2870,31 @@
                     // Add event listeners for the interactive elements
                     const rateInput = document.getElementById('weekly-rate-input');
                     const resetButton = document.getElementById('reset-rate-btn');
+                    const resetBalanceButton = document.getElementById('reset-balance-btn');
                     const trendDisplay = document.getElementById('trend-display');
                     const trendIndicator = trendDisplay.nextElementSibling;
 
                     if (rateInput) {
                         rateInput.addEventListener('input', function() {
                             const newRate = parseFloat(this.value) || 0;
-                            
+                            // Get the balance at the marker's current position
+                            const timelineMarker = document.querySelector('.timeline-marker');
+                            let draggedBalance = currentBalance;
+                            if (timelineMarker) {
+                                const markerLeft = parseFloat(timelineMarker.style.left) || 0;
+                                draggedBalance = calculateBalanceFromProgress(markerLeft, currentBalance);
+                            }
                             // Update the display
                             trendDisplay.textContent = new Intl.NumberFormat('en-US', { 
                                 style: 'currency', 
                                 currency: 'USD', 
                                 maximumFractionDigits: 0 
                             }).format(newRate);
-                            
                             // Update trend indicator
                             trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
                             trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per week`;
-                            
-                            // Update time estimate
-                            updateTimeEstimate(newRate);
+                            // Update time estimate using dragged balance
+                            updateTimeEstimate(newRate, draggedBalance);
                         });
                     }
 
@@ -2528,6 +2904,15 @@
                             rateInput.dispatchEvent(new Event('input'));
                         });
                     }
+
+                    if (resetBalanceButton) {
+                        resetBalanceButton.addEventListener('click', function() {
+                            resetToActualBalance();
+                        });
+                    }
+
+                    // Setup timeline dragging
+                    setupTimelineDragging();
                 })
                 .catch(error => {
                     console.error('Error fetching PELT analysis:', error);
@@ -2578,6 +2963,30 @@
                                 transform: translate(-50%, -50%);
                                 transition: left 1s ease-in-out;
                                 box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                                cursor: grab;
+                                user-select: none;
+                                z-index: 20;
+                            }
+                            .timeline-marker:hover {
+                                transform: translate(-50%, -50%) scale(1.1);
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                            }
+                            .timeline-marker.dragging {
+                                cursor: grabbing;
+                                transform: translate(-50%, -50%) scale(1.2);
+                                box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+                                transition: none;
+                            }
+                            .timeline-track {
+                                height: 8px;
+                                background: #eef2f7;
+                                border-radius: 4px;
+                                position: relative;
+                                margin: 40px 0;
+                                cursor: pointer;
+                            }
+                            .timeline-track:hover {
+                                background: #e2e8f0;
                             }
                             .milestone-marker {
                                 position: absolute;
@@ -2691,6 +3100,81 @@
                             .reset-button:hover {
                                 color: #1a73e8;
                             }
+                            .balance-slider-container {
+                                margin-top: 20px;
+                                padding: 20px;
+                                background: #f8f9fa;
+                                border-radius: 12px;
+                                border: 1px solid #e1e8f0;
+                            }
+                            .balance-slider-label {
+                                display: flex;
+                                justify-content: space-between;
+                                align-items: center;
+                                margin-bottom: 15px;
+                            }
+                            .balance-slider-value {
+                                font-weight: 600;
+                                color: #1e293b;
+                                font-size: 1.1rem;
+                            }
+                            .balance-slider {
+                                width: 100%;
+                                height: 6px;
+                                border-radius: 3px;
+                                background: #e1e8f0;
+                                outline: none;
+                                -webkit-appearance: none;
+                                appearance: none;
+                            }
+                            .balance-slider::-webkit-slider-thumb {
+                                -webkit-appearance: none;
+                                appearance: none;
+                                width: 20px;
+                                height: 20px;
+                                border-radius: 50%;
+                                background: #4285f4;
+                                cursor: pointer;
+                                box-shadow: 0 2px 6px rgba(66, 133, 244, 0.3);
+                                transition: all 0.2s ease;
+                            }
+                            .balance-slider::-webkit-slider-thumb:hover {
+                                transform: scale(1.1);
+                                box-shadow: 0 4px 12px rgba(66, 133, 244, 0.4);
+                            }
+                            .balance-slider::-moz-range-thumb {
+                                width: 20px;
+                                height: 20px;
+                                border-radius: 50%;
+                                background: #4285f4;
+                                cursor: pointer;
+                                border: none;
+                                box-shadow: 0 2px 6px rgba(66, 133, 244, 0.3);
+                            }
+                            .balance-slider::-moz-range-thumb:hover {
+                                transform: scale(1.1);
+                                box-shadow: 0 4px 12px rgba(66, 133, 244, 0.4);
+                            }
+                            .balance-slider-range {
+                                display: flex;
+                                justify-content: space-between;
+                                margin-top: 10px;
+                                font-size: 0.8rem;
+                                color: #64748b;
+                            }
+                            .reset-balance-button {
+                                background: none;
+                                border: none;
+                                color: #4285f4;
+                                font-size: 0.8rem;
+                                cursor: pointer;
+                                text-decoration: underline;
+                                padding: 0;
+                                margin-top: 10px;
+                            }
+                            .reset-balance-button:hover {
+                                color: #1a73e8;
+                            }
                         </style>
                         <div class="timeline-track">
                             <div class="timeline-progress" style="width: ${progress}%"></div>
@@ -2712,6 +3196,26 @@
                                     ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone)}
                                 </div>
                             </div>
+                        </div>
+                        <div class="balance-slider-container">
+                            <div class="balance-slider-label">
+                                <span class="stat-label">Simulate Different Balance</span>
+                                <span class="balance-slider-value" id="balance-slider-value">
+                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentBalance)}
+                                </span>
+                            </div>
+                            <input type="range" 
+                                   id="balance-slider" 
+                                   class="balance-slider" 
+                                   min="0" 
+                                   max="1000000" 
+                                   step="1000" 
+                                   value="${currentBalance}">
+                            <div class="balance-slider-range">
+                                <span>$0</span>
+                                <span>$1,000,000</span>
+                            </div>
+                            <button class="reset-balance-button" id="reset-balance-btn">Reset to Actual Balance</button>
                         </div>
                         <div class="milestone-stats">
                             <div class="stat-card">
@@ -2738,7 +3242,7 @@
                                     <span class="rate-unit">$/week</span>
                                     <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
                                 </div>
-                                <div class="small text-muted mt-2">Based on fallback calculation</div>
+                                <div class="small text-muted mt-2">Based on PELT analysis</div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">Estimated Time to Next Milestone</div>
@@ -2771,26 +3275,31 @@
                     // Add event listeners for the interactive elements
                     const rateInput = document.getElementById('weekly-rate-input');
                     const resetButton = document.getElementById('reset-rate-btn');
+                    const resetBalanceButton = document.getElementById('reset-balance-btn');
                     const trendDisplay = document.getElementById('trend-display');
                     const trendIndicator = trendDisplay.nextElementSibling;
 
                     if (rateInput) {
                         rateInput.addEventListener('input', function() {
                             const newRate = parseFloat(this.value) || 0;
-                            
+                            // Get the balance at the marker's current position
+                            const timelineMarker = document.querySelector('.timeline-marker');
+                            let draggedBalance = currentBalance;
+                            if (timelineMarker) {
+                                const markerLeft = parseFloat(timelineMarker.style.left) || 0;
+                                draggedBalance = calculateBalanceFromProgress(markerLeft, currentBalance);
+                            }
                             // Update the display
                             trendDisplay.textContent = new Intl.NumberFormat('en-US', { 
                                 style: 'currency', 
                                 currency: 'USD', 
                                 maximumFractionDigits: 0 
                             }).format(newRate);
-                            
                             // Update trend indicator
                             trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
                             trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per week`;
-                            
-                            // Update time estimate
-                            updateTimeEstimate(newRate);
+                            // Update time estimate using dragged balance
+                            updateTimeEstimate(newRate, draggedBalance);
                         });
                     }
 
@@ -2800,6 +3309,15 @@
                             rateInput.dispatchEvent(new Event('input'));
                         });
                     }
+
+                    if (resetBalanceButton) {
+                        resetBalanceButton.addEventListener('click', function() {
+                            resetToActualBalance();
+                        });
+                    }
+
+                    // Setup timeline dragging
+                    setupTimelineDragging();
                 });
         }
 
@@ -2988,6 +3506,69 @@
                 });
             }
         }
+
+        // Function to update milestone calculations based on new balance
+        const updateMilestoneCalculations = (newBalance) => {
+            const newNextMilestone = milestones.find(m => m > newBalance) || milestones[milestones.length - 1];
+            const newPreviousMilestone = milestones.filter(m => m <= newBalance).pop() || 0;
+            const newProgress = ((newBalance - newPreviousMilestone) / (newNextMilestone - newPreviousMilestone)) * 100;
+            
+            // Update progress bar
+            const progressBar = document.querySelector('.timeline-progress');
+            if (progressBar) {
+                progressBar.style.width = `${newProgress}%`;
+            }
+            
+            // Update current balance marker position
+            const currentBalanceMarker = document.querySelector('.timeline-marker');
+            if (currentBalanceMarker) {
+                currentBalanceMarker.style.left = `${newProgress}%`;
+            }
+            
+            // Update current balance display
+            const currentBalanceValue = document.querySelector('.current-balance-value');
+            if (currentBalanceValue) {
+                currentBalanceValue.textContent = new Intl.NumberFormat('en-US', { 
+                    style: 'currency', 
+                    currency: 'USD', 
+                    maximumFractionDigits: 0 
+                }).format(newBalance);
+            }
+            
+            // Update milestone values
+            const milestoneMarkers = document.querySelectorAll('.milestone-marker');
+            if (milestoneMarkers.length >= 2) {
+                const previousMilestoneValue = milestoneMarkers[0].querySelector('.milestone-value');
+                const nextMilestoneValue = milestoneMarkers[1].querySelector('.milestone-value');
+                
+                if (previousMilestoneValue) {
+                    previousMilestoneValue.textContent = new Intl.NumberFormat('en-US', { 
+                        style: 'currency', 
+                        currency: 'USD', 
+                        maximumFractionDigits: 0 
+                    }).format(newPreviousMilestone);
+                }
+                
+                if (nextMilestoneValue) {
+                    nextMilestoneValue.textContent = new Intl.NumberFormat('en-US', { 
+                        style: 'currency', 
+                        currency: 'USD', 
+                        maximumFractionDigits: 0 
+                    }).format(newNextMilestone);
+                }
+            }
+            
+            // Update progress percentage
+            const progressValue = document.querySelector('.stat-card:first-child .stat-value');
+            if (progressValue) {
+                progressValue.textContent = `${newProgress.toFixed(1)}%`;
+            }
+            
+            // Update time estimate with current rate
+            const rateInput = document.getElementById('weekly-rate-input');
+            const currentRate = rateInput ? parseFloat(rateInput.value) || 0 : 0;
+            updateTimeEstimate(currentRate, newBalance);
+        };
     </script>
 </body>
 </html>
