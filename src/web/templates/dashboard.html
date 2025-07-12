@@ -2213,48 +2213,62 @@
             // Calculate progress percentage between current milestones
             const progress = ((currentBalance - previousMilestone) / (nextMilestone - previousMilestone)) * 100;
             
+            // Function to calculate time estimate based on trend
+            const calculateTimeEstimate = (trend) => {
+                const remainingAmount = nextMilestone - currentBalance;
+                const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
+                
+                // Convert weeks to months and years for display
+                const totalMonths = Math.ceil(weeksToMilestone / 4.33); // Average weeks per month
+                const years = Math.floor(totalMonths / 12);
+                const months = totalMonths % 12;
+
+                if (trend <= 0) {
+                    return 'Trend is negative';
+                }
+                if (totalMonths > 36) {
+                    return 'Over 3 years';
+                }
+                if (years === 0) {
+                    return `${months} month${months !== 1 ? 's' : ''}`;
+                }
+                if (months === 0) {
+                    return `${years} year${years !== 1 ? 's' : ''}`;
+                }
+                return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
+            };
+
+            // Function to update the time estimate display
+            const updateTimeEstimate = (trend) => {
+                const timeEstimateElement = document.getElementById('time-estimate-value');
+                const remainingAmountElement = document.getElementById('remaining-amount');
+                const remainingAmount = nextMilestone - currentBalance;
+                
+                if (timeEstimateElement) {
+                    timeEstimateElement.textContent = calculateTimeEstimate(trend);
+                }
+                if (remainingAmountElement) {
+                    remainingAmountElement.textContent = trend > 0 ? 
+                        `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(remainingAmount)} more` : '';
+                }
+            };
+            
             // Fetch PELT analysis data for trend calculation
             fetch('/api/pelt-analysis')
                 .then(response => response.json())
                 .then(peltData => {
                     // Get the most recent rate of change
-                    let trend = 0;
+                    let defaultTrend = 0;
                     if (peltData && peltData.rateOfChange && peltData.rateOfChange.data) {
                         const rateData = peltData.rateOfChange.data;
                         // Get the last non-null value from the rate of change data
                         for (let i = rateData.length - 1; i >= 0; i--) {
                             if (rateData[i] !== null) {
-                                trend = rateData[i];
+                                defaultTrend = rateData[i];
                                 break;
                             }
                         }
                     }
-
-                    // Calculate weeks to next milestone using weekly rate of change
-                    const remainingAmount = nextMilestone - currentBalance;
-                    const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
-                    
-                    // Convert weeks to months and years for display
-                    const totalMonths = Math.ceil(weeksToMilestone / 4.33); // Average weeks per month
-                    const years = Math.floor(totalMonths / 12);
-                    const months = totalMonths % 12;
-
-                    // Format the time estimate text
-                    const getTimeEstimateText = () => {
-                        if (trend <= 0) {
-                            return 'Trend is negative';
-                        }
-                        if (totalMonths > 36) {
-                            return 'Over 3 years';
-                        }
-                        if (years === 0) {
-                            return `${months} month${months !== 1 ? 's' : ''}`;
-                        }
-                        if (months === 0) {
-                            return `${years} year${years !== 1 ? 's' : ''}`;
-                        }
-                        return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
-                    };
 
                     // Create the milestone visualization
                     const milestoneInfo = document.createElement('div');
@@ -2369,6 +2383,42 @@
                                 background: #fee2e2;
                                 color: #991b1b;
                             }
+                            .rate-input-container {
+                                display: flex;
+                                align-items: center;
+                                gap: 10px;
+                                margin-top: 10px;
+                            }
+                            .rate-input {
+                                width: 120px;
+                                padding: 6px 12px;
+                                border: 1px solid #d1d5db;
+                                border-radius: 6px;
+                                font-size: 0.9rem;
+                                text-align: right;
+                            }
+                            .rate-input:focus {
+                                outline: none;
+                                border-color: #4285f4;
+                                box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
+                            }
+                            .rate-unit {
+                                color: #64748b;
+                                font-size: 0.9rem;
+                            }
+                            .reset-button {
+                                background: none;
+                                border: none;
+                                color: #4285f4;
+                                font-size: 0.8rem;
+                                cursor: pointer;
+                                text-decoration: underline;
+                                padding: 0;
+                                margin-left: 10px;
+                            }
+                            .reset-button:hover {
+                                color: #1a73e8;
+                            }
                         </style>
                         <div class="timeline-track">
                             <div class="timeline-progress" style="width: ${progress}%"></div>
@@ -2399,20 +2449,32 @@
                             <div class="stat-card">
                                 <div class="stat-label">Weekly Rate of Change</div>
                                 <div class="stat-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(trend)}
-                                    <span class="trend-indicator ${trend >= 0 ? 'trend-positive' : 'trend-negative'}">
-                                        ${trend >= 0 ? '↗' : '↘'} per week
+                                    <span id="trend-display">
+                                        ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(defaultTrend)}
                                     </span>
+                                    <span class="trend-indicator ${defaultTrend >= 0 ? 'trend-positive' : 'trend-negative'}">
+                                        ${defaultTrend >= 0 ? '↗' : '↘'} per week
+                                    </span>
+                                </div>
+                                <div class="rate-input-container">
+                                    <input type="number" 
+                                           id="weekly-rate-input" 
+                                           class="rate-input" 
+                                           value="${defaultTrend.toFixed(0)}" 
+                                           step="100" 
+                                           placeholder="Enter rate">
+                                    <span class="rate-unit">$/week</span>
+                                    <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
                                 </div>
                                 <div class="small text-muted mt-2">Based on PELT analysis</div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">Estimated Time to Next Milestone</div>
-                                <div class="stat-value">
-                                    ${getTimeEstimateText()}
+                                <div class="stat-value" id="time-estimate-value">
+                                    ${calculateTimeEstimate(defaultTrend)}
                                 </div>
-                                <div class="small text-muted mt-2">
-                                    ${trend > 0 ? `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(remainingAmount)} more` : ''}
+                                <div class="small text-muted mt-2" id="remaining-amount">
+                                    ${defaultTrend > 0 ? `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone - currentBalance)} more` : ''}
                                 </div>
                             </div>
                         </div>
@@ -2433,21 +2495,311 @@
                     
                     // Hide the loading spinner
                     document.getElementById('milestoneChartLoader').classList.add('hidden');
+
+                    // Add event listeners for the interactive elements
+                    const rateInput = document.getElementById('weekly-rate-input');
+                    const resetButton = document.getElementById('reset-rate-btn');
+                    const trendDisplay = document.getElementById('trend-display');
+                    const trendIndicator = trendDisplay.nextElementSibling;
+
+                    if (rateInput) {
+                        rateInput.addEventListener('input', function() {
+                            const newRate = parseFloat(this.value) || 0;
+                            
+                            // Update the display
+                            trendDisplay.textContent = new Intl.NumberFormat('en-US', { 
+                                style: 'currency', 
+                                currency: 'USD', 
+                                maximumFractionDigits: 0 
+                            }).format(newRate);
+                            
+                            // Update trend indicator
+                            trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
+                            trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per week`;
+                            
+                            // Update time estimate
+                            updateTimeEstimate(newRate);
+                        });
+                    }
+
+                    if (resetButton) {
+                        resetButton.addEventListener('click', function() {
+                            rateInput.value = defaultTrend.toFixed(0);
+                            rateInput.dispatchEvent(new Event('input'));
+                        });
+                    }
                 })
                 .catch(error => {
                     console.error('Error fetching PELT analysis:', error);
                     // Fallback to simple trend calculation if PELT analysis fails
-                    let trend = 0;
+                    let defaultTrend = 0;
                     if (balanceData && balanceData.datasets && balanceData.datasets[0]) {
                         const data = balanceData.datasets[0].data;
                         if (data.length >= 2) {
                             const numMonths = Math.min(3, data.length - 1);
                             const recentChange = data[data.length - 1] - data[data.length - 1 - numMonths];
-                            trend = recentChange / numMonths;
+                            defaultTrend = recentChange / numMonths;
                         }
                     }
-                    // Continue with the rest of the visualization...
-                    // (Same code as above, just with the fallback trend calculation)
+                    
+                    // Create the milestone visualization with fallback trend
+                    const milestoneInfo = document.createElement('div');
+                    milestoneInfo.className = 'milestone-timeline-container';
+                    milestoneInfo.innerHTML = `
+                        <style>
+                            .milestone-timeline-container {
+                                padding: 30px 20px;
+                                font-family: 'Inter', sans-serif;
+                            }
+                            .timeline-track {
+                                height: 8px;
+                                background: #eef2f7;
+                                border-radius: 4px;
+                                position: relative;
+                                margin: 40px 0;
+                            }
+                            .timeline-progress {
+                                position: absolute;
+                                left: 0;
+                                top: 0;
+                                height: 100%;
+                                background: linear-gradient(90deg, #4285f4, #5c9fff);
+                                border-radius: 4px;
+                                transition: width 1s ease-in-out;
+                            }
+                            .timeline-marker {
+                                width: 24px;
+                                height: 24px;
+                                background: white;
+                                border: 3px solid #4285f4;
+                                border-radius: 50%;
+                                position: absolute;
+                                top: 50%;
+                                transform: translate(-50%, -50%);
+                                transition: left 1s ease-in-out;
+                                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                            }
+                            .milestone-marker {
+                                position: absolute;
+                                top: -30px;
+                                transform: translateX(-50%);
+                                text-align: center;
+                            }
+                            .milestone-marker::after {
+                                content: '';
+                                position: absolute;
+                                bottom: -10px;
+                                left: 50%;
+                                transform: translateX(-50%);
+                                width: 2px;
+                                height: 8px;
+                                background: #cbd5e1;
+                            }
+                            .milestone-value {
+                                font-weight: 600;
+                                color: #1a73e8;
+                                font-size: 0.9rem;
+                            }
+                            .current-balance {
+                                position: absolute;
+                                top: 25px;
+                                transform: translateX(-50%);
+                                text-align: center;
+                                background: white;
+                                padding: 8px 16px;
+                                border-radius: 20px;
+                                box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+                                border: 1px solid #e1e8f0;
+                            }
+                            .current-balance-value {
+                                font-weight: 700;
+                                color: #1e293b;
+                                font-size: 1.1rem;
+                            }
+                            .milestone-stats {
+                                display: grid;
+                                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                                gap: 20px;
+                                margin-top: 60px;
+                            }
+                            .stat-card {
+                                background: white;
+                                padding: 20px;
+                                border-radius: 12px;
+                                box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                                border: 1px solid #e1e8f0;
+                            }
+                            .stat-label {
+                                color: #64748b;
+                                font-size: 0.9rem;
+                                margin-bottom: 8px;
+                            }
+                            .stat-value {
+                                color: #1e293b;
+                                font-weight: 600;
+                                font-size: 1.1rem;
+                            }
+                            .trend-indicator {
+                                display: inline-flex;
+                                align-items: center;
+                                padding: 4px 12px;
+                                border-radius: 16px;
+                                font-size: 0.9rem;
+                                margin-left: 8px;
+                            }
+                            .trend-positive {
+                                background: #dcfce7;
+                                color: #166534;
+                            }
+                            .trend-negative {
+                                background: #fee2e2;
+                                color: #991b1b;
+                            }
+                            .rate-input-container {
+                                display: flex;
+                                align-items: center;
+                                gap: 10px;
+                                margin-top: 10px;
+                            }
+                            .rate-input {
+                                width: 120px;
+                                padding: 6px 12px;
+                                border: 1px solid #d1d5db;
+                                border-radius: 6px;
+                                font-size: 0.9rem;
+                                text-align: right;
+                            }
+                            .rate-input:focus {
+                                outline: none;
+                                border-color: #4285f4;
+                                box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
+                            }
+                            .rate-unit {
+                                color: #64748b;
+                                font-size: 0.9rem;
+                            }
+                            .reset-button {
+                                background: none;
+                                border: none;
+                                color: #4285f4;
+                                font-size: 0.8rem;
+                                cursor: pointer;
+                                text-decoration: underline;
+                                padding: 0;
+                                margin-left: 10px;
+                            }
+                            .reset-button:hover {
+                                color: #1a73e8;
+                            }
+                        </style>
+                        <div class="timeline-track">
+                            <div class="timeline-progress" style="width: ${progress}%"></div>
+                            <div class="timeline-marker" style="left: ${progress}%">
+                                <div class="current-balance">
+                                    <div class="current-balance-value">
+                                        ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentBalance)}
+                                    </div>
+                                    <div style="font-size: 0.8rem; color: #64748b;">Current Balance</div>
+                                </div>
+                            </div>
+                            <div class="milestone-marker" style="left: 0%">
+                                <div class="milestone-value">
+                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(previousMilestone)}
+                                </div>
+                            </div>
+                            <div class="milestone-marker" style="left: 100%">
+                                <div class="milestone-value">
+                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone)}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="milestone-stats">
+                            <div class="stat-card">
+                                <div class="stat-label">Progress to Next Milestone</div>
+                                <div class="stat-value">${progress.toFixed(1)}%</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Weekly Rate of Change</div>
+                                <div class="stat-value">
+                                    <span id="trend-display">
+                                        ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(defaultTrend)}
+                                    </span>
+                                    <span class="trend-indicator ${defaultTrend >= 0 ? 'trend-positive' : 'trend-negative'}">
+                                        ${defaultTrend >= 0 ? '↗' : '↘'} per week
+                                    </span>
+                                </div>
+                                <div class="rate-input-container">
+                                    <input type="number" 
+                                           id="weekly-rate-input" 
+                                           class="rate-input" 
+                                           value="${defaultTrend.toFixed(0)}" 
+                                           step="100" 
+                                           placeholder="Enter rate">
+                                    <span class="rate-unit">$/week</span>
+                                    <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
+                                </div>
+                                <div class="small text-muted mt-2">Based on fallback calculation</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Estimated Time to Next Milestone</div>
+                                <div class="stat-value" id="time-estimate-value">
+                                    ${calculateTimeEstimate(defaultTrend)}
+                                </div>
+                                <div class="small text-muted mt-2" id="remaining-amount">
+                                    ${defaultTrend > 0 ? `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone - currentBalance)} more` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Remove any existing milestone info
+                    const existingInfo = document.querySelector('#milestoneChart').parentNode.querySelector('.milestone-timeline-container');
+                    if (existingInfo) {
+                        existingInfo.remove();
+                    }
+                    
+                    // Remove the canvas since we're not using Chart.js anymore
+                    const canvas = document.getElementById('milestoneChart');
+                    canvas.remove();
+                    
+                    // Add the new timeline visualization
+                    document.getElementById('milestoneChartLoader').insertAdjacentElement('afterend', milestoneInfo);
+                    
+                    // Hide the loading spinner
+                    document.getElementById('milestoneChartLoader').classList.add('hidden');
+
+                    // Add event listeners for the interactive elements
+                    const rateInput = document.getElementById('weekly-rate-input');
+                    const resetButton = document.getElementById('reset-rate-btn');
+                    const trendDisplay = document.getElementById('trend-display');
+                    const trendIndicator = trendDisplay.nextElementSibling;
+
+                    if (rateInput) {
+                        rateInput.addEventListener('input', function() {
+                            const newRate = parseFloat(this.value) || 0;
+                            
+                            // Update the display
+                            trendDisplay.textContent = new Intl.NumberFormat('en-US', { 
+                                style: 'currency', 
+                                currency: 'USD', 
+                                maximumFractionDigits: 0 
+                            }).format(newRate);
+                            
+                            // Update trend indicator
+                            trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
+                            trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per week`;
+                            
+                            // Update time estimate
+                            updateTimeEstimate(newRate);
+                        });
+                    }
+
+                    if (resetButton) {
+                        resetButton.addEventListener('click', function() {
+                            rateInput.value = defaultTrend.toFixed(0);
+                            rateInput.dispatchEvent(new Event('input'));
+                        });
+                    }
                 });
         }
 
