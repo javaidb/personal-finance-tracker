@@ -142,6 +142,19 @@
         .month-spacer {
             width: 8px;
         }
+        .month-labels {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 5px;
+        }
+        .month-letter {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #6c757d;
+            width: 12px;
+            text-align: center;
+        }
         .coverage-legend {
             display: flex;
             gap: 20px;
@@ -226,6 +239,26 @@
                                             {{ account_name }}
                                         </div>
                                         <div class="account-coverage">
+                                            <div class="month-labels">
+                                                <div class="year-label"></div>
+                                                <div class="month-circles">
+                                                    <span class="month-letter">J</span>
+                                                    <span class="month-letter">F</span>
+                                                    <span class="month-letter">M</span>
+                                                    <span class="month-spacer"></span>
+                                                    <span class="month-letter">A</span>
+                                                    <span class="month-letter">M</span>
+                                                    <span class="month-letter">J</span>
+                                                    <span class="month-spacer"></span>
+                                                    <span class="month-letter">J</span>
+                                                    <span class="month-letter">A</span>
+                                                    <span class="month-letter">S</span>
+                                                    <span class="month-spacer"></span>
+                                                    <span class="month-letter">O</span>
+                                                    <span class="month-letter">N</span>
+                                                    <span class="month-letter">D</span>
+                                                </div>
+                                            </div>
                                             {% for year, months in account_data.monthly_coverage.items() %}
                                             <div class="year-coverage">
                                                 <div class="year-label">{{ year }}</div>
