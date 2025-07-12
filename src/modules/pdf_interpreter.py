@@ -901,8 +901,9 @@ class PDFReader(GeneralHelperFns):
         """
         Apply manual categories from manual_categories.json to the DataFrame.
         For each entry:
-          - If index is not null, update that row's Classification.
-          - If index is null, find row(s) matching datetime and amount, and update Classification.
+          - If index is not null, try to match by datetime and amount first
+          - If no match found by datetime/amount, fall back to index if provided
+          - If index is null, find row(s) matching datetime and amount
         """
         import json
         import os
@@ -918,18 +919,33 @@ class PDFReader(GeneralHelperFns):
         if not isinstance(manual_cats, list):
             print("manual_categories.json is not a list; skipping manual category application.")
             return df
+
+        # Convert DateTime column to datetime if it's not already
+        if not pd.api.types.is_datetime64_any_dtype(df['DateTime']):
+            df['DateTime'] = pd.to_datetime(df['DateTime'])
+
         for entry in manual_cats:
             dt = entry.get('datetime')
             amt = entry.get('amount')
             cat = entry.get('category')
             idx = entry.get('index')
-            if idx is not None and idx in df.index:
+
+            # Convert entry datetime to datetime object
+            entry_dt = pd.to_datetime(dt)
+
+            # Try to match by datetime and amount first
+            mask = (df['DateTime'] == entry_dt) & (df['Amount'] == amt)
+            
+            if mask.any():
+                # If we found matches by datetime and amount, use those
+                df.loc[mask, 'Classification'] = cat
+            elif idx is not None and idx in df.index:
+                # Fall back to index matching if datetime/amount match failed
                 df.at[idx, 'Classification'] = cat
             else:
-                # Try to match by DateTime and Amount
-                mask = (df['DateTime'].astype(str) == str(dt)) & (df['Amount'] == amt)
-                if mask.any():
-                    df.loc[mask, 'Classification'] = cat
+                # If no match found at all, print a warning
+                print(f"Warning: Could not find match for manual category entry: {entry}")
+
         return df
 
     def df_postprocessing(self, df_in):
@@ -980,7 +996,13 @@ class PDFReader(GeneralHelperFns):
                 'transfer to',
                 'transfer from',
                 'mb-credit card/loc pay',
-                'credit card payment'
+                'credit card payment',
+                'from -',  # New pattern for transfers starting with "FROM -"
+                'mb credit card/loc pay. from',  # New pattern for credit card payments
+                'mb credit card/loc pay from',  # Alternative format
+                'mb credit card payment from',  # Another alternative format
+                'mb credit card payment to',  # Outgoing credit card payment
+                'mb credit card/loc pay to'  # Another outgoing format
             ]
             
             return any(indicator in details_lower for indicator in transfer_indicators)
