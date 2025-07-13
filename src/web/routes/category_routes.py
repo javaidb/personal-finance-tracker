@@ -3,6 +3,7 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
+from config.paths import DATABANK_PATH, CATEGORY_COLORS_PATH
 
 category_bp = Blueprint('category_bp', __name__, url_prefix='/api')
 
@@ -11,8 +12,8 @@ class CategoryService:
         if base_path is None:
             base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
         self.base_path = base_path
-        self.databank_path = os.path.join(base_path, 'cached_data', 'databank.json')
-        self.category_colors_path = os.path.join(base_path, 'cached_data', 'category_colors.json')
+        self.databank_path = DATABANK_PATH
+        self.category_colors_path = CATEGORY_COLORS_PATH
         self.load_databank()
 
     def load_databank(self):
@@ -39,7 +40,7 @@ class CategoryService:
                     # If category_colors.json doesn't exist, use minimal default categories
                     self.databank = {
                         "categories": {
-                            "Uncategorized": {"totalMatches": 0, "patterns": []}
+                            "uncategorized": {"totalMatches": 0, "patterns": []}
                         }
                     }
                 self.save_databank()

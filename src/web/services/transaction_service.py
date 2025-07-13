@@ -10,6 +10,7 @@ import json
 import os
 import re
 from ..constants.categories import CATEGORY_COLORS, get_category_color
+from config.paths import DATABANK_PATH, CATEGORY_COLORS_PATH
 
 class TransactionService:
     """Service class for handling transaction-related operations."""
@@ -19,7 +20,7 @@ class TransactionService:
         self.pdf_reader = PDFReader(base_path=base_path)
         self.helper = GeneralHelperFns()
         self.processed_df = None
-        self.databank_path = os.path.join(base_path, "cached_data", "databank.json")
+        self.databank_path = DATABANK_PATH
         self.manual_categorizer = ManualTransactionCategorizer(base_path=base_path)
         self.load_categories()
 
@@ -33,9 +34,8 @@ class TransactionService:
                     self.category_patterns = databank.get('categories', {})
             else:
                 # On first run, load categories from category_colors.json
-                category_colors_path = os.path.join(self.base_path, 'cached_data', 'category_colors.json')
-                if os.path.exists(category_colors_path):
-                    with open(category_colors_path, 'r') as f:
+                if os.path.exists(CATEGORY_COLORS_PATH):
+                    with open(CATEGORY_COLORS_PATH, 'r') as f:
                         category_colors = json.load(f)
                         self.categories = list(category_colors.keys())
                         self.category_patterns = {
@@ -48,9 +48,9 @@ class TransactionService:
                         }
                 else:
                     # If category_colors.json doesn't exist, use minimal default
-                    self.categories = ["Uncategorized"]
+                    self.categories = ["uncategorized"]
                     self.category_patterns = {
-                        "Uncategorized": {
+                        "uncategorized": {
                             'patterns': [],
                             'color': '#607D8B',
                             'totalMatches': 0
@@ -74,7 +74,7 @@ class TransactionService:
                 return manual_category
 
         if not description or not self.category_patterns:
-            return 'Uncategorized'
+            return 'uncategorized'
         
         description = description.lower()
         best_match = None
@@ -92,7 +92,7 @@ class TransactionService:
                     highest_match_count = match_count
                     best_match = category
         
-        return best_match if best_match else 'Uncategorized'
+        return best_match if best_match else 'uncategorized'
 
     def set_manual_category(self, transaction_id: str, category: str) -> bool:
         """Set a manual category for a specific transaction."""
@@ -191,10 +191,10 @@ class TransactionService:
                 self.processed_df.set_index('id', inplace=True)
             # Apply automatic categorization only to uncategorized transactions
             if self.processed_df is not None and not self.processed_df.empty:
-                # Fill NaN classifications with 'Uncategorized'
-                self.processed_df['Classification'] = self.processed_df['Classification'].fillna('Uncategorized')
+                # Fill NaN classifications with 'uncategorized'
+                self.processed_df['Classification'] = self.processed_df['Classification'].fillna('uncategorized')
                 # Only apply categorization to uncategorized transactions
-                uncategorized_mask = self.processed_df['Classification'] == 'Uncategorized'
+                uncategorized_mask = self.processed_df['Classification'] == 'uncategorized'
                 self.processed_df.loc[uncategorized_mask, 'Classification'] = \
                     self.processed_df.loc[uncategorized_mask, 'Details'].apply(self.categorize_transaction)
             return True if self.processed_df is not None and not self.processed_df.empty else False
@@ -303,9 +303,9 @@ class TransactionService:
             }
         
         try:
-            # Fill NaN values in Classification with 'Uncategorized'
+            # Fill NaN values in Classification with 'uncategorized'
             df = self.processed_df.copy()
-            df['Classification'] = df['Classification'].fillna('Uncategorized')
+            df['Classification'] = df['Classification'].fillna('uncategorized')
             
             # Count transactions by category
             category_counts = df['Classification'].value_counts().to_dict()
@@ -778,7 +778,7 @@ class TransactionService:
                     return current_category
                 
                 if pd.isna(details):
-                    return 'Uncategorized'
+                    return 'uncategorized'
                 
                 # Process details similar to __process_transaction_details
                 concat_details = f"{details} {transaction_type}"
@@ -791,11 +791,11 @@ class TransactionService:
                 if category != "uncategorized":
                     return category
                 
-                # If no merchant match and already has a non-Uncategorized category, preserve it
-                if current_category != 'Uncategorized':
+                # If no merchant match and already has a non-uncategorized category, preserve it
+                if current_category != 'uncategorized':
                     return current_category
                 
-                return 'Uncategorized'
+                return 'uncategorized'
             
             # Apply categorization
             df['Classification'] = df.apply(categorize_transaction, axis=1)

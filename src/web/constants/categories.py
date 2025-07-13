@@ -10,11 +10,12 @@ from pathlib import Path
 from typing import Dict, Optional
 
 # Path to store category colors
-CATEGORY_COLORS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'cached_data', 'category_colors.json')
+from config.paths import CATEGORY_COLORS_PATH
+CATEGORY_COLORS_FILE = CATEGORY_COLORS_PATH
 
 # Minimal default color mapping for categories (only used if category_colors.json doesn't exist)
 DEFAULT_CATEGORY_COLORS = {
-    'Uncategorized': '#607D8B'  # Blue Grey
+    'uncategorized': '#607D8B'  # Blue Grey
 }
 
 def load_category_colors() -> Dict[str, str]:

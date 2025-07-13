@@ -814,7 +814,7 @@
             merchantList.forEach(merchant => {
                 const categoryColor = getCategoryColor(merchant.category);
                 const merchantName = merchant.name || merchant;
-                const merchantCategory = merchant.category || 'Uncategorized';
+                const merchantCategory = merchant.category || 'uncategorized';
                 
                 tableHTML += `
                     <tr>
@@ -995,7 +995,7 @@
                 return;
             }
 
-            if (!confirm(`Are you sure you want to delete the category "${name}"? All merchants in this category will be moved to "Uncategorized".`)) {
+                            if (!confirm(`Are you sure you want to delete the category "${name}"? All merchants in this category will be moved to "uncategorized".`)) {
                 return;
             }
 

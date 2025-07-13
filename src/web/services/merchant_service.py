@@ -5,6 +5,7 @@ from typing import Dict, List, Any
 from src.modules.merchant_categorizer import MerchantCategorizer
 import logging
 from datetime import datetime
+from config.paths import DATABANK_PATH, UNCATEGORIZED_MERCHANTS_PATH, CATEGORY_COLORS_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,9 @@ class MerchantService:
     def __init__(self, base_path: Path):
         self.base_path = base_path
         self.merchant_categorizer = MerchantCategorizer(base_path=base_path)
-        self.databank_path = os.path.join(base_path, 'cached_data', 'databank.json')
-        self.review_path = os.path.join(base_path, 'cached_data', 'uncategorized_merchants.json')
-        self.category_colors_path = os.path.join(base_path, 'cached_data', 'category_colors.json')
+        self.databank_path = DATABANK_PATH
+        self.review_path = UNCATEGORIZED_MERCHANTS_PATH
+        self.category_colors_path = CATEGORY_COLORS_PATH
         self.load_databank()
 
     def load_databank(self):
@@ -43,7 +44,7 @@ class MerchantService:
                     # If category_colors.json doesn't exist, use minimal default categories
                     self.databank = {
                         "categories": {
-                            "Uncategorized": {"totalMatches": 0, "patterns": []}
+                            "uncategorized": {"totalMatches": 0, "patterns": []}
                         }
                     }
                 self.save_databank()
@@ -147,7 +148,7 @@ class MerchantService:
         except Exception as e:
             logger.error(f"Error loading categories: {str(e)}", exc_info=True)
             return ["Groceries", "Dining", "Transport", "Shopping", "Bills", 
-                    "Entertainment", "Uncategorized"]
+                    "Entertainment", "uncategorized"]
 
     def get_merchant_stats(self) -> Dict[str, int]:
         """Get merchant and alias counts."""
@@ -365,15 +366,15 @@ class MerchantService:
             del self.databank['categories'][category_actual_name]
             self.save_databank()
             
-            # Update all merchants with this category to "Uncategorized"
+            # Update all merchants with this category to "uncategorized"
             success = True
             for merchant_name in affected_merchants:
-                if not self.merchant_categorizer.add_merchant(merchant_name, "Uncategorized"):
-                    logger.error(f"Failed to update merchant {merchant_name} to Uncategorized")
+                if not self.merchant_categorizer.add_merchant(merchant_name, "uncategorized"):
+                    logger.error(f"Failed to update merchant {merchant_name} to uncategorized")
                     success = False
             
             if not success:
-                logger.warning("Some merchants could not be updated to Uncategorized")
+                logger.warning("Some merchants could not be updated to uncategorized")
             
             return True
         except Exception as e:
@@ -387,15 +388,15 @@ class MerchantService:
             category, _ = self.merchant_categorizer.categorize_transaction(processed_details)
             
             # If merchant categorization found something, use it
-            if category != "Uncategorized":
+            if category != "uncategorized":
                 return category
             
-            # If no merchant match and already has a non-Uncategorized category, preserve it
-            current_category = processed_details.get('category', 'Uncategorized')
-            if current_category != 'Uncategorized':
+            # If no merchant match and already has a non-uncategorized category, preserve it
+            current_category = processed_details.get('category', 'uncategorized')
+            if current_category != 'uncategorized':
                 return current_category
             
-            return 'Uncategorized'
+            return 'uncategorized'
         except Exception as e:
             logger.error(f"Error categorizing transaction: {str(e)}", exc_info=True)
-            return 'Uncategorized' 
+            return 'uncategorized' 
