@@ -3,7 +3,7 @@ import re
 import json
 from datetime import datetime
 from pathlib import Path
-from config.paths import MERCHANT_DB_PATH, MERCHANT_ALIASES_PATH, MANUAL_CATEGORIES_PATH, paths
+from src.config.paths import MERCHANT_DB_PATH, MERCHANT_ALIASES_PATH, MANUAL_CATEGORIES_PATH, paths
 
 class MerchantCategorizer:
     """

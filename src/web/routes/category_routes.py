@@ -3,7 +3,7 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
-from config.paths import DATABANK_PATH, CATEGORY_COLORS_PATH
+from src.config.paths import DATABANK_PATH, CATEGORY_COLORS_PATH
 
 category_bp = Blueprint('category_bp', __name__, url_prefix='/api')
 

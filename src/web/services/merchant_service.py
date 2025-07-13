@@ -5,7 +5,7 @@ from typing import Dict, List, Any
 from src.modules.merchant_categorizer import MerchantCategorizer
 import logging
 from datetime import datetime
-from config.paths import DATABANK_PATH, UNCATEGORIZED_MERCHANTS_PATH, CATEGORY_COLORS_PATH
+from src.config.paths import DATABANK_PATH, UNCATEGORIZED_MERCHANTS_PATH, CATEGORY_COLORS_PATH
 
 logger = logging.getLogger(__name__)
 

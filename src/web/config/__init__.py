@@ -16,8 +16,8 @@ class Config:
     def init_app(self):
         """Initialize application configuration."""
         # Common configuration settings
-        from config.paths import get_bank_statements_dir, get_cached_data_dir, get_logs_dir, get_uploads_dir
-        from config.paths import DATABANK_PATH, MERCHANT_DB_PATH, UNCATEGORIZED_MERCHANTS_PATH
+        from src.config.paths import get_bank_statements_dir, get_cached_data_dir, get_logs_dir, get_uploads_dir
+        from src.config.paths import DATABANK_PATH, MERCHANT_DB_PATH, UNCATEGORIZED_MERCHANTS_PATH
         
         self.STATEMENTS_DIR = get_bank_statements_dir()
         self.CACHED_DATA_DIR = get_cached_data_dir()

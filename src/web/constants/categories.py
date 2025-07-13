@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 # Path to store category colors
-from config.paths import CATEGORY_COLORS_PATH
+from src.config.paths import CATEGORY_COLORS_PATH
 CATEGORY_COLORS_FILE = CATEGORY_COLORS_PATH
 
 # Minimal default color mapping for categories (only used if category_colors.json doesn't exist)
