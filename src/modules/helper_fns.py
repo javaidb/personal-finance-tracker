@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 from plotly.colors import qualitative
+from config.paths import DATABANK_PATH
 
 # from scipy.ndimage import gaussian_filter1d
 class GeneralHelperFns:
@@ -23,7 +24,7 @@ class GeneralHelperFns:
         if base_path is None:
             base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.base_path = base_path
-        self.databank_path = os.path.join(base_path, "cached_data", "databank.json")
+        self.databank_path = DATABANK_PATH
 
     def __extract_month(self, input_string):
         months = '|'.join(f'.*{m}.*' for m in calendar.month_abbr[1:])

@@ -22,6 +22,16 @@ except ImportError:
     config = types.SimpleNamespace()
     config.rent_ranges = []
 
+from config.paths import (
+    DATABANK_PATH, 
+    UNCATEGORIZED_MERCHANTS_PATH, 
+    DINING_KEYWORDS_PATH, 
+    SHOPPING_KEYWORDS_PATH,
+    MANUAL_CATEGORIES_PATH,
+    CATEGORY_COLORS_PATH,
+    paths
+)
+
 class PDFReader(GeneralHelperFns):
 
     def __init__(self, base_path=None):
@@ -29,11 +39,11 @@ class PDFReader(GeneralHelperFns):
             base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         super().__init__(base_path=base_path)
         self.base_path = base_path
-        self.databank_path = os.path.join(base_path, "cached_data", "databank.json")
-        self.uncategorized_path = os.path.join(base_path, "cached_data", "uncategorized_merchants.json")
+        self.databank_path = DATABANK_PATH
+        self.uncategorized_path = UNCATEGORIZED_MERCHANTS_PATH
         
         # Create cached_data directory if it doesn't exist
-        os.makedirs(os.path.join(base_path, "cached_data"), exist_ok=True)
+        paths.ensure_cached_data_exists()
         self.cached_pdfs_count = 0  # Track number of cached PDFs
         self.df_raw = self.generate_fin_df()
 
@@ -291,8 +301,7 @@ class PDFReader(GeneralHelperFns):
             
     def __get_cache_path(self, pdf_hash, metadata=None):
         """Get the path to the cached data for a PDF"""
-        cache_dir = os.path.join(self.base_path, "cached_data", "pdf_cache")
-        os.makedirs(cache_dir, exist_ok=True)
+        cache_dir = paths.ensure_pdf_cache_exists()
         
         if metadata:
             # Create a descriptive filename using metadata
@@ -350,7 +359,7 @@ class PDFReader(GeneralHelperFns):
         """Clear all cached PDF data"""
         try:
             # Clear the PDF cache directory
-            cache_dir = os.path.join(self.base_path, "cached_data", "pdf_cache")
+            cache_dir = paths.pdf_cache
             if os.path.exists(cache_dir):
                 # Get list of cached files before deleting
                 cached_files = [f for f in os.listdir(cache_dir) if f.endswith('.json')]
@@ -390,7 +399,7 @@ class PDFReader(GeneralHelperFns):
 
     def get_cache_info(self):
         """Get information about cached PDFs"""
-        cache_dir = os.path.join(self.base_path, "cached_data", "pdf_cache")
+        cache_dir = paths.pdf_cache
         if not os.path.exists(cache_dir):
             return {"cached_pdfs_count": 0, "cache_size_kb": 0}
         
@@ -907,7 +916,7 @@ class PDFReader(GeneralHelperFns):
         """
         import json
         import os
-        manual_path = os.path.join(self.base_path, "cached_data", "manual_categories.json")
+        manual_path = MANUAL_CATEGORIES_PATH
         if not os.path.exists(manual_path):
             return df
         try:
@@ -1185,12 +1194,12 @@ class PDFReader(GeneralHelperFns):
 
     def import_json(self):
         if hasattr(self, 'base_path') and self.base_path:
-            json_file_path = os.path.join(self.base_path, "cached_data", "databank.json")
-            category_colors_path = os.path.join(self.base_path, "cached_data", "category_colors.json")
+            json_file_path = DATABANK_PATH
+            category_colors_path = CATEGORY_COLORS_PATH
         else:
             # Use os.path.join for OS-independence
-            json_file_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'databank.json')
-            category_colors_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'category_colors.json')
+            json_file_path = DATABANK_PATH
+            category_colors_path = CATEGORY_COLORS_PATH
         
         # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(json_file_path), exist_ok=True)
@@ -1213,10 +1222,10 @@ class PDFReader(GeneralHelperFns):
                 # If category_colors.json doesn't exist, use minimal default
                 default_categories = {
                     "categories": {
-                        "Uncategorized": {
-                            "totalMatches": 0,
-                            "patterns": []
-                        }
+                                        "uncategorized": {
+                    "totalMatches": 0,
+                    "patterns": []
+                }
                     }
                 }
             with open(json_file_path, 'w') as json_file:
@@ -1228,10 +1237,10 @@ class PDFReader(GeneralHelperFns):
 
     def export_json(self, updated_json, print_statement=False):
         if hasattr(self, 'base_path') and self.base_path:
-            json_file_path = os.path.join(self.base_path, "cached_data", "databank.json")
+            json_file_path = DATABANK_PATH
         else:
             # Use os.path.join for OS-independence
-            json_file_path = os.path.join(os.path.dirname(__file__), '..', '..', 'cached_data', 'databank.json')
+            json_file_path = DATABANK_PATH
         
         # Ensure the directory exists
         os.makedirs(os.path.dirname(json_file_path), exist_ok=True)
@@ -1332,7 +1341,7 @@ class PDFReader(GeneralHelperFns):
         print("Categorizing dining transactions...")
         
         # Path to dining keywords file
-        dining_keywords_path = os.path.join(self.base_path, "cached_data", "dining_keywords.json")
+        dining_keywords_path = DINING_KEYWORDS_PATH
         
         # Create default dining keywords if file doesn't exist
         if not os.path.exists(dining_keywords_path):
@@ -1526,7 +1535,7 @@ class PDFReader(GeneralHelperFns):
         print("Categorizing shopping transactions...")
         
         # Path to shopping keywords file
-        shopping_keywords_path = os.path.join(self.base_path, "cached_data", "shopping_keywords.json")
+        shopping_keywords_path = SHOPPING_KEYWORDS_PATH
         
         # Create default shopping keywords if file doesn't exist
         if not os.path.exists(shopping_keywords_path):

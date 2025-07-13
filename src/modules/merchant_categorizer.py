@@ -3,6 +3,7 @@ import re
 import json
 from datetime import datetime
 from pathlib import Path
+from config.paths import MERCHANT_DB_PATH, MERCHANT_ALIASES_PATH, MANUAL_CATEGORIES_PATH, paths
 
 class MerchantCategorizer:
     """
@@ -15,11 +16,11 @@ class MerchantCategorizer:
         if base_path is None:
             base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.base_path = base_path
-        self.merchant_db_path = os.path.join(base_path, "cached_data", "merchant_db.json")
-        self.alias_db_path = os.path.join(base_path, "cached_data", "merchant_aliases.json")
+        self.merchant_db_path = MERCHANT_DB_PATH
+        self.alias_db_path = MERCHANT_ALIASES_PATH
         
         # Create cached_data directory if it doesn't exist
-        os.makedirs(os.path.join(base_path, "cached_data"), exist_ok=True)
+        paths.ensure_cached_data_exists()
         
         # Load or create merchant database
         self.merchant_db = self.load_merchant_db()
@@ -344,10 +345,10 @@ class ManualTransactionCategorizer:
         if base_path is None:
             base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.base_path = base_path
-        self.manual_categories_path = os.path.join(base_path, "cached_data", "manual_categories.json")
+        self.manual_categories_path = MANUAL_CATEGORIES_PATH
         
         # Create cached_data directory if it doesn't exist
-        os.makedirs(os.path.join(base_path, "cached_data"), exist_ok=True)
+        paths.ensure_cached_data_exists()
         
         # Load or create manual categories database
         self.manual_categories = self.load_manual_categories()

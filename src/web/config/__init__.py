@@ -16,15 +16,18 @@ class Config:
     def init_app(self):
         """Initialize application configuration."""
         # Common configuration settings
-        self.STATEMENTS_DIR = os.path.join(self.root_dir, 'bank_statements')
-        self.CACHED_DATA_DIR = os.path.join(self.root_dir, 'cached_data')
-        self.LOGS_DIR = os.path.join(self.root_dir, 'logs')
-        self.UPLOAD_FOLDER = os.path.join(self.root_dir, 'uploads')
+        from config.paths import get_bank_statements_dir, get_cached_data_dir, get_logs_dir, get_uploads_dir
+        from config.paths import DATABANK_PATH, MERCHANT_DB_PATH, UNCATEGORIZED_MERCHANTS_PATH
+        
+        self.STATEMENTS_DIR = get_bank_statements_dir()
+        self.CACHED_DATA_DIR = get_cached_data_dir()
+        self.LOGS_DIR = get_logs_dir()
+        self.UPLOAD_FOLDER = get_uploads_dir()
         self.ALLOWED_EXTENSIONS = {'pdf'}
         self.MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
-        self.DATABANK_PATH = os.path.join(self.root_dir, 'cached_data', 'databank.json')
-        self.MERCHANT_DB_PATH = os.path.join(self.root_dir, 'cached_data', 'merchant_db.json')
-        self.UNCATEGORIZED_MERCHANTS_PATH = os.path.join(self.root_dir, 'cached_data', 'uncategorized_merchants.json')
+        self.DATABANK_PATH = DATABANK_PATH
+        self.MERCHANT_DB_PATH = MERCHANT_DB_PATH
+        self.UNCATEGORIZED_MERCHANTS_PATH = UNCATEGORIZED_MERCHANTS_PATH
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -43,6 +46,7 @@ class TestingConfig(Config):
         self.TESTING = True
         self.SECRET_KEY = 'test'
         self.TEMPLATES_AUTO_RELOAD = True
+        # Override paths for testing environment
         self.STATEMENTS_DIR = os.path.join(self.root_dir, 'tests', 'test_data', 'bank_statements')
         self.CACHED_DATA_DIR = os.path.join(self.root_dir, 'tests', 'test_data', 'cached_data')
 
