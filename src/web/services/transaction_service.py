@@ -640,7 +640,7 @@ class TransactionService:
             'datasets': datasets
         }
 
-    def get_spending_trends_data(self, start_date: str = None, end_date: str = None, group_range: str = 'month') -> Dict[str, Any]:
+    def get_spending_trends_data(self, start_date: str = None, end_date: str = None, group_range: str = 'month', categories: list = None) -> Dict[str, Any]:
         """Get spending trends data with configurable time and group ranges."""
         if self.processed_df is None:
             return {}
@@ -658,6 +658,10 @@ class TransactionService:
         if end_date:
             end_date = pd.to_datetime(end_date)
             df = df[df['DateTime'] <= end_date]
+        
+        # Filter by categories if provided
+        if categories and len(categories) > 0:
+            df = df[df['Classification'].isin(categories)]
         
         # Determine time grouping based on group_range parameter
         if group_range == 'quarter':
@@ -713,10 +717,26 @@ class TransactionService:
         
 
         
+        # Get available categories for the legend (from original unfiltered data)
+        original_df = self.processed_df.copy()
+        original_df['DateTime'] = pd.to_datetime(original_df['DateTime'])
+        
+        # Apply date filtering to get categories in the date range
+        if start_date:
+            start_date = pd.to_datetime(start_date)
+            original_df = original_df[original_df['DateTime'] >= start_date]
+        
+        if end_date:
+            end_date = pd.to_datetime(end_date)
+            original_df = original_df[original_df['DateTime'] <= end_date]
+        
+        available_categories = sorted(original_df['Classification'].unique().tolist())
+        
         return {
             'labels': time_groups,
             'datasets': [positive_dataset, negative_dataset, net_dataset],
-            'group_range': group_range
+            'group_range': group_range,
+            'available_categories': available_categories
         }
 
     def clear_cache(self) -> bool:
