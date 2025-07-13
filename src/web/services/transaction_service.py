@@ -640,6 +640,85 @@ class TransactionService:
             'datasets': datasets
         }
 
+    def get_spending_trends_data(self, start_date: str = None, end_date: str = None, group_range: str = 'month') -> Dict[str, Any]:
+        """Get spending trends data with configurable time and group ranges."""
+        if self.processed_df is None:
+            return {}
+        
+        df = self.processed_df.copy()
+        
+        # Ensure DateTime is in proper format
+        df['DateTime'] = pd.to_datetime(df['DateTime'])
+        
+        # Filter by date range if provided
+        if start_date:
+            start_date = pd.to_datetime(start_date)
+            df = df[df['DateTime'] >= start_date]
+        
+        if end_date:
+            end_date = pd.to_datetime(end_date)
+            df = df[df['DateTime'] <= end_date]
+        
+        # Determine time grouping based on group_range parameter
+        if group_range == 'quarter':
+            df['TimeGroup'] = df['DateTime'].dt.to_period('Q').astype(str)
+        elif group_range == 'year':
+            df['TimeGroup'] = df['DateTime'].dt.strftime('%Y')
+        else:  # default to month
+            df['TimeGroup'] = df['DateTime'].dt.strftime('%Y-%m')
+        
+        # Sort time groups chronologically
+        time_groups = sorted(df['TimeGroup'].unique())
+        
+        # Initialize datasets for positive and negative flows
+        positive_dataset = {
+            'label': 'Positive Inflow',
+            'data': [],
+            'backgroundColor': 'rgba(40, 167, 69, 0.8)',  # Green
+            'borderColor': 'rgba(40, 167, 69, 1)',
+            'borderWidth': 1,
+            'stack': 'Stack 0'
+        }
+        
+        negative_dataset = {
+            'label': 'Negative Inflow',
+            'data': [],
+            'backgroundColor': 'rgba(220, 53, 69, 0.8)',  # Red
+            'borderColor': 'rgba(220, 53, 69, 1)',
+            'borderWidth': 1,
+            'stack': 'Stack 0'
+        }
+        
+        net_dataset = {
+            'label': 'Net Amount',
+            'data': [],
+            'backgroundColor': 'rgba(13, 110, 253, 0.8)',  # Blue
+            'borderColor': 'rgba(13, 110, 253, 1)',
+            'borderWidth': 1,
+            'stack': 'Stack 1'  # Separate stack for net amount
+        }
+        
+        # Calculate data for each time group
+        for time_group in time_groups:
+            time_df = df[df['TimeGroup'] == time_group]
+            
+            # Calculate positive and negative flows for all groups combined
+            positive_flow = time_df[time_df['Amount'] > 0]['Amount'].sum()
+            negative_flow = time_df[time_df['Amount'] < 0]['Amount'].sum()
+            net_flow = positive_flow + negative_flow  # negative_flow is already negative
+            
+            positive_dataset['data'].append(float(positive_flow))
+            negative_dataset['data'].append(float(negative_flow))
+            net_dataset['data'].append(float(net_flow))
+        
+
+        
+        return {
+            'labels': time_groups,
+            'datasets': [positive_dataset, negative_dataset, net_dataset],
+            'group_range': group_range
+        }
+
     def clear_cache(self) -> bool:
         """Clear the PDF cache."""
         try:
