@@ -541,6 +541,7 @@ def get_spending_trends():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     group_range = request.args.get('group_range', 'month')  # month, quarter, year
+    categories = request.args.getlist('categories')  # Get list of selected categories
     
-    trends_data = service.get_spending_trends_data(start_date, end_date, group_range)
+    trends_data = service.get_spending_trends_data(start_date, end_date, group_range, categories)
     return jsonify(trends_data) 
