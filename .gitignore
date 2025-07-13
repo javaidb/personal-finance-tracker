@@ -1,14 +1,15 @@
 # Personal bank statements + generated info
 cached_data/*
+/bank_statements/sample_bank/*
 # Ignore all .pdf files in sdf/ and its subfolders
 bank_statements/**/*.pdf
+
 # Ignore personal configs
 src/config/config.py
+src/logs/*
+
 # Ignore local test files
 tests/local/
-
-# Ignore placeholder banks
-/bank_statements/sample_bank/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
