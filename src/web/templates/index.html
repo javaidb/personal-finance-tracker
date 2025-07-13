@@ -331,8 +331,9 @@
                             <div class="alert alert-warning">
                                 <h4 class="alert-heading">No Bank Statements Found!</h4>
                                 <p>There are no bank statements in your bank_statements directory. Please add your PDF statements to:</p>
-                                <pre>/bank_statements/[account_type]/[account_name]/</pre>
-                                <p>For example: /bank_statements/Chequing/Ultimate Package/statement_jan_2023.pdf</p>
+                                <pre>/bank_statements/[bank_name]/[account_type]/[account_name]/</pre>
+                                <p>For example: /bank_statements/scotiabank/Chequing/Ultimate Package/statement_jan_2023.pdf</p>
+                                <p><strong>Note:</strong> The bank folder name (e.g., "scotiabank") must match a configuration file in src/config/banks/</p>
                             </div>
                         {% endif %}
                         
