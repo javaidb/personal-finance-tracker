@@ -425,8 +425,11 @@
                                 <canvas id="trendsChart"></canvas>
                             </div>
                             <div class="mt-3 text-center">
-                                <button id="reset-zoom-btn" class="btn btn-outline-secondary btn-sm">
+                                <button id="reset-zoom-btn" class="btn btn-outline-secondary btn-sm me-2">
                                     <i class="bi bi-arrow-clockwise"></i> Reset Zoom
+                                </button>
+                                <button id="reset-categories-btn" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-layers"></i> Reset Category Selection
                                 </button>
                             </div>
                         </div>
@@ -1849,6 +1852,35 @@
                                     const total = dataset.data.reduce((a, b) => Math.abs(a) + Math.abs(b), 0);
                                     return total > 100; // Only show categories with more than $100 total
                                 }
+                            },
+                            onClick: function(e, legendItem, legend) {
+                                // Handle double-click logic
+                                const now = Date.now();
+                                const lastClick = this.lastClickTime || 0;
+                                const doubleClickThreshold = 300; // milliseconds
+                                
+                                if (now - lastClick < doubleClickThreshold) {
+                                    // Double click detected - show only this category
+                                    const clickedIndex = legendItem.datasetIndex;
+                                    const datasets = legend.chart.data.datasets;
+                                    
+                                    // Show only this category
+                                    datasets.forEach((dataset, index) => {
+                                        legend.chart.getDatasetMeta(index).hidden = (index !== clickedIndex);
+                                    });
+                                    
+                                    legend.chart.update();
+                                    this.lastClickTime = 0; // Reset for next interaction
+                                    return false; // Prevent default behavior for double-click
+                                } else {
+                                    // Single click - use default behavior
+                                    this.lastClickTime = now;
+                                    // Execute the default legend click behavior manually
+                                    const meta = legend.chart.getDatasetMeta(legendItem.datasetIndex);
+                                    meta.hidden = !meta.hidden;
+                                    legend.chart.update();
+                                    return false; // Prevent default behavior since we handled it manually
+                                }
                             }
                         },
                         zoom: {
@@ -1922,6 +1954,18 @@
             if (resetZoomBtn) {
                 resetZoomBtn.addEventListener('click', function() {
                     trendsChart.resetZoom();
+                });
+            }
+            
+            // Add reset categories functionality
+            const resetCategoriesBtn = document.getElementById('reset-categories-btn');
+            if (resetCategoriesBtn) {
+                resetCategoriesBtn.addEventListener('click', function() {
+                    // Show all categories
+                    trendsChart.data.datasets.forEach((dataset, index) => {
+                        trendsChart.getDatasetMeta(index).hidden = false;
+                    });
+                    trendsChart.update();
                 });
             }
         }
