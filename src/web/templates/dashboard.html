@@ -146,6 +146,12 @@
             display: inline-block;
             border-radius: 0.25rem;
             font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .category-badge:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .stats-card {
             background-color: #f8f9fa;
@@ -487,26 +493,37 @@
                                             <span class="badge bg-primary ms-3 me-1">Blue</span> Net amount
                                         </small>
                                     </div>
+                                    
+                                    <!-- Category Legend -->
+                                    <div class="mt-3">
+                                        <h6>Categories</h6>
+                                        <small class="text-muted mb-2 d-block">
+                                            Click categories to deselect them and visualize net inflow without those categories
+                                        </small>
+                                        <div id="category-legend" class="d-flex flex-wrap gap-2">
+                                            <!-- Categories will be populated here -->
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         
                         <!-- PELT Trend Analysis -->
                         <div class="col-md-6">
-                            <div class="card">
+                            <div class="card h-100">
                                 <div class="card-header">
                                     <h5>Balance Trend Analysis (PELT Algorithm)</h5>
                                 </div>
-                                <div class="card-body">
+                                <div class="card-body d-flex flex-column">
                                     <p class="text-muted mb-3">
                                         This chart uses the PELT algorithm to detect significant changes in your balance trend. Vertical lines indicate breakpoints between different financial periods.
                                     </p>
-                                    <div class="chart-container">
+                                    <div class="chart-container flex-grow-1" style="height: 300px;">
                                         <canvas id="peltChart"></canvas>
                                     </div>
-                                    <div class="mt-4">
+                                    <div class="mt-4 flex-grow-1 d-flex flex-column">
                                         <h6>Rate of Change Analysis</h6>
-                                        <div class="chart-container">
+                                        <div class="chart-container flex-grow-1" style="height: 250px;">
                                             <canvas id="rateOfChangeChart"></canvas>
                                         </div>
                                         <div class="mt-3">
@@ -1422,10 +1439,18 @@
                 const endDate = document.getElementById('end-date-trends')?.value;
                 const groupRange = document.getElementById('group-range-select')?.value || 'month';
                 
+                // Get selected categories
+                const selectedCategories = getSelectedCategories();
+                
                 const params = new URLSearchParams();
                 if (startDate) params.append('start_date', startDate);
                 if (endDate) params.append('end_date', endDate);
                 params.append('group_range', groupRange);
+                
+                // Add selected categories
+                selectedCategories.forEach(category => {
+                    params.append('categories', category);
+                });
                 
                 const response = await fetch(`/api/spending-trends?${params.toString()}`);
                 if (!response.ok) {
@@ -1433,6 +1458,8 @@
                 }
                 const data = await response.json();
                 renderSpendingTrendsChart(data);
+                
+                renderCategoryLegend(data.available_categories || []);
                 return data;
             } catch (error) {
                 console.error('Error fetching spending trends data:', error);
@@ -2591,6 +2618,52 @@
                     }
                 }
             });
+        }
+        
+        // Category management functions
+        let selectedCategories = new Set(); // Track selected categories
+        let allAvailableCategories = []; // Track all available categories
+        
+        function getSelectedCategories() {
+            return Array.from(selectedCategories);
+        }
+        
+        function renderCategoryLegend(categories) {
+            const legendContainer = document.getElementById('category-legend');
+            if (!legendContainer) return;
+            
+            // Update the list of all available categories
+            allAvailableCategories = [...categories];
+            
+            // If this is the first time loading categories, initialize all as selected
+            if (selectedCategories.size === 0) {
+                categories.forEach(category => selectedCategories.add(category));
+            }
+            
+            legendContainer.innerHTML = '';
+            
+            categories.forEach(category => {
+                const isSelected = selectedCategories.has(category);
+                const badge = document.createElement('span');
+                badge.className = `badge ${isSelected ? 'bg-primary' : 'bg-secondary'} category-badge`;
+                badge.style.cursor = 'pointer';
+                badge.textContent = category;
+                badge.onclick = () => toggleCategory(category, badge);
+                legendContainer.appendChild(badge);
+            });
+        }
+        
+        function toggleCategory(category, badgeElement) {
+            if (selectedCategories.has(category)) {
+                selectedCategories.delete(category);
+                badgeElement.className = 'badge bg-secondary category-badge';
+            } else {
+                selectedCategories.add(category);
+                badgeElement.className = 'badge bg-primary category-badge';
+            }
+            
+            // Refresh the chart with new category selection
+            fetchSpendingTrends();
         }
 
         // Initialize milestone chart
