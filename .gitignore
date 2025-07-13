@@ -4,6 +4,11 @@ cached_data/*
 bank_statements/**/*.pdf
 # Ignore personal configs
 src/config/config.py
+# Ignore local test files
+tests/local/
+
+# Ignore placeholder banks
+/bank_statements/sample_bank/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -137,7 +142,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.venv_word_encoding
+.venv_finance
 
 # Spyder project settings
 .spyderproject
