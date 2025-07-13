@@ -435,28 +435,87 @@
                         </div>
                     </div>
                     
-                    <!-- PELT Trend Analysis -->
-                    <div class="card mt-4">
-                        <div class="card-header">
-                            <h5>Balance Trend Analysis (PELT Algorithm)</h5>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted mb-3">
-                                This chart uses the PELT algorithm to detect significant changes in your balance trend. Vertical lines indicate breakpoints between different financial periods.
-                            </p>
-                            <div class="chart-container">
-                                <canvas id="peltChart"></canvas>
-                            </div>
-                            <div class="mt-4">
-                                <h6>Rate of Change Analysis</h6>
-                                <div class="chart-container">
-                                    <canvas id="rateOfChangeChart"></canvas>
+                    <!-- Side by Side Analysis Section -->
+                    <div class="row mt-4">
+                        <!-- Spending Trends Section -->
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h5>Spending Trends</h5>
                                 </div>
-                                <div class="mt-3">
-                                    <small class="text-muted">
-                                        <span class="badge bg-success me-1">Green</span> Positive rate (increasing balance)
-                                        <span class="badge bg-danger ms-3 me-1">Red</span> Negative rate (decreasing balance)
-                                    </small>
+                                <div class="card-body d-flex flex-column">
+                                    <p class="text-muted mb-3">
+                                        Analyze your cash flow trends with configurable time and grouping options. Green bars show positive inflows, red bars show negative inflows, and blue bars show the net amount.
+                                    </p>
+                                    
+                                    <!-- Controls -->
+                                    <div class="row mb-4">
+                                        <div class="col-md-6">
+                                            <label for="start-date-trends" class="form-label">Start Date</label>
+                                            <input type="month" id="start-date-trends" class="form-control">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="end-date-trends" class="form-label">End Date</label>
+                                            <input type="month" id="end-date-trends" class="form-control">
+                                        </div>
+                                    </div>
+                                    <div class="row mb-4">
+                                        <div class="col-md-8">
+                                            <label for="group-range-select" class="form-label">Group By</label>
+                                            <select id="group-range-select" class="form-select">
+                                                <option value="month">Month</option>
+                                                <option value="quarter">Quarter</option>
+                                                <option value="year">Year</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4 d-flex align-items-end">
+                                            <button id="apply-trends-filter" class="btn btn-primary">Apply</button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="chart-container flex-grow-1" style="height: 600px;">
+                                        <div id="spendingTrendsChartLoader" class="loading-chart">
+                                            <div class="loading-spinner"></div>
+                                        </div>
+                                        <canvas id="spendingTrendsChart"></canvas>
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <small class="text-muted">
+                                            <span class="badge bg-success me-1">Green</span> Positive inflow (income)
+                                            <span class="badge bg-danger ms-3 me-1">Red</span> Negative inflow (expenses)
+                                            <span class="badge bg-primary ms-3 me-1">Blue</span> Net amount
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- PELT Trend Analysis -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Balance Trend Analysis (PELT Algorithm)</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted mb-3">
+                                        This chart uses the PELT algorithm to detect significant changes in your balance trend. Vertical lines indicate breakpoints between different financial periods.
+                                    </p>
+                                    <div class="chart-container">
+                                        <canvas id="peltChart"></canvas>
+                                    </div>
+                                    <div class="mt-4">
+                                        <h6>Rate of Change Analysis</h6>
+                                        <div class="chart-container">
+                                            <canvas id="rateOfChangeChart"></canvas>
+                                        </div>
+                                        <div class="mt-3">
+                                            <small class="text-muted">
+                                                <span class="badge bg-success me-1">Green</span> Positive rate (increasing balance)
+                                                <span class="badge bg-danger ms-3 me-1">Red</span> Negative rate (decreasing balance)
+                                            </small>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -664,6 +723,18 @@
             // Load filter options
             loadFilterOptions();
             
+            // Set default date range for spending trends (empty start date to take entire range, end date to current month)
+            const startDateTrends = document.getElementById('start-date-trends');
+            const endDateTrends = document.getElementById('end-date-trends');
+            if (startDateTrends && endDateTrends) {
+                const now = new Date();
+                
+                // Leave start date empty to take entire range
+                startDateTrends.value = '';
+                // Set end date to current month
+                endDateTrends.value = now.toISOString().slice(0, 7);
+            }
+            
             // Fetch data and populate the dashboard - ensure categories is loaded first
             Promise.all([
                 fetchCategories(),  // Get categories first for color consistency
@@ -671,7 +742,8 @@
                 fetchBalanceData(), // Add milestone chart initialization
                 fetchTransactions(),
                 fetchMonthlyTrends(),
-                fetchPeltAnalysis()
+                fetchPeltAnalysis(),
+                fetchSpendingTrends() // Add spending trends chart
             ])
             .then(() => {
                 if (statusMessage) {
@@ -693,6 +765,14 @@
             if (applyDateFilter) applyDateFilter.addEventListener('click', fetchTransactions);
             const descriptionSearch = document.getElementById('description-search');
             if (descriptionSearch) descriptionSearch.addEventListener('input', debounce(fetchTransactions, 300));
+            
+            // Event listeners for spending trends controls
+            const applyTrendsFilter = document.getElementById('apply-trends-filter');
+            const groupRangeSelect = document.getElementById('group-range-select');
+            if (applyTrendsFilter) applyTrendsFilter.addEventListener('click', fetchSpendingTrends);
+            if (groupRangeSelect) groupRangeSelect.addEventListener('change', fetchSpendingTrends);
+            
+
             const accountTypeFilter = document.getElementById('account-type-filter');
             if (accountTypeFilter) accountTypeFilter.addEventListener('change', fetchTransactions);
             const categoryFilter = document.getElementById('category-filter');
@@ -1332,6 +1412,33 @@
                 return data;
             } catch (error) {
                 console.error('Error fetching PELT analysis data:', error);
+                throw error;
+            }
+        }
+        
+        async function fetchSpendingTrends() {
+            try {
+                const startDate = document.getElementById('start-date-trends')?.value;
+                const endDate = document.getElementById('end-date-trends')?.value;
+                const groupRange = document.getElementById('group-range-select')?.value || 'month';
+                
+                const params = new URLSearchParams();
+                if (startDate) params.append('start_date', startDate);
+                if (endDate) params.append('end_date', endDate);
+                params.append('group_range', groupRange);
+                
+                const response = await fetch(`/api/spending-trends?${params.toString()}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                renderSpendingTrendsChart(data);
+                return data;
+            } catch (error) {
+                console.error('Error fetching spending trends data:', error);
+                // Hide loading spinner on error
+                const loader = document.getElementById('spendingTrendsChartLoader');
+                if (loader) loader.classList.add('hidden');
                 throw error;
             }
         }
@@ -2304,6 +2411,182 @@
                         },
                         legend: {
                             display: false
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderSpendingTrendsChart(data) {
+            const ctx = document.getElementById('spendingTrendsChart').getContext('2d');
+            
+            // Clean up any existing chart
+            const existingChart = Chart.getChart(ctx.canvas);
+            if (existingChart) {
+                existingChart.destroy();
+            }
+            
+            // Hide loading spinner
+            document.getElementById('spendingTrendsChartLoader').classList.add('hidden');
+            
+            // If no data or error, show placeholder
+            if (!data || data.error || !data.datasets || data.datasets.length === 0) {
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['No data available'],
+                        datasets: [{
+                            data: [0],
+                            backgroundColor: '#ccc'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+                return;
+            }
+            
+            // Check if we have any actual data points
+            const hasData = data.datasets.some(dataset => 
+                dataset.data && dataset.data.some(value => value !== 0)
+            );
+            
+            if (!hasData) {
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['No data in selected range'],
+                        datasets: [{
+                            data: [0],
+                            backgroundColor: '#ccc'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+                return;
+            }
+            
+            // Create the chart with stacked bars and net amount bars
+            const chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: data.datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                maxTicksLimit: 12,
+                                autoSkip: true,
+                                maxRotation: 45,
+                                minRotation: 45,
+                                color: '#666',
+                                font: {
+                                    family: 'Inter',
+                                    size: 11
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time Period',
+                                color: '#666',
+                                font: {
+                                    family: 'Inter',
+                                    size: 12
+                                }
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)',
+                                display: true
+                            },
+                            title: {
+                                display: true,
+                                text: 'Amount',
+                                color: '#666',
+                                font: {
+                                    family: 'Inter',
+                                    size: 12
+                                }
+                            },
+                            ticks: {
+                                color: '#666',
+                                font: {
+                                    family: 'Inter',
+                                    size: 11
+                                },
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('en-US', {
+                                        style: 'currency',
+                                        currency: 'USD',
+                                        maximumFractionDigits: 0
+                                    }).format(value);
+                                }
+                            }
+                        },
+
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                            titleFont: {
+                                family: 'Inter',
+                                size: 12
+                            },
+                            bodyFont: {
+                                family: 'Inter',
+                                size: 12
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = context.raw || 0;
+                                    const sign = value >= 0 ? '+' : '';
+                                    return `${label}: ${sign}${new Intl.NumberFormat('en-US', {
+                                        style: 'currency',
+                                        currency: 'USD'
+                                    }).format(value)}`;
+                                }
+                            }
+                        },
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    family: 'Inter',
+                                    size: 12
+                                },
+                                color: '#666',
+                                usePointStyle: true,
+                                pointStyle: 'rect'
+                            }
                         }
                     }
                 }
