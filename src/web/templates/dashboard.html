@@ -2718,6 +2718,18 @@
                                 color: #1e293b;
                                 font-size: 1.1rem;
                             }
+                            .original-balance-indicator {
+                                position: absolute;
+                                top: -15px;
+                                left: 50%;
+                                transform: translateX(-50%);
+                                width: 0;
+                                height: 0;
+                                border-left: 6px solid transparent;
+                                border-right: 6px solid transparent;
+                                border-bottom: 8px solid #ff6b6b;
+                                z-index: 10;
+                            }
                             .milestone-stats {
                                 display: grid;
                                 grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -2876,9 +2888,9 @@
                                     <div class="current-balance-value">
                                         ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentBalance)}
                                     </div>
-                                    <div style="font-size: 0.8rem; color: #64748b;">Current Balance</div>
                                 </div>
                             </div>
+                            <div class="original-balance-indicator" style="left: ${progress}%"></div>
                             <div class="milestone-marker" style="left: 0%">
                                 <div class="milestone-value">
                                     ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(previousMilestone)}
@@ -3262,9 +3274,9 @@
                                     <div class="current-balance-value">
                                         ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentBalance)}
                                     </div>
-                                    <div style="font-size: 0.8rem; color: #64748b;">Current Balance</div>
                                 </div>
                             </div>
+                            <div class="original-balance-indicator" style="left: ${progress}%"></div>
                             <div class="milestone-marker" style="left: 0%">
                                 <div class="milestone-value">
                                     ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(previousMilestone)}
