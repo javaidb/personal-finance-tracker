@@ -5,6 +5,7 @@ from ..services.transaction_service import TransactionService
 from typing import List, Dict, Any
 import logging
 from .api import init_transaction_service
+from ..utils.statement_coverage import get_simple_coverage, get_coverage_summary, format_date_range
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +49,21 @@ def index() -> str:
         except Exception as e:
             logger.error(f"Error getting cache info: {str(e)}")
         
+        # Get statement coverage information
+        coverage_info = {}
+        coverage_summary = {}
+        try:
+            coverage_info = get_simple_coverage(statements_dir)
+            coverage_summary = get_coverage_summary(coverage_info)
+        except Exception as e:
+            logger.error(f"Error getting coverage info: {str(e)}")
+        
         return render_template('index.html',
                              account_types=account_types,
                              statement_counts=statement_counts,
-                             cache_info=cache_info)
+                             cache_info=cache_info,
+                             coverage_info=coverage_info,
+                             coverage_summary=coverage_summary)
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}", exc_info=True)
         return render_template('error.html', message="Failed to load account types")
