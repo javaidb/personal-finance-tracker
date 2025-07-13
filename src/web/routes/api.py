@@ -529,3 +529,18 @@ def remove_manual_category():
             "success": False,
             "error": str(e)
         }), 500 
+
+@api_bp.route('/spending-trends')
+def get_spending_trends():
+    """Get spending trends data with configurable time and group ranges."""
+    service = init_transaction_service()
+    if service is None or service.processed_df is None:
+        return jsonify({"error": "No data has been processed yet"}), 404
+    
+    # Get parameters
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    group_range = request.args.get('group_range', 'month')  # month, quarter, year
+    
+    trends_data = service.get_spending_trends_data(start_date, end_date, group_range)
+    return jsonify(trends_data) 
