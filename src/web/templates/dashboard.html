@@ -7,6 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -414,14 +415,19 @@
 
                 <!-- Trends Section -->
                 <section id="trends" class="mb-5">
-                    <h2>Spending Trends</h2>
+                    <h2>Spending Summary</h2>
                     <div class="card mt-4">
                         <div class="card-header">
-                            <h5>Monthly Spending Trends</h5>
+                            <h5>Monthly Spending Summary</h5>
                         </div>
                         <div class="card-body">
                             <div class="chart-container">
                                 <canvas id="trendsChart"></canvas>
+                            </div>
+                            <div class="mt-3 text-center">
+                                <button id="reset-zoom-btn" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-arrow-clockwise"></i> Reset Zoom
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1811,7 +1817,7 @@
             }
             
             // Create chart with improved options
-            new Chart(ctx, {
+            const trendsChart = new Chart(ctx, {
                 type: 'bar',
                 data: data,
                 options: {
@@ -1842,6 +1848,28 @@
                                     const dataset = data.datasets[legendItem.datasetIndex];
                                     const total = dataset.data.reduce((a, b) => Math.abs(a) + Math.abs(b), 0);
                                     return total > 100; // Only show categories with more than $100 total
+                                }
+                            }
+                        },
+                        zoom: {
+                            pan: {
+                                enabled: true,
+                                mode: 'x'
+                            },
+                            zoom: {
+                                wheel: {
+                                    enabled: true,
+                                },
+                                pinch: {
+                                    enabled: true
+                                },
+                                mode: 'x',
+                                drag: {
+                                    enabled: true,
+                                    backgroundColor: 'rgba(0,0,0,0.1)',
+                                    borderColor: 'rgba(0,0,0,0.3)',
+                                    borderWidth: 1,
+                                    threshold: 10
                                 }
                             }
                         }
@@ -1889,6 +1917,13 @@
                     }
                 }
             });
+            // Add reset zoom functionality
+            const resetZoomBtn = document.getElementById('reset-zoom-btn');
+            if (resetZoomBtn) {
+                resetZoomBtn.addEventListener('click', function() {
+                    trendsChart.resetZoom();
+                });
+            }
         }
         
         async function fetchMonthlyTrends() {
