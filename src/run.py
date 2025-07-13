@@ -11,4 +11,7 @@ from src.web import create_app
 app = create_app('development')
 
 if __name__ == '__main__':
+    print("Registered routes:")
+    for rule in app.url_map.iter_rules():
+        print(rule)
     app.run(host='127.0.0.1', port=8000, debug=True) 
