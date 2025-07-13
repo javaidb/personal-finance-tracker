@@ -53,6 +53,7 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
     """
     Get simplified coverage information for each account (variant) under each account type.
     Returns coverage data with monthly indicators from earliest statement to current month.
+    Now supports the new bank structure: bank_statements/[bank_name]/[account_type]/[account_name]/
     """
     coverage = {}
     
@@ -66,19 +67,53 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
     
     # Collect all statement dates across all accounts to determine global min/max
     all_statement_dates = set()
-    for account_type in os.listdir(statements_dir):
-        account_type_path = os.path.join(statements_dir, account_type)
-        if not os.path.isdir(account_type_path):
-            continue
-        for account_name in os.listdir(account_type_path):
-            account_path = os.path.join(account_type_path, account_name)
-            if not os.path.isdir(account_path):
+    
+    # First, check if we have the new bank structure or old structure
+    has_bank_folders = False
+    for item in os.listdir(statements_dir):
+        item_path = os.path.join(statements_dir, item)
+        if os.path.isdir(item_path):
+            # Check if this looks like a bank folder (contains account types)
+            sub_items = os.listdir(item_path)
+            if any(sub_item.lower() in ['credit', 'chequing', 'savings'] for sub_item in sub_items):
+                has_bank_folders = True
+                break
+    
+    if has_bank_folders:
+        # New structure: bank_statements/[bank_name]/[account_type]/[account_name]/
+        for bank_name in os.listdir(statements_dir):
+            bank_path = os.path.join(statements_dir, bank_name)
+            if not os.path.isdir(bank_path):
                 continue
-            pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
-            for pdf_file in pdf_files:
-                year, month = extract_date_from_filename(pdf_file)
-                if year and month:
-                    all_statement_dates.add((year, month))
+            for account_type in os.listdir(bank_path):
+                account_type_path = os.path.join(bank_path, account_type)
+                if not os.path.isdir(account_type_path):
+                    continue
+                for account_name in os.listdir(account_type_path):
+                    account_path = os.path.join(account_type_path, account_name)
+                    if not os.path.isdir(account_path):
+                        continue
+                    pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
+                    for pdf_file in pdf_files:
+                        year, month = extract_date_from_filename(pdf_file)
+                        if year and month:
+                            all_statement_dates.add((year, month))
+    else:
+        # Old structure: bank_statements/[account_type]/[account_name]/
+        for account_type in os.listdir(statements_dir):
+            account_type_path = os.path.join(statements_dir, account_type)
+            if not os.path.isdir(account_type_path):
+                continue
+            for account_name in os.listdir(account_type_path):
+                account_path = os.path.join(account_type_path, account_name)
+                if not os.path.isdir(account_path):
+                    continue
+                pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
+                for pdf_file in pdf_files:
+                    year, month = extract_date_from_filename(pdf_file)
+                    if year and month:
+                        all_statement_dates.add((year, month))
+    
     if not all_statement_dates:
         return coverage
     min_date = min(all_statement_dates)
@@ -98,34 +133,71 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
             current_date = (year + 1, 1)
         else:
             current_date = (year, month + 1)
+    
     # Now, for each account type and account, build monthly coverage
-    for account_type in os.listdir(statements_dir):
-        account_type_path = os.path.join(statements_dir, account_type)
-        if not os.path.isdir(account_type_path):
-            continue
-        coverage[account_type] = {}
-        for account_name in os.listdir(account_type_path):
-            account_path = os.path.join(account_type_path, account_name)
-            if not os.path.isdir(account_path):
+    if has_bank_folders:
+        # New structure: bank_statements/[bank_name]/[account_type]/[account_name]/
+        for bank_name in os.listdir(statements_dir):
+            bank_path = os.path.join(statements_dir, bank_name)
+            if not os.path.isdir(bank_path):
                 continue
-            account_dates = set()
-            pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
-            for pdf_file in pdf_files:
-                year, month = extract_date_from_filename(pdf_file)
-                if year and month:
-                    account_dates.add((year, month))
-            # Generate monthly coverage for this account
-            monthly_coverage = {}
-            for year, month in expected_months:
-                if year not in monthly_coverage:
-                    monthly_coverage[year] = {}
-                has_coverage = (year, month) in account_dates
-                monthly_coverage[year][month] = has_coverage
-            coverage[account_type][account_name] = {
-                'monthly_coverage': monthly_coverage,
-                'total_statements': len(account_dates),
-                'date_range': (min_date, (end_year, end_month))
-            }
+            for account_type in os.listdir(bank_path):
+                account_type_path = os.path.join(bank_path, account_type)
+                if not os.path.isdir(account_type_path):
+                    continue
+                if account_type not in coverage:
+                    coverage[account_type] = {}
+                for account_name in os.listdir(account_type_path):
+                    account_path = os.path.join(account_type_path, account_name)
+                    if not os.path.isdir(account_path):
+                        continue
+                    account_dates = set()
+                    pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
+                    for pdf_file in pdf_files:
+                        year, month = extract_date_from_filename(pdf_file)
+                        if year and month:
+                            account_dates.add((year, month))
+                    # Generate monthly coverage for this account
+                    monthly_coverage = {}
+                    for year, month in expected_months:
+                        if year not in monthly_coverage:
+                            monthly_coverage[year] = {}
+                        has_coverage = (year, month) in account_dates
+                        monthly_coverage[year][month] = has_coverage
+                    coverage[account_type][account_name] = {
+                        'monthly_coverage': monthly_coverage,
+                        'total_statements': len(account_dates),
+                        'date_range': (min_date, (end_year, end_month))
+                    }
+    else:
+        # Old structure: bank_statements/[account_type]/[account_name]/
+        for account_type in os.listdir(statements_dir):
+            account_type_path = os.path.join(statements_dir, account_type)
+            if not os.path.isdir(account_type_path):
+                continue
+            coverage[account_type] = {}
+            for account_name in os.listdir(account_type_path):
+                account_path = os.path.join(account_type_path, account_name)
+                if not os.path.isdir(account_path):
+                    continue
+                account_dates = set()
+                pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
+                for pdf_file in pdf_files:
+                    year, month = extract_date_from_filename(pdf_file)
+                    if year and month:
+                        account_dates.add((year, month))
+                # Generate monthly coverage for this account
+                monthly_coverage = {}
+                for year, month in expected_months:
+                    if year not in monthly_coverage:
+                        monthly_coverage[year] = {}
+                    has_coverage = (year, month) in account_dates
+                    monthly_coverage[year][month] = has_coverage
+                coverage[account_type][account_name] = {
+                    'monthly_coverage': monthly_coverage,
+                    'total_statements': len(account_dates),
+                    'date_range': (min_date, (end_year, end_month))
+                }
     return coverage
 
 def get_coverage_summary(coverage: Dict) -> Dict:

@@ -16,15 +16,34 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 from plotly.colors import qualitative
-from config.paths import DATABANK_PATH
+from src.config.paths import DATABANK_PATH
 
 # from scipy.ndimage import gaussian_filter1d
 class GeneralHelperFns:
-    def __init__(self, base_path=None):
+    def __init__(self, base_path=None, bank_name=None):
         if base_path is None:
             base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.base_path = base_path
         self.databank_path = DATABANK_PATH
+        self.bank_name = bank_name or self._detect_bank()
+        
+        # Import BankConfig here to avoid circular imports
+        try:
+            from src.config.bank_config import BankConfig
+            self.bank_config = BankConfig(base_path)
+        except ImportError:
+            print("Warning: BankConfig not available, using default behavior")
+            self.bank_config = None
+    
+    def _detect_bank(self):
+        """Detect which bank is being used."""
+        try:
+            from src.config.bank_config import BankConfig
+            bank_config = BankConfig(self.base_path)
+            return bank_config.detect_bank_from_structure()
+        except Exception as e:
+            print(f"Error detecting bank: {str(e)}")
+            return None
 
     def __extract_month(self, input_string):
         months = '|'.join(f'.*{m}.*' for m in calendar.month_abbr[1:])
@@ -54,38 +73,78 @@ class GeneralHelperFns:
         full_path = f"../../cached_data/{parent_account_name}/{pdf_atts['month']}_{pdf_atts['year']}.csv"
         return full_path
 
-    def process_import_path(self, pdf_file, parent_account_type, parent_account_name):
+    def process_import_path(self, pdf_file, parent_account_type, parent_account_name, bank_name=None):
         # Get the absolute path to the project root directory
+        if bank_name is None:
+            bank_name = self.bank_name
+        
+        if not bank_name:
+            raise ValueError("bank_name is required and cannot be None or empty")
+        
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-        return os.path.join(project_root, "bank_statements", parent_account_type, parent_account_name, pdf_file)
+        return os.path.join(project_root, "bank_statements", bank_name, parent_account_type, parent_account_name, pdf_file)
 
-    def read_all_account_type_folder_names(self):
-        # Get the absolute path to the project root directory
+    def read_all_bank_names(self):
+        """Read all bank folder names from bank_statements."""
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
         directory = os.path.join(project_root, "bank_statements")
         
-        # Make sure the directory exists
-        os.makedirs(directory, exist_ok=True)
+        if not os.path.exists(directory):
+            return []
+        
+        return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
+    
+    def read_all_account_type_folder_names(self, bank_name=None):
+        """Read all account type folder names for a specific bank."""
+        if bank_name is None:
+            bank_name = self.bank_name
+        
+        if not bank_name:
+            print("Error: bank_name is required and cannot be None or empty")
+            return []
+        
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        directory = os.path.join(project_root, "bank_statements", bank_name)
+        
+        if not os.path.exists(directory):
+            print(f"Warning: Bank directory not found: {directory}")
+            return []
         
         return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
 
-    def read_all_account_folder_names(self, account_type):
-        # Get the absolute path to the project root directory
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-        directory = os.path.join(project_root, "bank_statements", account_type)
+    def read_all_account_folder_names(self, account_type, bank_name=None):
+        """Read all account folder names for a specific account type and bank."""
+        if bank_name is None:
+            bank_name = self.bank_name
         
-        # Make sure the directory exists
-        os.makedirs(directory, exist_ok=True)
+        if not bank_name:
+            print("Error: bank_name is required and cannot be None or empty")
+            return []
+        
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        directory = os.path.join(project_root, "bank_statements", bank_name, account_type)
+        
+        if not os.path.exists(directory):
+            print(f"Warning: Account type directory not found: {directory}")
+            return []
         
         return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
 
-    def read_all_files(self, account_type, account_name):
-        # Get the absolute path to the project root directory
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-        directory = os.path.join(project_root, "bank_statements", account_type, account_name)
+    def read_all_files(self, account_type, account_name, bank_name=None):
+        """Read all PDF files for a specific account."""
+        if bank_name is None:
+            bank_name = self.bank_name
         
-        # Make sure the directory exists
-        os.makedirs(directory, exist_ok=True)
+        if not bank_name:
+            print("Error: bank_name is required and cannot be None or empty")
+            return []
+        
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        directory = os.path.join(project_root, "bank_statements", bank_name, account_type, account_name)
+        
+        if not os.path.exists(directory):
+            print(f"Warning: Account directory not found: {directory}")
+            return []
         
         pdf_files = os.listdir(directory)
         return [f for f in pdf_files if f.endswith('.pdf')]

@@ -15,30 +15,41 @@ main_bp = Blueprint('main', __name__)
 def index() -> str:
     """Render the main page."""
     try:
-        # Get list of account types (directories)
-        account_types = []
+        # Get list of banks (directories)
+        banks = []
         statements_dir = current_app.config.get('STATEMENTS_DIR')
         if statements_dir and os.path.exists(statements_dir):
             for item in os.listdir(statements_dir):
                 if os.path.isdir(os.path.join(statements_dir, item)):
-                    account_types.append(item)
+                    banks.append(item)
         
-        # Get statement counts by type
+        # Get statement counts by bank and account type
         statement_counts = {}
-        for account_type in account_types:
-            account_type_dir = os.path.join(statements_dir, account_type)
-            account_names = []
-            # Get account names
-            for item in os.listdir(account_type_dir):
-                if os.path.isdir(os.path.join(account_type_dir, item)):
-                    account_names.append(item)
+        for bank_name in banks:
+            bank_dir = os.path.join(statements_dir, bank_name)
+            account_types = []
+            
+            # Get account types for this bank
+            for item in os.listdir(bank_dir):
+                if os.path.isdir(os.path.join(bank_dir, item)):
+                    account_types.append(item)
+            
+            statement_counts[bank_name] = {}
+            for account_type in account_types:
+                account_type_dir = os.path.join(bank_dir, account_type)
+                account_names = []
                 
-            statement_counts[account_type] = {}
-            for account_name in account_names:
-                account_dir = os.path.join(account_type_dir, account_name)
-                # Count PDFs in this account directory
-                pdf_count = len([f for f in os.listdir(account_dir) if f.endswith('.pdf')])
-                statement_counts[account_type][account_name] = pdf_count
+                # Get account names for this account type
+                for item in os.listdir(account_type_dir):
+                    if os.path.isdir(os.path.join(account_type_dir, item)):
+                        account_names.append(item)
+                
+                statement_counts[bank_name][account_type] = {}
+                for account_name in account_names:
+                    account_dir = os.path.join(account_type_dir, account_name)
+                    # Count PDFs in this account directory
+                    pdf_count = len([f for f in os.listdir(account_dir) if f.endswith('.pdf')])
+                    statement_counts[bank_name][account_type][account_name] = pdf_count
         
         # Get cache info
         cache_info = {"cached_pdfs_count": 0, "cache_size_kb": 0}
@@ -59,7 +70,7 @@ def index() -> str:
             logger.error(f"Error getting coverage info: {str(e)}")
         
         return render_template('index.html',
-                             account_types=account_types,
+                             banks=banks,
                              statement_counts=statement_counts,
                              cache_info=cache_info,
                              coverage_info=coverage_info,
@@ -121,9 +132,9 @@ def dashboard():
                             show_details=True,
                             error_details=error_details)
 
-@main_bp.route('/api/accounts/<account_type>')
-def get_accounts(account_type: str) -> Dict[str, Any]:
-    """Get list of accounts for a given account type."""
+@main_bp.route('/api/accounts/<bank_name>/<account_type>')
+def get_accounts(bank_name: str, account_type: str) -> Dict[str, Any]:
+    """Get list of accounts for a given bank and account type."""
     try:
         statements_dir = current_app.config.get('STATEMENTS_DIR')
         if not statements_dir:
@@ -132,11 +143,11 @@ def get_accounts(account_type: str) -> Dict[str, Any]:
                 "error": "STATEMENTS_DIR not configured"
             }), 500
 
-        account_type_dir = os.path.join(statements_dir, account_type)
+        account_type_dir = os.path.join(statements_dir, bank_name, account_type)
         if not os.path.exists(account_type_dir):
             return jsonify({
                 "success": False,
-                "error": f"Account type '{account_type}' not found"
+                "error": f"Account type '{account_type}' not found for bank '{bank_name}'"
             }), 404
         
         accounts = []
@@ -149,7 +160,7 @@ def get_accounts(account_type: str) -> Dict[str, Any]:
             "accounts": accounts
         })
     except Exception as e:
-        logger.error(f"Error getting accounts for {account_type}: {str(e)}", exc_info=True)
+        logger.error(f"Error getting accounts for {bank_name}/{account_type}: {str(e)}", exc_info=True)
         return jsonify({
             "success": False,
             "error": "Failed to get accounts"

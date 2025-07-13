@@ -10,15 +10,16 @@ import json
 import os
 import re
 from ..constants.categories import CATEGORY_COLORS, get_category_color
-from config.paths import DATABANK_PATH, CATEGORY_COLORS_PATH
+from src.config.paths import DATABANK_PATH, CATEGORY_COLORS_PATH
 
 class TransactionService:
     """Service class for handling transaction-related operations."""
     
-    def __init__(self, base_path: Path):
+    def __init__(self, base_path: Path, bank_name=None):
         self.base_path = base_path
-        self.pdf_reader = PDFReader(base_path=base_path)
-        self.helper = GeneralHelperFns()
+        self.bank_name = bank_name
+        self.pdf_reader = PDFReader(base_path=base_path, bank_name=bank_name)
+        self.helper = GeneralHelperFns(base_path=base_path, bank_name=bank_name)
         self.processed_df = None
         self.databank_path = DATABANK_PATH
         self.manual_categorizer = ManualTransactionCategorizer(base_path=base_path)

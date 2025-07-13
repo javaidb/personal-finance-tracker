@@ -17,7 +17,21 @@ def init_transaction_service():
     try:
         if transaction_service is None:
             base_path = Path(current_app.root_path).parent.parent
-            transaction_service = TransactionService(base_path=base_path)
+            
+            # Detect bank name from folder structure
+            bank_name = None
+            try:
+                from src.config.bank_config import BankConfig
+                bank_config = BankConfig(base_path)
+                bank_name = bank_config.detect_bank_from_structure()
+            except Exception as e:
+                print(f"Warning: Could not detect bank automatically: {str(e)}")
+            
+            if not bank_name:
+                print("Error: Could not detect bank name from folder structure")
+                return None
+            
+            transaction_service = TransactionService(base_path=base_path, bank_name=bank_name)
             # Try to process statements immediately
             transaction_service.process_statements()
         return transaction_service

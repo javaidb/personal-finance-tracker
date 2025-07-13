@@ -22,7 +22,7 @@ except ImportError:
     config = types.SimpleNamespace()
     config.rent_ranges = []
 
-from config.paths import (
+from src.config.paths import (
     DATABANK_PATH, 
     UNCATEGORIZED_MERCHANTS_PATH, 
     DINING_KEYWORDS_PATH, 
@@ -34,10 +34,14 @@ from config.paths import (
 
 class PDFReader(GeneralHelperFns):
 
-    def __init__(self, base_path=None):
+    def __init__(self, base_path=None, bank_name=None):
         if base_path is None:
             base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        super().__init__(base_path=base_path)
+        super().__init__(base_path=base_path, bank_name=bank_name)
+        
+        if not self.bank_name:
+            raise ValueError("bank_name is required and cannot be None or empty")
+        
         self.base_path = base_path
         self.databank_path = DATABANK_PATH
         self.uncategorized_path = UNCATEGORIZED_MERCHANTS_PATH
@@ -157,22 +161,41 @@ class PDFReader(GeneralHelperFns):
         return lines
 
     def __grab_pattern(self, account_type):
+        """Get pattern based on bank and account type."""
+        if self.bank_config is None:
+            # Fallback to original hard-coded patterns if bank config is not available
+            if account_type == "Credit":
+                pattern = r'(\d{3})\s+(\w{3}\s+\d{1,2})\s+(\w{3}\s+\d{1,2})\s+(.+?)\s+(\d+\.\d{2})(-)?$'
+                print(f"DEBUG: Using fallback Credit card pattern: {pattern}")
+                return pattern
+            elif account_type in ["Chequing", "Savings"]:
+                pattern = r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s*\d{1,2})\s+([^$\d]+?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d{2})?))'
+                print(f"DEBUG: Using fallback Chequing/Savings pattern: {pattern}")
+                return pattern
+            else:
+                print(f"DEBUG: WARNING - Unknown account type: {account_type}")
+                return None
+        
+        try:
+            pattern_config = self.bank_config.get_bank_pattern(self.bank_name, account_type)
+            pattern = pattern_config['pattern']
+            print(f"DEBUG: Using {self.bank_name} {account_type} pattern: {pattern}")
+            print(f"DEBUG: Example match: {pattern_config.get('example', 'No example provided')}")
+            return pattern
+        except Exception as e:
+            print(f"Error getting pattern for {self.bank_name}/{account_type}: {str(e)}")
+            # Fallback to original patterns
+            return self.__grab_pattern_fallback(account_type)
+    
+    def __grab_pattern_fallback(self, account_type):
+        """Fallback to original hard-coded patterns."""
         if account_type == "Credit":
-            # Pattern for credit card statements
-            # Format: Reference # | Transaction Date | Post Date | Details | Amount | (optional negative sign)
-            # Example: 001 Aug 2 Aug 5 UBER CANADA/UBERTRIPTORONTOON 22.36
             pattern = r'(\d{3})\s+(\w{3}\s+\d{1,2})\s+(\w{3}\s+\d{1,2})\s+(.+?)\s+(\d+\.\d{2})(-)?$'
-            print(f"DEBUG: Using Credit card pattern: {pattern}")
-            print("DEBUG: Example match: '001 Aug 2 Aug 5 UBER CANADA/UBERTRIPTORONTOON 22.36'")
+            print(f"DEBUG: Using fallback Credit card pattern: {pattern}")
             return pattern
         elif account_type in ["Chequing", "Savings"]:
-            # Pattern for chequing/savings statements
-            # Format: Date | Description | Amount | Balance
-            # Example: Mar7 Payrolldep. 2,694.74 42,060.20
-            # Also handle cases with spaces after month
-            pattern = r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s*\d{1,2})\s+([^$\d]+?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
-            print(f"DEBUG: Using Chequing/Savings pattern: {pattern}")
-            print("DEBUG: Example match: 'Mar7 Payrolldep. 2,694.74 42,060.20'")
+            pattern = r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s*\d{1,2})\s+([^$\d]+?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d{2})?))'
+            print(f"DEBUG: Using fallback Chequing/Savings pattern: {pattern}")
             return pattern
         else:
             print(f"DEBUG: WARNING - Unknown account type: {account_type}")
@@ -414,6 +437,10 @@ class PDFReader(GeneralHelperFns):
         if account_types is None:
             account_types = self.read_all_account_type_folder_names()
         
+        if not account_types:
+            print("No account types found. Check if bank is properly configured.")
+            return overall_df
+        
         cached_pdfs = 0
         processed_pdfs = 0
         pdf_row_counts = {}  # Track rows per PDF
@@ -422,13 +449,15 @@ class PDFReader(GeneralHelperFns):
             account_names = self.read_all_account_folder_names(account_type)
             for account_name in account_names:
                 pdf_files = self.read_all_files(account_type, account_name)
-                print(f"\nProcessing {len(pdf_files)} statements from {account_type}/{account_name}")
+                print(f"\nProcessing {len(pdf_files)} statements from {self.bank_name}/{account_type}/{account_name}")
                 
                 for pdf_file in tqdm(pdf_files, desc=f"Reading PDFs from '{account_name}'"):
                     pdf_file_atts = self.grab_pdf_name_attributes(pdf_file)
                     # Use base_path if provided
                     if self.base_path:
-                        pdf_file_path = os.path.join(self.base_path, "bank_statements", account_type, account_name, pdf_file)
+                        if not self.bank_name:
+                            raise ValueError("bank_name is required and cannot be None or empty")
+                        pdf_file_path = os.path.join(self.base_path, "bank_statements", self.bank_name, account_type, account_name, pdf_file)
                     else:
                         pdf_file_path = self.process_import_path(pdf_file, account_type, account_name)
                     
