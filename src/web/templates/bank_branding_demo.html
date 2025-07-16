@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Branding Demo - Scotiabank</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bank-themes.css') }}">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .demo-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .demo-section {
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        
+        .demo-section h3 {
+            margin-top: 0;
+            color: var(--bank-primary);
+        }
+        
+        .color-palette {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        
+        .color-swatch {
+            width: 100px;
+            height: 100px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .component-demo {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .demo-card {
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .gradient-demo {
+            height: 100px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body class="theme-scotiabank">
+    <div class="demo-container">
+        <div class="bank-header">
+            <h1>Bank Branding System Demo</h1>
+            <p>Scotiabank Theme Implementation</p>
+        </div>
+        
+        <div class="demo-section">
+            <h3>Color Palette</h3>
+            <div class="color-palette">
+                <div class="color-swatch" style="background-color: var(--bank-primary);">
+                    Primary<br>#E31837
+                </div>
+                <div class="color-swatch" style="background-color: var(--bank-secondary);">
+                    Secondary<br>#1B365D
+                </div>
+                <div class="color-swatch" style="background-color: var(--bank-accent); color: #333;">
+                    Accent<br>#FDB913
+                </div>
+                <div class="color-swatch" style="background-color: var(--bank-success);">
+                    Success<br>#28A745
+                </div>
+                <div class="color-swatch" style="background-color: var(--bank-warning); color: #333;">
+                    Warning<br>#FFC107
+                </div>
+                <div class="color-swatch" style="background-color: var(--bank-error);">
+                    Error<br>#DC3545
+                </div>
+            </div>
+        </div>
+        
+        <div class="demo-section">
+            <h3>Bank Logo</h3>
+            <img src="{{ url_for('static', filename='images/banks/scotiabank/logo.svg') }}" 
+                 alt="Scotiabank Logo" 
+                 class="bank-logo">
+        </div>
+        
+        <div class="demo-section">
+            <h3>Component Examples</h3>
+            <div class="component-demo">
+                <div class="demo-card">
+                    <h4>Bank Card Component</h4>
+                    <div class="bank-card">
+                        <h5>Account Summary</h5>
+                        <p>Balance: <span class="bank-accent">$2,450.67</span></p>
+                        <p>Status: <span class="bank-success">Active</span></p>
+                    </div>
+                </div>
+                
+                <div class="demo-card">
+                    <h4>Buttons</h4>
+                    <button class="bank-button">Primary Button</button>
+                    <br><br>
+                    <button class="bank-button bank-button-secondary">Secondary Button</button>
+                </div>
+                
+                <div class="demo-card">
+                    <h4>Status Indicators</h4>
+                    <p>Success: <span class="bank-success">Transaction completed</span></p>
+                    <p>Warning: <span class="bank-warning">Low balance alert</span></p>
+                    <p>Error: <span class="bank-error">Transaction failed</span></p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="demo-section">
+            <h3>Gradient Backgrounds</h3>
+            <div class="gradient-demo bank-gradient-primary">
+                Primary Gradient Background
+            </div>
+            <div class="gradient-demo bank-gradient-secondary">
+                Secondary Gradient Background
+            </div>
+        </div>
+        
+        <div class="demo-section">
+            <h3>API Endpoints</h3>
+            <p>The following API endpoints are available for bank branding:</p>
+            <ul>
+                <li><code>/api/bank-branding/scotiabank</code> - Get complete branding info</li>
+                <li><code>/api/bank-branding/scotiabank/colors</code> - Get color scheme</li>
+                <li><code>/api/bank-branding/scotiabank/logo</code> - Get logo information</li>
+                <li><code>/api/bank-branding/scotiabank/theme</code> - Get theme information</li>
+                <li><code>/api/bank-branding/all</code> - Get all bank branding</li>
+                <li><code>/api/bank-branding/available</code> - Get available banks</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html> 

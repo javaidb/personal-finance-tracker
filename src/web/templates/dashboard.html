@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Finance Dashboard | Personal Finance Tracker</title>
+    <title>{% if bank_branding %}{{ bank_branding.display_name }} - {% endif %}Finance Dashboard | Personal Finance Tracker</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bank-themes.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
@@ -14,21 +15,97 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230d6efd'><path d='M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z'/></svg>">
+    {% if bank_branding %}
+    <style>
+        :root {
+            --bank-primary: {{ bank_branding.colors.primary }};
+            --bank-secondary: {{ bank_branding.colors.secondary }};
+            --bank-accent: {{ bank_branding.colors.accent }};
+            --bank-text: {{ bank_branding.colors.text }};
+            --bank-background: {{ bank_branding.colors.background }};
+            --bank-success: {{ bank_branding.colors.success }};
+            --bank-warning: {{ bank_branding.colors.warning }};
+            --bank-error: {{ bank_branding.colors.error }};
+        }
+    </style>
+    {% endif %}
     <style>
         body {
             font-family: 'Inter', sans-serif;
         }
         .dashboard-header {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            background: linear-gradient(135deg, var(--bank-primary, #2c3e50) 0%, var(--bank-secondary, #34495e) 100%);
             color: white;
             padding: 1.5rem 0;
             margin-bottom: 2rem;
             box-shadow: 0 2px 15px rgba(0,0,0,0.08);
+            display: flex;
+            align-items: stretch;
         }
-        .dashboard-header .container {
+        .dashboard-logo-section {
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            width: 16.666667%;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .dashboard-logo-section::after {
+            content: '';
+            position: absolute;
+            right: -20px;
+            top: 0;
+            bottom: 0;
+            width: 40px;
+            background-color: #f8f9fa;
+            border-radius: 0 20px 20px 0;
+            z-index: 1;
+        }
+        .dashboard-logo-placeholder {
+            width: 300px;
+            height: 300px;
+            background-color: #e9ecef;
+            border: 2px dashed #adb5bd;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+            font-size: 0.8rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 2;
+        }
+        .dashboard-logo-placeholder:hover {
+            border-color: var(--bank-primary, #007bff);
+            background-color: #f8f9fa;
+        }
+        .dashboard-bank-logo {
+            max-width: 300px;
+            max-height: 300px;
+            object-fit: contain;
+            position: relative;
+            z-index: 2;
+        }
+        .dashboard-header-content {
+            background: linear-gradient(135deg, var(--bank-primary, #2c3e50) 0%, var(--bank-secondary, #34495e) 100%);
+            color: white;
+            padding: 1.5rem 0 1.5rem 0;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            position: relative;
+            z-index: 0;
+            width: 100%;
+        }
+        .dashboard-header-inner {
             position: relative;
             overflow: hidden;
-            padding-left: 1rem;
+            padding-left: 60px;
+            width: 100%;
         }
         .dashboard-header h1 {
             font-size: 2.2rem;
@@ -70,12 +147,14 @@
         }
         .social-links {
             position: absolute;
-            right: 1rem;
+            right: 0;
             top: 50%;
             transform: translateY(-50%);
             display: flex;
             gap: 1rem;
             align-items: center;
+            padding-right: 40px;
+            margin-right: 0;
         }
         .social-links a {
             color: rgba(255,255,255,0.8);
@@ -156,7 +235,7 @@
         }
         .stats-card {
             background-color: #f8f9fa;
-            border-left: 4px solid #0d6efd;
+            border-left: 4px solid var(--bank-primary, #0d6efd);
             padding: 15px;
             border-radius: 5px;
             transition: transform 0.3s ease;
@@ -188,7 +267,7 @@
             width: 40px;
             height: 40px;
             border: 4px solid rgba(0, 0, 0, 0.1);
-            border-left-color: #0d6efd;
+            border-left-color: var(--bank-primary, #0d6efd);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -226,19 +305,19 @@
         }
 
         .form-control:focus {
-            border-color: #86b7fe;
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+            border-color: var(--bank-primary, #86b7fe);
+            box-shadow: 0 0 0 0.25rem rgba(var(--bank-primary-rgb, 13, 110, 253), 0.25);
         }
 
         .form-control:focus + .input-group-text {
-            border-color: #86b7fe;
+            border-color: var(--bank-primary, #86b7fe);
         }
 
         .timeline-marker {
             width: 24px;
             height: 24px;
             background: white;
-            border: 3px solid #4285f4;
+            border: 3px solid var(--bank-primary, #4285f4);
             border-radius: 50%;
             position: absolute;
             top: 50%;
@@ -270,9 +349,51 @@
         .timeline-track:hover {
             background: #e2e8f0;
         }
+        
+        /* Bank-specific button styles */
+        .btn-bank-primary {
+            background-color: var(--bank-primary, #0d6efd);
+            border-color: var(--bank-primary, #0d6efd);
+            color: white;
+        }
+        
+        .btn-bank-primary:hover {
+            background-color: var(--bank-secondary, #0b5ed7);
+            border-color: var(--bank-secondary, #0b5ed7);
+            color: white;
+        }
+        
+        .btn-outline-bank-primary {
+            color: var(--bank-primary, #0d6efd);
+            border-color: var(--bank-primary, #0d6efd);
+        }
+        
+        .btn-outline-bank-primary:hover {
+            background-color: var(--bank-primary, #0d6efd);
+            border-color: var(--bank-primary, #0d6efd);
+            color: white;
+        }
+        
+        /* Responsive design for dashboard header */
+        @media (max-width: 768px) {
+            .dashboard-header {
+                flex-direction: column;
+            }
+            .dashboard-logo-section {
+                width: 100%;
+                border-bottom: 1px solid #dee2e6;
+                padding: 15px;
+            }
+            .dashboard-logo-section::after {
+                display: none;
+            }
+            .dashboard-header-content {
+                padding: 20px 0;
+            }
+        }
     </style>
 </head>
-<body>
+<body {% if bank_branding %}class="{{ bank_branding.theme_class }}"{% endif %}>
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
@@ -296,7 +417,7 @@
                     </ul>
                     <hr>
                     <div class="p-3">
-                        <a href="/merchants" class="btn btn-outline-primary btn-sm w-100 mb-2">Merchant Management</a>
+                        <a href="/merchants" class="btn btn-bank-primary btn-sm w-100 mb-2">Merchant Management</a>
                         <a href="/" class="btn btn-outline-secondary btn-sm w-100 mb-2">Back to Home</a>
                         <button id="clear-cache-btn" class="btn btn-outline-danger btn-sm w-100">Clear PDF Cache</button>
                     </div>
@@ -306,28 +427,42 @@
             <!-- Main content -->
             <div class="col-md-9 col-lg-10 ms-sm-auto px-md-4">
                 <div class="dashboard-header">
-                    <div class="container">
-                        <div class="header-decoration"></div>
-                        <div class="header-decoration"></div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h1>
-                                    <i class="bi bi-graph-up-arrow header-icon"></i>
-                                    Finance Dashboard
-                                </h1>
-                                <p>
-                                    <i class="bi bi-bar-chart-line"></i>
-                                    Track, analyze, and optimize your financial journey
-                                </p>
+                    <div class="dashboard-logo-section">
+                        {% if bank_branding and bank_branding.logo_exists %}
+                            <img src="{{ bank_branding.logo_path }}" alt="{{ bank_branding.display_name }} Logo" class="dashboard-bank-logo">
+                        {% else %}
+                            <div class="dashboard-logo-placeholder">
+                                <div>
+                                    <strong>Bank Logo</strong><br>
+                                    <small>Place logo here</small>
+                                </div>
                             </div>
-                            <div class="social-links">
-                                <a href="https://github.com/javaidb" target="_blank" title="GitHub Profile">
-                                    <i class="bi bi-github"></i>
-                                </a>
-                                <div class="divider"></div>
-                                <a href="https://github.com/javaidb/personal-finance-tracker" target="_blank" title="Project Repository">
-                                    <i class="bi bi-code-square"></i>
-                                </a>
+                        {% endif %}
+                    </div>
+                    <div class="dashboard-header-content">
+                        <div class="dashboard-header-inner">
+                            <div class="header-decoration"></div>
+                            <div class="header-decoration"></div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h1>
+                                        <i class="bi bi-graph-up-arrow header-icon"></i>
+                                        {% if bank_branding %}{{ bank_branding.display_name }} - {% endif %}Finance Dashboard
+                                    </h1>
+                                    <p>
+                                        <i class="bi bi-bar-chart-line"></i>
+                                        Track, analyze, and optimize your financial journey
+                                    </p>
+                                </div>
+                                <div class="social-links">
+                                    <a href="https://github.com/javaidb" target="_blank" title="GitHub Profile">
+                                        <i class="bi bi-github"></i>
+                                    </a>
+                                    <div class="divider"></div>
+                                    <a href="https://github.com/javaidb/personal-finance-tracker" target="_blank" title="Project Repository">
+                                        <i class="bi bi-code-square"></i>
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
