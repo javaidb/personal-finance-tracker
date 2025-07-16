@@ -2272,11 +2272,21 @@
                     // Draw a more noticeable, thicker, solid, and slightly longer line centered on yVal
                     const yOffset = Math.max(5, Math.abs(yVal) * 0.07); // 7% of value or at least 5 units
                     const annotationId = `cp_${idx}`;
+                    const backgroundAnnotationId = `cp_bg_${idx}`;
                     // Use direction to set color
                     let color = 'rgba(0,0,0,0.85)';
+                    let bgColor = 'rgba(0,0,0,0.1)';
                     if (data.changePointDirections && data.changePointDirections[idx]) {
-                        color = data.changePointDirections[idx] === 'up' ? 'rgba(40, 167, 69, 0.8)' : 'rgba(220, 53, 69, 0.8)';
+                        if (data.changePointDirections[idx] === 'up') {
+                            color = 'rgba(40, 167, 69, 0.8)';
+                            bgColor = 'rgba(40, 167, 69, 0.15)';
+                        } else {
+                            color = 'rgba(220, 53, 69, 0.8)';
+                            bgColor = 'rgba(220, 53, 69, 0.15)';
+                        }
                     }
+                    
+                    // Add the main changepoint line (short, centered)
                     chart.options.plugins.annotation.annotations[annotationId] = {
                         type: 'line',
                         xMin: date,
@@ -2284,6 +2294,21 @@
                         yMin: yVal - yOffset,
                         yMax: yVal + yOffset,
                         borderColor: color,
+                        borderWidth: 6,
+                        borderDash: [], // solid line
+                        label: {
+                            display: false
+                        }
+                    };
+                    
+                    // Add the background line (full height, transparent)
+                    chart.options.plugins.annotation.annotations[backgroundAnnotationId] = {
+                        type: 'line',
+                        xMin: date,
+                        xMax: date,
+                        yMin: '0%',
+                        yMax: '100%',
+                        borderColor: bgColor,
                         borderWidth: 6,
                         borderDash: [], // solid line
                         label: {
