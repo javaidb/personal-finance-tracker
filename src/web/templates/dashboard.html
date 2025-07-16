@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0/dist/chartjs-plugin-annotation.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -2121,13 +2122,11 @@
         
         function renderPeltChart(data) {
             const ctx = document.getElementById('peltChart').getContext('2d');
-            
             // Clean up any existing chart
             const existingChart = Chart.getChart(ctx.canvas);
             if (existingChart) {
                 existingChart.destroy();
             }
-            
             // If no data or error, show placeholder
             if (!data || data.error || !data.datasets || data.datasets.length === 0) {
                 new Chart(ctx, {
@@ -2150,7 +2149,8 @@
                 });
                 return;
             }
-            
+            // Store labels globally for x-axis sync
+            window.peltLabels = data.labels;
             // Create the chart with improved options
             const chart = new Chart(ctx, {
                 type: 'line',
@@ -2258,69 +2258,50 @@
                     }
                 }
             });
-            
-            // Add vertical lines for change points
+            // Add vertical lines for change points as short annotation lines centered on the data point
             if (data.changePoints && data.changePoints.length > 0) {
-                const chartContainer = chart.canvas.parentNode;
-                chartContainer.style.position = 'relative';
-                
-                // Remove any existing change point lines
-                const existingLines = chartContainer.querySelectorAll('.change-point-line');
-                existingLines.forEach(line => line.remove());
-                
-                // Add change point lines after a slight delay to ensure chart is rendered
-                setTimeout(() => {
-                    data.changePoints.forEach((date, index) => {
-                        const dateIndex = data.labels.indexOf(date);
-                        if (dateIndex === -1) return;
-                        
-                        const meta = chart.getDatasetMeta(0);
-                        if (!meta.data[dateIndex]) return;
-                        
-                        const x = meta.data[dateIndex].x;
-                        
-                        // Create the line element
-                        const line = document.createElement('div');
-                        line.className = 'change-point-line';
-                        line.style.position = 'absolute';
-                        line.style.top = '0';
-                        line.style.bottom = '0';
-                        line.style.width = '1px';
-                        line.style.backgroundColor = 'rgba(0, 0, 0, 0.15)';
-                        line.style.left = `${x}px`;
-                        line.style.pointerEvents = 'none';
-                        line.style.zIndex = '10';
-                        line.style.boxShadow = '0 0 2px rgba(0, 0, 0, 0.1)';
-                        
-                        // Add a subtle point at the top of the line
-                        const point = document.createElement('div');
-                        point.style.position = 'absolute';
-                        point.style.top = '0';
-                        point.style.left = '-2px';
-                        point.style.width = '5px';
-                        point.style.height = '5px';
-                        point.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
-                        point.style.borderRadius = '50%';
-                        
-                        line.appendChild(point);
-                        chartContainer.appendChild(line);
-                        
-                        // Add date tooltip
-                        line.title = `Change point: ${date}`;
-                    });
-                }, 200);
+                if (!chart.options.plugins) chart.options.plugins = {};
+                if (!chart.options.plugins.annotation) chart.options.plugins.annotation = { annotations: {} };
+                // Find the y-value (balance) for each change point
+                data.changePoints.forEach((date, idx) => {
+                    const dateIndex = data.labels.indexOf(date);
+                    if (dateIndex === -1) return;
+                    // Use the first dataset (balance) for y-value
+                    const yVal = data.datasets[0].data[dateIndex];
+                    if (typeof yVal !== 'number') return;
+                    // Draw a more noticeable, thicker, solid, and slightly longer line centered on yVal
+                    const yOffset = Math.max(5, Math.abs(yVal) * 0.07); // 7% of value or at least 5 units
+                    const annotationId = `cp_${idx}`;
+                    // Use direction to set color
+                    let color = 'rgba(0,0,0,0.85)';
+                    if (data.changePointDirections && data.changePointDirections[idx]) {
+                        color = data.changePointDirections[idx] === 'up' ? 'rgba(40, 167, 69, 0.8)' : 'rgba(220, 53, 69, 0.8)';
+                    }
+                    chart.options.plugins.annotation.annotations[annotationId] = {
+                        type: 'line',
+                        xMin: date,
+                        xMax: date,
+                        yMin: yVal - yOffset,
+                        yMax: yVal + yOffset,
+                        borderColor: color,
+                        borderWidth: 6,
+                        borderDash: [], // solid line
+                        label: {
+                            display: false
+                        }
+                    };
+                });
+                chart.update();
             }
         }
         
         function renderRateOfChangeChart(rateData) {
             const ctx = document.getElementById('rateOfChangeChart').getContext('2d');
-            
             // Clean up any existing chart
             const existingChart = Chart.getChart(ctx.canvas);
             if (existingChart) {
                 existingChart.destroy();
             }
-            
             // If no data, show placeholder
             if (!rateData || !rateData.data || rateData.data.length === 0) {
                 new Chart(ctx, {
@@ -2343,15 +2324,18 @@
                 });
                 return;
             }
-            
+            // Use the same x-axis labels as the PELT chart if available
+            let labels = rateData.labels;
+            if (window.peltLabels && Array.isArray(window.peltLabels) && window.peltLabels.length === rateData.data.length) {
+                labels = window.peltLabels;
+            }
             // Create datasets for positive and negative values
             const positiveData = rateData.data.map(val => val > 0 ? val : null);
             const negativeData = rateData.data.map(val => val < 0 ? val : null);
-            
             new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: rateData.labels,
+                    labels: labels,
                     datasets: [
                         {
                             label: 'Positive Rate of Change',
@@ -2427,7 +2411,6 @@
                                 label: function(context) {
                                     const value = context.raw;
                                     if (value === null) return null;
-                                    
                                     const sign = value >= 0 ? '+' : '';
                                     return `Rate of Change: ${sign}${new Intl.NumberFormat('en-US', {
                                         style: 'currency',

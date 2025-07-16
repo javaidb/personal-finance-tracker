@@ -488,12 +488,12 @@ class TransactionService:
             # Calculate numeric time and change points
             daily_df['numeric_time'] = (daily_df['DateTime'] - daily_df['DateTime'].min()).dt.total_seconds()
             
-            # Set PELT parameters - for broader trend detection
+            # Set PELT parameters - tuned for fewer, broader segments (target ~6 segments)
             segment_settings = {
-                'penalty': 50,  # Higher penalty for more general segmentation
-                'min_size': 14,  # Minimum 2 weeks of data for a segment
-                'jump': 5,     # Larger jump for broader trends
-                'model': "l2"  # Linear model for financial trends
+                'penalty': 300,  # Much higher penalty for fewer segments (was 50)
+                'min_size': 30,  # Minimum 1 month of data for a segment (was 14)
+                'jump': 7,       # Slightly larger jump for broader trends
+                'model': "l2"   # Linear model for financial trends
             }
             
             from ruptures import Pelt
@@ -507,46 +507,105 @@ class TransactionService:
             if change_points[-1] != len(daily_df):
                 change_points = change_points + [len(daily_df)]
             
+            # --- SECOND PASS: Merge adjacent segments with similar gradients (within 25%) ---
+            # First, extract gradients for each segment
+            segment_gradients = []
+            for i in range(len(change_points) - 1):
+                start_idx = change_points[i]
+                end_idx = change_points[i + 1]
+                segment_time = daily_df['numeric_time'].iloc[start_idx:end_idx].values
+                segment_balance = daily_df['running_balance'].iloc[start_idx:end_idx].values
+                if len(segment_time) >= 2:
+                    coeffs = np.polyfit(segment_time, segment_balance, 1)
+                    segment_gradients.append(coeffs[0])
+                else:
+                    segment_gradients.append(0.0)
+
+            # Merge logic: if next gradient is within 25% of current, merge
+            merged_change_points = [change_points[0]]
+            i = 0
+            while i < len(segment_gradients) - 1:
+                g1 = segment_gradients[i]
+                g2 = segment_gradients[i + 1]
+                # Avoid division by zero, treat both zero as similar
+                if g1 == 0 and g2 == 0:
+                    similar = True
+                elif g1 == 0 or g2 == 0:
+                    similar = False
+                else:
+                    ratio = abs(g2 - g1) / max(abs(g1), abs(g2))
+                    similar = ratio <= 0.25
+                if similar:
+                    # Merge: skip the next change point
+                    i += 1
+                else:
+                    merged_change_points.append(change_points[i + 1])
+                    i += 1
+            # Always include the last point
+            if merged_change_points[-1] != change_points[-1]:
+                merged_change_points.append(change_points[-1])
+            change_points = merged_change_points
+
+            # --- Continue with segment calculation as before, but using merged change_points ---
             # Calculate segments and trends
             segments = []
             concat_y_segments = []
             concat_coeffs = []
             change_dates = []
-            
-            # Initialize arrays with NaN to match data length
+            change_directions = []  # New: direction of each changepoint
             trend_values = np.full(len(daily_df), np.nan)
             rate_of_change = np.full(len(daily_df), np.nan)
-            
             for i in range(len(change_points) - 1):
                 start_idx = change_points[i]
                 end_idx = change_points[i + 1]
-                
-                # Get segment data
                 segment_time = daily_df['numeric_time'].iloc[start_idx:end_idx].values
                 segment_balance = daily_df['running_balance'].iloc[start_idx:end_idx].values
-                
                 if len(segment_time) >= 2:
-                    # Fit polynomial to segment
                     coeffs = np.polyfit(segment_time, segment_balance, 1)
                     segment_y_values = np.polyval(coeffs, segment_time)
-                    
-                    # Store trend values in the main array
                     trend_values[start_idx:end_idx] = segment_y_values
-                    
-                    # Calculate weekly rate of change
-                    weekly_change_rate = coeffs[0] * (7 * 24 * 60 * 60)  # Convert to weekly rate
+                    weekly_change_rate = coeffs[0] * (7 * 24 * 60 * 60)
                     rate_of_change[start_idx:end_idx] = weekly_change_rate
-                    
-                    # Store change point dates
-                    if i < len(change_points) - 2:  # Don't include the last point
+                    if i < len(change_points) - 2:
                         change_dates.append(daily_df['DateTime'].iloc[change_points[i+1]].strftime('%Y-%m-%d'))
+                        # Determine direction: compare average of last 5 points of this segment to average of first 5 points of next segment
+                        this_segment_end = segment_balance[-5:] if len(segment_balance) >= 5 else segment_balance
+                        next_segment_start_idx = change_points[i+1]
+                        next_segment_end_idx = change_points[i+2] if i+2 < len(change_points) else len(daily_df)
+                        next_segment_balance = daily_df['running_balance'].iloc[next_segment_start_idx:next_segment_end_idx].values
+                        next_segment_start = next_segment_balance[:5] if len(next_segment_balance) >= 5 else next_segment_balance
+                        
+                        # Calculate averages
+                        this_avg = np.mean(this_segment_end)
+                        next_avg = np.mean(next_segment_start)
+                        
+                        if next_avg > this_avg:
+                            change_directions.append('up')
+                        else:
+                            change_directions.append('down')
                 else:
-                    # For very short segments, use linear interpolation
                     if len(segment_balance) == 2:
                         trend_values[start_idx:end_idx] = segment_balance
                         rate = (segment_balance[-1] - segment_balance[0]) / (segment_time[-1] - segment_time[0])
                         weekly_rate = rate * (7 * 24 * 60 * 60)
                         rate_of_change[start_idx:end_idx] = weekly_rate
+                        # For short segments, use the same logic but with available points
+                        if i < len(change_points) - 2:
+                            change_dates.append(daily_df['DateTime'].iloc[change_points[i+1]].strftime('%Y-%m-%d'))
+                            this_segment_end = segment_balance[-min(5, len(segment_balance)):]
+                            next_segment_start_idx = change_points[i+1]
+                            next_segment_end_idx = change_points[i+2] if i+2 < len(change_points) else len(daily_df)
+                            next_segment_balance = daily_df['running_balance'].iloc[next_segment_start_idx:next_segment_end_idx].values
+                            next_segment_start = next_segment_balance[:min(5, len(next_segment_balance))]
+                            
+                            # Calculate averages
+                            this_avg = np.mean(this_segment_end)
+                            next_avg = np.mean(next_segment_start)
+                            
+                            if next_avg > this_avg:
+                                change_directions.append('up')
+                            else:
+                                change_directions.append('down')
             
             # Convert NaN to None for JSON serialization
             trend_values = [None if np.isnan(x) else float(x) for x in trend_values]
@@ -562,7 +621,7 @@ class TransactionService:
                     {
                         "label": "Balance",
                         "data": balance_data,
-                        "borderColor": "#BB2525",
+                        "borderColor": "#5D6D7E",
                         "pointRadius": 2,
                         "fill": False,
                         "yAxisID": "y"
@@ -570,7 +629,7 @@ class TransactionService:
                     {
                         "label": "Trend Segments",
                         "data": trend_values,
-                        "borderColor": "#BCBF07",
+                        "borderColor": "#000000",
                         "borderWidth": 2,
                         "pointRadius": 0,
                         "fill": False,
@@ -578,6 +637,7 @@ class TransactionService:
                     }
                 ],
                 "changePoints": change_dates,
+                "changePointDirections": change_directions,  # New: up/down for each changepoint
                 "rateOfChange": {
                     "labels": daily_df['DateTime'].dt.strftime('%Y-%m-%d').tolist(),
                     "data": rate_of_change
