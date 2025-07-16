@@ -1,0 +1,115 @@
+/* Bank-specific theme styles */
+:root {
+  /* Default theme variables */
+  --bank-primary: #007bff;
+  --bank-secondary: #6c757d;
+  --bank-accent: #ffc107;
+  --bank-text: #333333;
+  --bank-background: #ffffff;
+  --bank-success: #28a745;
+  --bank-warning: #ffc107;
+  --bank-error: #dc3545;
+}
+
+/* Scotiabank Theme */
+.theme-scotiabank {
+  --bank-primary: #E31837;
+  --bank-secondary: #1B365D;
+  --bank-accent: #FDB913;
+  --bank-text: #333333;
+  --bank-background: #FFFFFF;
+  --bank-success: #28A745;
+  --bank-warning: #FFC107;
+  --bank-error: #DC3545;
+}
+
+/* Bank-specific component styles */
+.bank-header {
+  background: var(--bank-primary);
+  color: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.bank-logo {
+  max-height: 60px;
+  max-width: 200px;
+  object-fit: contain;
+}
+
+.bank-card {
+  border: 2px solid var(--bank-primary);
+  border-radius: 12px;
+  padding: 1.5rem;
+  background: var(--bank-background);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.bank-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.bank-button {
+  background: var(--bank-primary);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.bank-button:hover {
+  background: var(--bank-secondary);
+}
+
+.bank-button-secondary {
+  background: var(--bank-secondary);
+  color: white;
+}
+
+.bank-button-secondary:hover {
+  background: var(--bank-primary);
+}
+
+.bank-accent {
+  color: var(--bank-accent);
+  font-weight: bold;
+}
+
+.bank-success {
+  color: var(--bank-success);
+}
+
+.bank-warning {
+  color: var(--bank-warning);
+}
+
+.bank-error {
+  color: var(--bank-error);
+}
+
+/* Gradient backgrounds */
+.bank-gradient-primary {
+  background: var(--bank-primary-gradient, linear-gradient(135deg, var(--bank-primary) 0%, var(--bank-secondary) 100%));
+}
+
+.bank-gradient-secondary {
+  background: var(--bank-secondary-gradient, linear-gradient(135deg, var(--bank-secondary) 0%, var(--bank-primary) 100%));
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .bank-logo {
+    max-height: 40px;
+    max-width: 150px;
+  }
+  
+  .bank-card {
+    padding: 1rem;
+  }
+} 

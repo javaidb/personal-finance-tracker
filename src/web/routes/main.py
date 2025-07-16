@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, curren
 import os
 from pathlib import Path
 from ..services.transaction_service import TransactionService
+from ..services.bank_branding_service import BankBrandingService
 from typing import List, Dict, Any
 import logging
 from .api import init_transaction_service
@@ -15,6 +16,26 @@ main_bp = Blueprint('main', __name__)
 def index() -> str:
     """Render the main page."""
     try:
+        # Initialize bank branding service
+        bank_branding_service = BankBrandingService()
+        
+        # Detect which bank is being used
+        detected_bank = None
+        try:
+            from src.config.bank_config import BankConfig
+            bank_config = BankConfig()
+            detected_bank = bank_config.detect_bank_from_structure()
+        except Exception as e:
+            logger.error(f"Error detecting bank: {str(e)}")
+        
+        # Get bank branding info
+        bank_branding = None
+        if detected_bank:
+            try:
+                bank_branding = bank_branding_service.get_bank_display_info(detected_bank)
+            except Exception as e:
+                logger.error(f"Error getting bank branding for {detected_bank}: {str(e)}")
+        
         # Get list of banks (directories)
         banks = []
         statements_dir = current_app.config.get('STATEMENTS_DIR')
@@ -74,7 +95,9 @@ def index() -> str:
                              statement_counts=statement_counts,
                              cache_info=cache_info,
                              coverage_info=coverage_info,
-                             coverage_summary=coverage_summary)
+                             coverage_summary=coverage_summary,
+                             bank_branding=bank_branding,
+                             detected_bank=detected_bank)
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}", exc_info=True)
         return render_template('error.html', message="Failed to load account types")
@@ -109,13 +132,36 @@ def process_statements():
 def dashboard():
     """Dashboard route."""
     try:
+        # Initialize bank branding service
+        bank_branding_service = BankBrandingService()
+        
+        # Detect which bank is being used
+        detected_bank = None
+        try:
+            from src.config.bank_config import BankConfig
+            bank_config = BankConfig()
+            detected_bank = bank_config.detect_bank_from_structure()
+        except Exception as e:
+            logger.error(f"Error detecting bank: {str(e)}")
+        
+        # Get bank branding info
+        bank_branding = None
+        if detected_bank:
+            try:
+                bank_branding = bank_branding_service.get_bank_display_info(detected_bank)
+            except Exception as e:
+                logger.error(f"Error getting bank branding for {detected_bank}: {str(e)}")
+        
         service = init_transaction_service()
         if not service or service.processed_df is None:
             # No data processed yet, try to process
             if service:
                 success = service.process_statements()
                 if success:
-                    return render_template('dashboard.html', categoryColors={})
+                    return render_template('dashboard.html', 
+                                         categoryColors={},
+                                         bank_branding=bank_branding,
+                                         detected_bank=detected_bank)
             
             return render_template('error.html',
                                 message="No transaction data found. Please upload some bank statements first.",
@@ -123,7 +169,10 @@ def dashboard():
         
         # Get category colors from the service
         category_colors = service.get_category_colors() if hasattr(service, 'get_category_colors') else {}
-        return render_template('dashboard.html', categoryColors=category_colors)
+        return render_template('dashboard.html', 
+                             categoryColors=category_colors,
+                             bank_branding=bank_branding,
+                             detected_bank=detected_bank)
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
