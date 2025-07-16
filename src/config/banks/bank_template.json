@@ -1,35 +1,36 @@
 {
-  "bank_name": "Scotiabank",
-  "display_name": "Scotiabank",
+  "_comment": "DEVELOPER USE ONLY: Template for creating new preset bank configurations. Users do not need to configure banks themselves.",
+  "bank_name": "BANK_NAME",
+  "display_name": "Bank Display Name",
   "branding": {
-    "primary_color": "#E31837",
-    "secondary_color": "#1B365D",
-    "accent_color": "#FDB913",
+    "primary_color": "#007bff",
+    "secondary_color": "#6c757d",
+    "accent_color": "#ffc107",
     "text_color": "#333333",
     "background_color": "#FFFFFF",
     "success_color": "#28A745",
     "warning_color": "#FFC107",
     "error_color": "#DC3545",
-    "logo_path": "/static/images/banks/scotiabank/logo.svg",
-    "favicon_path": "/static/images/banks/scotiabank/favicon.svg",
+    "logo_path": "/static/images/banks/BANK_NAME/logo.svg",
+    "favicon_path": "/static/images/banks/BANK_NAME/favicon.svg",
     "css_variables": {
-      "--bank-primary": "#E31837",
-      "--bank-secondary": "#1B365D",
-      "--bank-accent": "#FDB913",
+      "--bank-primary": "#007bff",
+      "--bank-secondary": "#6c757d",
+      "--bank-accent": "#ffc107",
       "--bank-text": "#333333",
       "--bank-background": "#FFFFFF"
     },
     "theme": {
-      "name": "scotiabank_red",
-      "description": "Scotiabank's signature red and navy blue theme",
+      "name": "BANK_NAME_theme",
+      "description": "Bank theme description",
       "gradients": {
-        "primary": "linear-gradient(135deg, #E31837 0%, #C41230 100%)",
-        "secondary": "linear-gradient(135deg, #1B365D 0%, #0F2444 100%)"
+        "primary": "linear-gradient(135deg, #007bff 0%, #0056b3 100%)",
+        "secondary": "linear-gradient(135deg, #6c757d 0%, #495057 100%)"
       }
     }
   },
   "pdf_naming_convention": {
-    "pattern": "{month} {year} e-statement.pdf",
+    "pattern": "{month} {year} statement.pdf",
     "month_format": "full_name",
     "year_format": "YYYY"
   },
@@ -39,7 +40,7 @@
       "balance_calculation": "running_balance"
     },
     "Chequing": {
-      "statement_format": "deposit_account", 
+      "statement_format": "deposit_account",
       "balance_calculation": "fixed_balance"
     },
     "Savings": {
