@@ -23,6 +23,18 @@
   --bank-error: #DC3545;
 }
 
+/* Barclays Theme */
+.theme-barclays {
+  --bank-primary: #0066CC;
+  --bank-secondary: #003366;
+  --bank-accent: #FFD700;
+  --bank-text: #333333;
+  --bank-background: #FFFFFF;
+  --bank-success: #28A745;
+  --bank-warning: #FFC107;
+  --bank-error: #DC3545;
+}
+
 /* Bank-specific component styles */
 .bank-header {
   background: var(--bank-primary);
