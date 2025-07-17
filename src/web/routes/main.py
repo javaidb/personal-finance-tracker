@@ -12,10 +12,32 @@ logger = logging.getLogger(__name__)
 
 main_bp = Blueprint('main', __name__)
 
+def has_bank_statements() -> bool:
+    """Check if any bank statements exist."""
+    statements_dir = current_app.config.get('STATEMENTS_DIR')
+    if not statements_dir or not os.path.exists(statements_dir):
+        return False
+    
+    # Check if any bank folders exist
+    for item in os.listdir(statements_dir):
+        if os.path.isdir(os.path.join(statements_dir, item)):
+            # Check if this bank folder has any PDF files
+            bank_dir = os.path.join(statements_dir, item)
+            for root, dirs, files in os.walk(bank_dir):
+                if any(f.endswith('.pdf') for f in files):
+                    return True
+    return False
+
 @main_bp.route('/')
 def index() -> str:
     """Render the main page."""
     try:
+        # Check if this is first launch (no bank statements)
+        # Allow users to skip setup by adding ?skip_setup=true to URL
+        skip_setup = request.args.get('skip_setup', 'false').lower() == 'true'
+        if not has_bank_statements() and not skip_setup:
+            return redirect(url_for('main.setup'))
+        
         # Initialize bank branding service
         bank_branding_service = BankBrandingService()
         
@@ -101,6 +123,44 @@ def index() -> str:
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}", exc_info=True)
         return render_template('error.html', message="Failed to load account types")
+
+@main_bp.route('/setup')
+def setup() -> str:
+    """First launch setup page."""
+    try:
+        # Initialize bank branding service
+        bank_branding_service = BankBrandingService()
+        
+        # Get all available banks
+        try:
+            from src.config.bank_config import BankConfig
+            bank_config = BankConfig()
+            available_banks = bank_config.get_available_banks()
+        except Exception as e:
+            logger.error(f"Error getting available banks: {str(e)}")
+            available_banks = []
+        
+        # Get bank display info for each available bank
+        banks_info = []
+        for bank_name in available_banks:
+            try:
+                bank_info = bank_branding_service.get_bank_display_info(bank_name)
+                banks_info.append(bank_info)
+            except Exception as e:
+                logger.error(f"Error getting bank info for {bank_name}: {str(e)}")
+                # Add basic info if branding service fails
+                banks_info.append({
+                    'name': bank_name,
+                    'display_name': bank_name.title(),
+                    'logo_path': '/static/images/banks/default/logo.svg',
+                    'theme_class': f'theme-{bank_name.lower()}',
+                    'logo_exists': False
+                })
+        
+        return render_template('setup.html', banks=banks_info)
+    except Exception as e:
+        logger.error(f"Error in setup route: {str(e)}", exc_info=True)
+        return render_template('error.html', message="Failed to load setup page")
 
 @main_bp.route('/process_statements', methods=['POST'])
 def process_statements():
@@ -214,3 +274,105 @@ def get_accounts(bank_name: str, account_type: str) -> Dict[str, Any]:
             "success": False,
             "error": "Failed to get accounts"
         }), 500 
+
+@main_bp.route('/create-folders', methods=['POST'])
+def create_folders():
+    """Create folder structure for selected bank."""
+    try:
+        data = request.get_json()
+        bank_name = data.get('bank_name')
+        
+        if not bank_name:
+            return jsonify({'success': False, 'error': 'Bank name is required'}), 400
+        
+        # Validate that the bank exists in configurations
+        try:
+            from src.config.bank_config import BankConfig
+            bank_config = BankConfig()
+            available_banks = bank_config.get_available_banks()
+            
+            if bank_name not in available_banks:
+                return jsonify({'success': False, 'error': f'Bank "{bank_name}" is not configured'}), 400
+        except Exception as e:
+            logger.error(f"Error validating bank: {str(e)}")
+            return jsonify({'success': False, 'error': 'Error validating bank configuration'}), 500
+        
+        # Create folder structure
+        statements_dir = current_app.config.get('STATEMENTS_DIR')
+        if not statements_dir:
+            return jsonify({'success': False, 'error': 'Statements directory not configured'}), 500
+        
+        # Ensure bank_statements directory exists
+        os.makedirs(statements_dir, exist_ok=True)
+        
+        # Create bank folder structure
+        folders_to_create = [
+            os.path.join(statements_dir, bank_name),
+            os.path.join(statements_dir, bank_name, 'Credit'),
+            os.path.join(statements_dir, bank_name, 'Credit', 'YourCreditCard'),
+            os.path.join(statements_dir, bank_name, 'Chequing'),
+            os.path.join(statements_dir, bank_name, 'Chequing', 'YourChequingAccount'),
+            os.path.join(statements_dir, bank_name, 'Savings'),
+            os.path.join(statements_dir, bank_name, 'Savings', 'YourSavingsAccount')
+        ]
+        
+        created_folders = []
+        for folder in folders_to_create:
+            try:
+                os.makedirs(folder, exist_ok=True)
+                created_folders.append(folder)
+            except Exception as e:
+                logger.error(f"Error creating folder {folder}: {str(e)}")
+                return jsonify({'success': False, 'error': f'Error creating folder: {str(e)}'}), 500
+        
+        # Create a README file in the bank folder
+        readme_content = f"""{bank_name.title()} Bank Statements
+
+This folder contains your {bank_name.title()} bank statements organized by account type.
+
+Folder Structure:
+- Credit/          - Credit card statements
+- Chequing/        - Current account statements  
+- Savings/         - Savings account statements
+
+Each account type folder contains subfolders for individual accounts.
+Place your PDF statements in the appropriate account folder.
+
+Example:
+bank_statements/{bank_name}/
+├── Credit/
+│   └── YourCreditCard/
+│       ├── January 2024 statement.pdf
+│       └── February 2024 statement.pdf
+├── Chequing/
+│   └── YourChequingAccount/
+│       ├── January 2024 statement.pdf
+│       └── February 2024 statement.pdf
+└── Savings/
+    └── YourSavingsAccount/
+        ├── January 2024 statement.pdf
+        └── February 2024 statement.pdf
+
+The system will automatically detect {bank_name.title()} and apply the appropriate
+branding and parsing patterns for your statements.
+
+IMPORTANT: Replace the placeholder folder names (like "YourCreditCard") with your actual account names!
+"""
+        
+        readme_path = os.path.join(statements_dir, bank_name, 'README.txt')
+        try:
+            with open(readme_path, 'w') as f:
+                f.write(readme_content)
+        except Exception as e:
+            logger.error(f"Error creating README file: {str(e)}")
+            # Don't fail the whole operation if README creation fails
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Folder structure created for {bank_name}',
+            'created_folders': created_folders
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating folders: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error creating folders: {str(e)}'}), 500 

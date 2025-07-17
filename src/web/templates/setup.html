@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Personal Finance Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bank-themes.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .setup-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 0;
+        }
+        
+        .setup-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            max-width: 800px;
+            width: 100%;
+        }
+        
+        .setup-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 3rem 2rem;
+            text-align: center;
+        }
+        
+        .setup-header h1 {
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        
+        .setup-header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            margin-bottom: 0;
+        }
+        
+        .setup-body {
+            padding: 3rem 2rem;
+        }
+        
+        .bank-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .bank-card {
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: white;
+        }
+        
+        .bank-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .bank-card.selected {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #f8f9ff 0%, #e8f2ff 100%);
+        }
+        
+        .bank-logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1rem;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+        }
+        
+        .bank-logo img {
+            max-width: 60px;
+            max-height: 60px;
+        }
+        
+        .bank-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        
+        .bank-description {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+        
+        .setup-instructions {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .setup-instructions h5 {
+            color: #495057;
+            margin-bottom: 1rem;
+        }
+        
+        .folder-structure {
+            background: #e9ecef;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 1rem 0;
+        }
+        
+        .btn-setup {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-setup:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            color: white;
+        }
+        
+        .btn-setup:disabled {
+            opacity: 0.6;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .step-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+        
+        .step {
+            display: flex;
+            align-items: center;
+            margin: 0 1rem;
+        }
+        
+        .step-number {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 0.5rem;
+        }
+        
+        .step.active .step-number {
+            background: #28a745;
+        }
+        
+        .step-text {
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .step.active .step-text {
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="setup-container">
+        <div class="setup-card">
+            <div class="setup-header">
+                <h1><i class="bi bi-wallet2 me-2"></i>Welcome to Personal Finance Tracker</h1>
+                <p>Let's get you started by setting up your bank configuration</p>
+            </div>
+            
+            <div class="setup-body">
+                <div class="step-indicator">
+                    <div class="step active">
+                        <div class="step-number">1</div>
+                        <div class="step-text">Choose Bank</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <div class="step-text">Create Folders</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div class="step-text">Add Statements</div>
+                    </div>
+                </div>
+                
+                <h4 class="text-center mb-4">Step 1: Choose Your Bank</h4>
+                <p class="text-center text-muted mb-4">Select your bank from the list below. This will configure the system with the correct branding and statement parsing patterns.</p>
+                
+                <div class="bank-grid">
+                    {% for bank in banks %}
+                    <div class="bank-card" data-bank="{{ bank.name }}" onclick="selectBank('{{ bank.name }}')">
+                        <div class="bank-logo">
+                            {% if bank.logo_exists %}
+                                <img src="{{ bank.logo_path }}" alt="{{ bank.display_name }} Logo">
+                            {% else %}
+                                <i class="bi bi-bank" style="font-size: 2rem; color: #6c757d;"></i>
+                            {% endif %}
+                        </div>
+                        <div class="bank-name">{{ bank.display_name }}</div>
+                        <div class="bank-description">
+                            {% if bank.name == 'scotiabank' %}
+                                Canadian bank with red and navy branding
+                            {% elif bank.name == 'barclays' %}
+                                UK bank with blue and gold branding
+                            {% else %}
+                                Configured bank with custom branding
+                            {% endif %}
+                        </div>
+                        <div class="form-check d-flex justify-content-center">
+                            <input class="form-check-input" type="radio" name="selectedBank" value="{{ bank.name }}" id="bank-{{ bank.name }}">
+                            <label class="form-check-label ms-2" for="bank-{{ bank.name }}">
+                                Select {{ bank.display_name }}
+                            </label>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <div id="setup-instructions" class="setup-instructions" style="display: none;">
+                    <h5><i class="bi bi-info-circle me-2"></i>Next Steps for <span id="selected-bank-name"></span></h5>
+                    <p>Now you need to create the folder structure for your bank statements:</p>
+                    
+                    <div class="folder-structure" id="folder-structure">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-lightbulb me-2"></i>
+                        <strong>Tip:</strong> Create these folders in your <code>bank_statements</code> directory. 
+                        You can then add your PDF statements to the appropriate account folders.
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-setup" onclick="createFolders()">
+                            <i class="bi bi-folder-plus me-2"></i>Create Folder Structure
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="skipSetup()">
+                            <i class="bi bi-arrow-right me-2"></i>Skip Setup (I'll do this manually)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedBank = null;
+        
+        function selectBank(bankName) {
+            // Remove previous selection
+            document.querySelectorAll('.bank-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            // Add selection to clicked card
+            const card = document.querySelector(`[data-bank="${bankName}"]`);
+            card.classList.add('selected');
+            
+            // Check the radio button
+            document.getElementById(`bank-${bankName}`).checked = true;
+            
+            selectedBank = bankName;
+            showSetupInstructions(bankName);
+        }
+        
+        function showSetupInstructions(bankName) {
+            const instructions = document.getElementById('setup-instructions');
+            const bankNameSpan = document.getElementById('selected-bank-name');
+            const folderStructure = document.getElementById('folder-structure');
+            
+            // Get bank display name
+            const bankCard = document.querySelector(`[data-bank="${bankName}"]`);
+            const displayName = bankCard.querySelector('.bank-name').textContent;
+            
+            bankNameSpan.textContent = displayName;
+            
+            // Create folder structure example
+            const structure = `bank_statements/
+└── ${bankName}/
+    ├── Credit/
+    │   └── YourCreditCard/
+    │       └── (PDF statements here)
+    ├── Chequing/
+    │   └── YourChequingAccount/
+    │       └── (PDF statements here)
+    └── Savings/
+        └── YourSavingsAccount/
+            └── (PDF statements here)`;
+            
+            folderStructure.textContent = structure;
+            instructions.style.display = 'block';
+            
+            // Update step indicator
+            document.querySelectorAll('.step').forEach((step, index) => {
+                if (index === 0) {
+                    step.classList.add('active');
+                } else {
+                    step.classList.remove('active');
+                }
+            });
+        }
+        
+        function createFolders() {
+            if (!selectedBank) {
+                alert('Please select a bank first');
+                return;
+            }
+            
+            // Disable the button and show loading state
+            const createBtn = document.querySelector('.btn-setup');
+            const originalText = createBtn.innerHTML;
+            createBtn.disabled = true;
+            createBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Creating Folders...';
+            
+            // Call the API to create folders
+            fetch('/create-folders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    bank_name: selectedBank
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    const instructions = document.getElementById('setup-instructions');
+                    instructions.innerHTML = `
+                        <div class="text-center">
+                            <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3">Folder Structure Created!</h5>
+                            <p class="text-muted">The basic folder structure has been created for ${selectedBank}.</p>
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                <strong>Next:</strong> Replace the placeholder folder names (like "YourCreditCard") with your actual account names, then add your PDF statements.
+                            </div>
+                            <button class="btn btn-setup" onclick="window.location.href='/'">
+                                <i class="bi bi-arrow-right me-2"></i>Continue to Main Page
+                            </button>
+                        </div>
+                    `;
+                    
+                    // Update step indicator
+                    document.querySelectorAll('.step').forEach((step, index) => {
+                        if (index <= 1) {
+                            step.classList.add('active');
+                        } else {
+                            step.classList.remove('active');
+                        }
+                    });
+                } else {
+                    // Show error message
+                    alert('Error creating folders: ' + data.error);
+                    createBtn.disabled = false;
+                    createBtn.innerHTML = originalText;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error creating folders. Please try again.');
+                createBtn.disabled = false;
+                createBtn.innerHTML = originalText;
+            });
+        }
+        
+        function skipSetup() {
+            window.location.href = '/?skip_setup=true';
+        }
+    </script>
+</body>
+</html> 
