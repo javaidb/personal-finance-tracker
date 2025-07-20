@@ -134,7 +134,7 @@ def get_categories_details():
         print(f"Error in /categories/details: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@category_bp.route('/categories', methods=['GET'])
+@category_bp.route('/categories/list', methods=['GET'])
 def get_categories():
     """Get all categories with their details"""
     try:
