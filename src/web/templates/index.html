@@ -413,9 +413,13 @@
                                                         <div class="month-circle {% if months[month] %}covered{% else %}missing{% endif %}" 
                                                              title="{{ month }}/{{ year }} - {% if months[month] %}Has statement{% else %}Missing{% endif %}">
                                                         </div>
+                                                        {% else %}
+                                                        <div class="month-circle missing" 
+                                                             title="{{ month }}/{{ year }} - Missing">
+                                                        </div>
+                                                        {% endif %}
                                                         {% if month % 3 == 0 and month < 12 %}
                                                         <div class="month-spacer"></div>
-                                                        {% endif %}
                                                         {% endif %}
                                                         {% endfor %}
                                                     </div>
