@@ -30,7 +30,7 @@
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             overflow: hidden;
-            max-width: 800px;
+            max-width: 900px;
             width: 100%;
         }
         
@@ -114,6 +114,14 @@
             margin-bottom: 1rem;
         }
         
+        .step-content {
+            display: none;
+        }
+        
+        .step-content.active {
+            display: block;
+        }
+        
         .setup-instructions {
             background: #f8f9fa;
             border-radius: 10px;
@@ -187,6 +195,10 @@
             background: #28a745;
         }
         
+        .step.completed .step-number {
+            background: #28a745;
+        }
+        
         .step-text {
             font-weight: 500;
             color: #495057;
@@ -194,6 +206,216 @@
         
         .step.active .step-text {
             color: #28a745;
+        }
+        
+        .step.completed .step-text {
+            color: #28a745;
+        }
+        
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: #f8f9fa;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #e8f2ff;
+        }
+        
+        .file-list {
+            margin-top: 1rem;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem;
+            background: white;
+            border-radius: 5px;
+            margin-bottom: 0.5rem;
+            border: 1px solid #e9ecef;
+        }
+        
+        .file-item .file-name {
+            flex: 1;
+            margin-right: 1rem;
+        }
+        
+        .file-item .file-size {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .file-item .remove-file {
+            color: #dc3545;
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+        
+        .account-type-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .account-type-card {
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 1rem;
+            background: white;
+        }
+        
+        .account-type-card h6 {
+            margin-bottom: 0.5rem;
+            color: #495057;
+        }
+        
+        .account-type-card .description {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+        
+        .account-management-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 1rem 0;
+        }
+        
+        .account-type-management-card {
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 1.5rem;
+            background: white;
+        }
+        
+        .account-type-management-card h6 {
+            margin-bottom: 1rem;
+            color: #495057;
+            font-weight: 600;
+        }
+        
+        .account-list {
+            margin-bottom: 1rem;
+        }
+        
+        .account-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            border: 1px solid #e9ecef;
+        }
+        
+        .account-item.editing {
+            background: white;
+            border-color: #667eea;
+        }
+        
+        .account-name {
+            flex: 1;
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .account-name-input {
+            flex: 1;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.9rem;
+        }
+        
+        .account-actions {
+            display: flex;
+            gap: 0.25rem;
+        }
+        
+        .btn-account-action {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-edit {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-edit:hover {
+            background: #0056b3;
+        }
+        
+        .btn-save {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-save:hover {
+            background: #1e7e34;
+        }
+        
+        .btn-cancel {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-cancel:hover {
+            background: #545b62;
+        }
+        
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-delete:hover {
+            background: #c82333;
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background: #e9ecef;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .success-message {
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .success-message i {
+            font-size: 4rem;
+            color: #28a745;
+            margin-bottom: 1rem;
         }
     </style>
 </head>
@@ -207,20 +429,30 @@
             
             <div class="setup-body">
                 <div class="step-indicator">
-                    <div class="step active">
+                    <div class="step active" id="step-1">
                         <div class="step-number">1</div>
                         <div class="step-text">Choose Bank</div>
                     </div>
-                    <div class="step">
+                    <div class="step" id="step-2">
                         <div class="step-number">2</div>
                         <div class="step-text">Create Folders</div>
                     </div>
-                    <div class="step">
+                    <div class="step" id="step-3">
                         <div class="step-number">3</div>
-                        <div class="step-text">Add Statements</div>
+                        <div class="step-text">Manage Accounts</div>
+                    </div>
+                    <div class="step" id="step-4">
+                        <div class="step-number">4</div>
+                        <div class="step-text">Upload Statements</div>
+                    </div>
+                    <div class="step" id="step-5">
+                        <div class="step-number">5</div>
+                        <div class="step-text">Complete</div>
                     </div>
                 </div>
                 
+                <!-- Step 1: Choose Bank -->
+                <div class="step-content active" id="step-1-content">
                 <h4 class="text-center mb-4">Step 1: Choose Your Bank</h4>
                 <p class="text-center text-muted mb-4">Select your bank from the list below. This will configure the system with the correct branding and statement parsing patterns.</p>
                 
@@ -254,9 +486,21 @@
                     {% endfor %}
                 </div>
                 
-                <div id="setup-instructions" class="setup-instructions" style="display: none;">
-                    <h5><i class="bi bi-info-circle me-2"></i>Next Steps for <span id="selected-bank-name"></span></h5>
-                    <p>Now you need to create the folder structure for your bank statements:</p>
+                    <div class="d-grid gap-2 mt-4">
+                        <button class="btn btn-setup" onclick="nextStep()" id="next-step-1" disabled>
+                            <i class="bi bi-arrow-right me-2"></i>Next: Create Folders
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Step 2: Create Folders -->
+                <div class="step-content" id="step-2-content">
+                    <h4 class="text-center mb-4">Step 2: Create Folder Structure</h4>
+                    <p class="text-center text-muted mb-4">We'll create the necessary folders for your <span id="selected-bank-name-2"></span> statements.</p>
+                    
+                    <div class="setup-instructions">
+                        <h5><i class="bi bi-info-circle me-2"></i>Folder Structure for <span id="selected-bank-name-3"></span></h5>
+                        <p>The following folder structure will be created:</p>
                     
                     <div class="folder-structure" id="folder-structure">
                         <!-- Will be populated by JavaScript -->
@@ -264,16 +508,159 @@
                     
                     <div class="alert alert-info">
                         <i class="bi bi-lightbulb me-2"></i>
-                        <strong>Tip:</strong> Create these folders in your <code>bank_statements</code> directory. 
-                        You can then add your PDF statements to the appropriate account folders.
+                            <strong>Tip:</strong> Each account type folder will contain a README file with instructions for organizing your statements.
+                        </div>
                     </div>
                     
                     <div class="d-grid gap-2">
-                        <button class="btn btn-setup" onclick="createFolders()">
+                        <button class="btn btn-setup" onclick="createFolders()" id="create-folders-btn">
                             <i class="bi bi-folder-plus me-2"></i>Create Folder Structure
                         </button>
-                        <button class="btn btn-outline-secondary" onclick="skipSetup()">
-                            <i class="bi bi-arrow-right me-2"></i>Skip Setup (I'll do this manually)
+                        <button class="btn btn-outline-secondary" onclick="previousStep()">
+                            <i class="bi bi-arrow-left me-2"></i>Back
+                        </button>
+                    </div>
+                </div>
+                
+                                 <!-- Step 3: Manage Accounts -->
+                 <div class="step-content" id="step-3-content">
+                     <h4 class="text-center mb-4">Step 3: Manage Account Folders</h4>
+                     <p class="text-center text-muted mb-4">Configure and manage the account folders for your <span id="selected-bank-name-4"></span> statements.</p>
+                     
+                     <div class="alert alert-info">
+                         <i class="bi bi-info-circle me-2"></i>
+                         <strong>Tip:</strong> Rename the default folders to match your actual account names. You need at least one account per type to continue.
+                     </div>
+                     
+                     <div class="account-management-grid">
+                         <div class="account-type-management-card">
+                             <h6><i class="bi bi-credit-card me-2"></i>Credit Cards</h6>
+                             <div class="account-list" id="credit-accounts">
+                                 <!-- Will be populated by JavaScript -->
+                             </div>
+                             <button class="btn btn-outline-primary btn-sm mt-2" onclick="addAccount('credit')">
+                                 <i class="bi bi-plus-circle me-1"></i>Add Credit Account
+                             </button>
+                         </div>
+                         
+                         <div class="account-type-management-card">
+                             <h6><i class="bi bi-bank me-2"></i>Chequing Accounts</h6>
+                             <div class="account-list" id="chequing-accounts">
+                                 <!-- Will be populated by JavaScript -->
+                             </div>
+                             <button class="btn btn-outline-primary btn-sm mt-2" onclick="addAccount('chequing')">
+                                 <i class="bi bi-plus-circle me-1"></i>Add Chequing Account
+                             </button>
+                         </div>
+                         
+                         <div class="account-type-management-card">
+                             <h6><i class="bi bi-piggy-bank me-2"></i>Savings Accounts</h6>
+                             <div class="account-list" id="savings-accounts">
+                                 <!-- Will be populated by JavaScript -->
+                             </div>
+                             <button class="btn btn-outline-primary btn-sm mt-2" onclick="addAccount('savings')">
+                                 <i class="bi bi-plus-circle me-1"></i>Add Savings Account
+                             </button>
+                         </div>
+                     </div>
+                     
+                     <div class="d-grid gap-2 mt-4">
+                         <button class="btn btn-setup" onclick="nextStep()" id="next-step-3" disabled>
+                             <i class="bi bi-arrow-right me-2"></i>Next: Upload Statements
+                         </button>
+                         <button class="btn btn-outline-secondary" onclick="previousStep()">
+                             <i class="bi bi-arrow-left me-2"></i>Back
+                         </button>
+                     </div>
+                 </div>
+                
+                <!-- Step 4: Upload Statements -->
+                <div class="step-content" id="step-4-content">
+                    <h4 class="text-center mb-4">Step 4: Upload Bank Statements</h4>
+                    <p class="text-center text-muted mb-4" id="upload-description">Upload your PDF bank statements to the appropriate accounts.</p>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Tip:</strong> Select the specific account for each file you upload. Files will be organized in the correct account folders.
+                    </div>
+                    
+                    <div class="account-type-grid">
+                        <div class="account-type-card">
+                            <h6><i class="bi bi-credit-card me-2"></i>Credit Cards</h6>
+                            <div class="description">Credit card statements and transactions</div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Select Account:</label>
+                                <select class="form-select" id="credit-account-select">
+                                    <option value="">Choose an account...</option>
+                                </select>
+                            </div>
+                            
+                            <div class="upload-area" onclick="document.getElementById('credit-upload').click()" ondrop="handleDrop(event, 'credit')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                                <i class="bi bi-cloud-upload" style="font-size: 2rem; color: #6c757d;"></i>
+                                <p class="mt-2 mb-0" id="credit-upload-text">Click or drag PDF files here</p>
+                                <input type="file" id="credit-upload" multiple accept=".pdf,.csv" style="display: none;" onchange="handleFileSelect(event, 'credit')">
+                            </div>
+                            <div class="file-list" id="credit-files"></div>
+                        </div>
+                        
+                        <div class="account-type-card">
+                            <h6><i class="bi bi-bank me-2"></i>Chequing Accounts</h6>
+                            <div class="description">Current account statements and transactions</div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Select Account:</label>
+                                <select class="form-select" id="chequing-account-select">
+                                    <option value="">Choose an account...</option>
+                                </select>
+                            </div>
+                            
+                            <div class="upload-area" onclick="document.getElementById('chequing-upload').click()" ondrop="handleDrop(event, 'chequing')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                                <i class="bi bi-cloud-upload" style="font-size: 2rem; color: #6c757d;"></i>
+                                <p class="mt-2 mb-0" id="chequing-upload-text">Click or drag PDF files here</p>
+                                <input type="file" id="chequing-upload" multiple accept=".pdf,.csv" style="display: none;" onchange="handleFileSelect(event, 'chequing')">
+                            </div>
+                            <div class="file-list" id="chequing-files"></div>
+                        </div>
+                        
+                        <div class="account-type-card">
+                            <h6><i class="bi bi-piggy-bank me-2"></i>Savings Accounts</h6>
+                            <div class="description">Savings account statements and transactions</div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Select Account:</label>
+                                <select class="form-select" id="savings-account-select">
+                                    <option value="">Choose an account...</option>
+                                </select>
+                            </div>
+                            
+                            <div class="upload-area" onclick="document.getElementById('savings-upload').click()" ondrop="handleDrop(event, 'savings')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                                <i class="bi bi-cloud-upload" style="font-size: 2rem; color: #6c757d;"></i>
+                                <p class="mt-2 mb-0" id="savings-upload-text">Click or drag PDF files here</p>
+                                <input type="file" id="savings-upload" multiple accept=".pdf,.csv" style="display: none;" onchange="handleFileSelect(event, 'savings')">
+                            </div>
+                            <div class="file-list" id="savings-files"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 mt-4">
+                        <button class="btn btn-setup" onclick="uploadFiles()" id="upload-btn" disabled>
+                            <i class="bi bi-cloud-upload me-2"></i>Upload All Files
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="previousStep()">
+                            <i class="bi bi-arrow-left me-2"></i>Back
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Step 5: Complete -->
+                <div class="step-content" id="step-5-content">
+                    <div class="success-message">
+                        <i class="bi bi-check-circle"></i>
+                        <h4>Setup Complete!</h4>
+                        <p class="text-muted">Your bank configuration has been set up successfully. You can now start analyzing your financial data.</p>
+                        <button class="btn btn-setup" onclick="completeSetup()">
+                            <i class="bi bi-arrow-right me-2"></i>Go to Dashboard
                         </button>
                     </div>
                 </div>
@@ -283,6 +670,17 @@
 
     <script>
         let selectedBank = null;
+        let currentStep = 1;
+        let uploadedFiles = {
+            credit: [],
+            chequing: [],
+            savings: []
+        };
+        let accountFolders = {
+            credit: [],
+            chequing: [],
+            savings: []
+        };
         
         function selectBank(bankName) {
             // Remove previous selection
@@ -298,44 +696,88 @@
             document.getElementById(`bank-${bankName}`).checked = true;
             
             selectedBank = bankName;
-            showSetupInstructions(bankName);
+            
+            // Enable next button
+            document.getElementById('next-step-1').disabled = false;
+            
+            // Update upload text based on bank file format
+            updateUploadTextForBank(bankName);
         }
         
-        function showSetupInstructions(bankName) {
-            const instructions = document.getElementById('setup-instructions');
-            const bankNameSpan = document.getElementById('selected-bank-name');
+        function nextStep() {
+            if (currentStep < 5) { // Updated to 5 for the new step
+                currentStep++;
+                updateStepDisplay();
+            }
+        }
+        
+        function previousStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                updateStepDisplay();
+            }
+        }
+        
+        function updateStepDisplay() {
+            // Hide all step contents
+            document.querySelectorAll('.step-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Show current step content
+            document.getElementById(`step-${currentStep}-content`).classList.add('active');
+            
+            // Update step indicators
+            document.querySelectorAll('.step').forEach((step, index) => {
+                step.classList.remove('active', 'completed');
+                if (index + 1 < currentStep) {
+                    step.classList.add('completed');
+                } else if (index + 1 === currentStep) {
+                    step.classList.add('active');
+                }
+            });
+            
+            // Update content based on step
+            if (currentStep === 2) {
+                showFolderStructure();
+            } else if (currentStep === 3) {
+                loadAccountFolders();
+            } else if (currentStep === 4) {
+                populateAccountDropdowns();
+            }
+        }
+        
+        function showFolderStructure() {
+            const bankNameSpan2 = document.getElementById('selected-bank-name-2');
+            const bankNameSpan3 = document.getElementById('selected-bank-name-3');
             const folderStructure = document.getElementById('folder-structure');
             
             // Get bank display name
-            const bankCard = document.querySelector(`[data-bank="${bankName}"]`);
+            const bankCard = document.querySelector(`[data-bank="${selectedBank}"]`);
             const displayName = bankCard.querySelector('.bank-name').textContent;
             
-            bankNameSpan.textContent = displayName;
+            bankNameSpan2.textContent = displayName;
+            bankNameSpan3.textContent = displayName;
             
             // Create folder structure example
+            let fileType = 'PDF statements here';
+            if (selectedBank === 'barclays') {
+                fileType = 'CSV statements here';
+            }
+            
             const structure = `bank_statements/
-└── ${bankName}/
+└── ${selectedBank}/
     ├── Credit/
     │   └── YourCreditCard/
-    │       └── (PDF statements here)
+    │       └── (${fileType})
     ├── Chequing/
     │   └── YourChequingAccount/
-    │       └── (PDF statements here)
+    │       └── (${fileType})
     └── Savings/
         └── YourSavingsAccount/
-            └── (PDF statements here)`;
+            └── (${fileType})`;
             
             folderStructure.textContent = structure;
-            instructions.style.display = 'block';
-            
-            // Update step indicator
-            document.querySelectorAll('.step').forEach((step, index) => {
-                if (index === 0) {
-                    step.classList.add('active');
-                } else {
-                    step.classList.remove('active');
-                }
-            });
         }
         
         function createFolders() {
@@ -345,7 +787,7 @@
             }
             
             // Disable the button and show loading state
-            const createBtn = document.querySelector('.btn-setup');
+            const createBtn = document.getElementById('create-folders-btn');
             const originalText = createBtn.innerHTML;
             createBtn.disabled = true;
             createBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Creating Folders...';
@@ -363,31 +805,8 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Show success message
-                    const instructions = document.getElementById('setup-instructions');
-                    instructions.innerHTML = `
-                        <div class="text-center">
-                            <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
-                            <h5 class="mt-3">Folder Structure Created!</h5>
-                            <p class="text-muted">The basic folder structure has been created for ${selectedBank}.</p>
-                            <div class="alert alert-warning">
-                                <i class="bi bi-exclamation-triangle me-2"></i>
-                                <strong>Next:</strong> Replace the placeholder folder names (like "YourCreditCard") with your actual account names, then add your PDF statements.
-                            </div>
-                            <button class="btn btn-setup" onclick="window.location.href='/'">
-                                <i class="bi bi-arrow-right me-2"></i>Continue to Main Page
-                            </button>
-                        </div>
-                    `;
-                    
-                    // Update step indicator
-                    document.querySelectorAll('.step').forEach((step, index) => {
-                        if (index <= 1) {
-                            step.classList.add('active');
-                        } else {
-                            step.classList.remove('active');
-                        }
-                    });
+                    // Move to next step
+                    nextStep();
                 } else {
                     // Show error message
                     alert('Error creating folders: ' + data.error);
@@ -403,8 +822,374 @@
             });
         }
         
-        function skipSetup() {
-            window.location.href = '/?skip_setup=true';
+        function handleFileSelect(event, accountType) {
+            const files = Array.from(event.target.files);
+            addFilesToAccountType(files, accountType);
+        }
+        
+        function handleDrop(event, accountType) {
+            event.preventDefault();
+            const files = Array.from(event.dataTransfer.files);
+            addFilesToAccountType(files, accountType);
+        }
+        
+        function handleDragOver(event) {
+            event.preventDefault();
+            event.currentTarget.classList.add('dragover');
+        }
+        
+        function handleDragLeave(event) {
+            event.currentTarget.classList.remove('dragover');
+        }
+        
+        function addFilesToAccountType(files, accountType) {
+            // Filter files based on selected bank's file format
+            let allowedFiles = [];
+            
+            if (selectedBank === 'barclays') {
+                // Barclays supports CSV files
+                allowedFiles = files.filter(file => file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv'));
+            } else {
+                // Other banks support PDF files
+                allowedFiles = files.filter(file => file.type === 'application/pdf');
+            }
+            
+            uploadedFiles[accountType] = uploadedFiles[accountType].concat(allowedFiles);
+            updateFileList(accountType);
+            updateUploadButton();
+        }
+        
+        function updateFileList(accountType) {
+            const fileList = document.getElementById(`${accountType}-files`);
+            fileList.innerHTML = '';
+            
+            uploadedFiles[accountType].forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div class="file-name">${file.name}</div>
+                    <div class="file-size">${formatFileSize(file.size)}</div>
+                    <div class="remove-file" onclick="removeFile('${accountType}', ${index})">
+                        <i class="bi bi-x-circle"></i>
+                    </div>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+        
+        function removeFile(accountType, index) {
+            uploadedFiles[accountType].splice(index, 1);
+            updateFileList(accountType);
+            updateUploadButton();
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function updateUploadButton() {
+            const totalFiles = uploadedFiles.credit.length + uploadedFiles.chequing.length + uploadedFiles.savings.length;
+            const uploadBtn = document.getElementById('upload-btn');
+            uploadBtn.disabled = totalFiles === 0;
+        }
+        
+        function uploadFiles() {
+            const totalFiles = uploadedFiles.credit.length + uploadedFiles.chequing.length + uploadedFiles.savings.length;
+            if (totalFiles === 0) {
+                alert('Please select at least one file to upload');
+                return;
+            }
+            
+            // Check if all files have selected accounts
+            const accountTypes = ['credit', 'chequing', 'savings'];
+            const missingAccounts = [];
+            
+            accountTypes.forEach(accountType => {
+                if (uploadedFiles[accountType].length > 0) {
+                    const selectedAccount = document.getElementById(`${accountType}-account-select`).value;
+                    if (!selectedAccount) {
+                        missingAccounts.push(accountType);
+                    }
+                }
+            });
+            
+            if (missingAccounts.length > 0) {
+                alert(`Please select accounts for: ${missingAccounts.join(', ')}`);
+                return;
+            }
+            
+            const uploadBtn = document.getElementById('upload-btn');
+            const originalText = uploadBtn.innerHTML;
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Uploading...';
+            
+            // Create FormData for each account type
+            const promises = [];
+            
+            accountTypes.forEach(accountType => {
+                if (uploadedFiles[accountType].length > 0) {
+                    const selectedAccount = document.getElementById(`${accountType}-account-select`).value;
+                    const formData = new FormData();
+                    formData.append('bank_name', selectedBank);
+                    formData.append('account_type', accountType);
+                    formData.append('account_name', selectedAccount);
+                    
+                    uploadedFiles[accountType].forEach(file => {
+                        formData.append('files', file);
+                    });
+                    
+                    promises.push(
+                        fetch('/upload-statements', {
+                            method: 'POST',
+                            body: formData
+                        }).then(response => response.json())
+                    );
+                }
+            });
+            
+            Promise.all(promises)
+                .then(results => {
+                    const allSuccess = results.every(result => result.success);
+                    if (allSuccess) {
+                        nextStep();
+                    } else {
+                        const errors = results.filter(result => !result.success).map(result => result.error).join(', ');
+                        alert('Error uploading files: ' + errors);
+                        uploadBtn.disabled = false;
+                        uploadBtn.innerHTML = originalText;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error uploading files. Please try again.');
+                    uploadBtn.disabled = false;
+                    uploadBtn.innerHTML = originalText;
+                });
+        }
+        
+        function completeSetup() {
+            window.location.href = '/';
+        }
+        
+        function updateUploadTextForBank(bankName) {
+            const accountTypes = ['credit', 'chequing', 'savings'];
+            let uploadText = 'Click or drag PDF files here';
+            let descriptionText = 'Upload your PDF bank statements to the appropriate accounts.';
+            
+            // Check if this is Barclays (CSV format)
+            if (bankName === 'barclays') {
+                uploadText = 'Click or drag CSV files here';
+                descriptionText = 'Upload your CSV bank statements to the appropriate accounts.';
+            }
+            
+            accountTypes.forEach(accountType => {
+                const textElement = document.getElementById(`${accountType}-upload-text`);
+                if (textElement) {
+                    textElement.textContent = uploadText;
+                }
+            });
+            
+            // Update step description
+            const descriptionElement = document.getElementById('upload-description');
+            if (descriptionElement) {
+                descriptionElement.textContent = descriptionText;
+            }
+        }
+        
+        function loadAccountFolders() {
+            // Load existing account folders for each account type
+            const accountTypes = ['credit', 'chequing', 'savings'];
+            
+            accountTypes.forEach(accountType => {
+                fetch(`/api/accounts/${selectedBank}/${accountType}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            accountFolders[accountType] = data.accounts;
+                            renderAccountList(accountType);
+                        }
+                    })
+                    .catch(error => {
+                        console.error(`Error loading ${accountType} accounts:`, error);
+                        // Use default folders if API fails
+                        accountFolders[accountType] = accountType === 'credit' ? ['YourCreditCard'] : 
+                                                    accountType === 'chequing' ? ['YourChequingAccount'] : 
+                                                    ['YourSavingsAccount'];
+                        renderAccountList(accountType);
+                    });
+            });
+            
+            // Update bank name display
+            const bankCard = document.querySelector(`[data-bank="${selectedBank}"]`);
+            const displayName = bankCard.querySelector('.bank-name').textContent;
+            document.getElementById('selected-bank-name-4').textContent = displayName;
+        }
+        
+        function renderAccountList(accountType) {
+            const container = document.getElementById(`${accountType}-accounts`);
+            container.innerHTML = '';
+            
+            accountFolders[accountType].forEach((accountName, index) => {
+                const accountItem = document.createElement('div');
+                accountItem.className = 'account-item';
+                accountItem.innerHTML = `
+                    <div class="account-name">${accountName}</div>
+                    <div class="account-actions">
+                        <button class="btn-account-action btn-edit" onclick="editAccount('${accountType}', ${index})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        ${accountFolders[accountType].length > 1 ? `
+                            <button class="btn-account-action btn-delete" onclick="deleteAccount('${accountType}', ${index})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+                container.appendChild(accountItem);
+            });
+            
+            updateNextButton();
+        }
+        
+        function addAccount(accountType) {
+            const newName = prompt(`Enter name for new ${accountType} account:`);
+            if (!newName || newName.trim() === '') return;
+            
+            fetch(`/api/accounts/${selectedBank}/${accountType}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    account_name: newName.trim()
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    accountFolders[accountType].push(newName.trim());
+                    renderAccountList(accountType);
+                } else {
+                    alert('Error creating account: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error creating account:', error);
+                alert('Error creating account. Please try again.');
+            });
+        }
+        
+        function editAccount(accountType, index) {
+            const accountItem = document.querySelector(`#${accountType}-accounts .account-item:nth-child(${index + 1})`);
+            const accountName = accountFolders[accountType][index];
+            
+            accountItem.className = 'account-item editing';
+            accountItem.innerHTML = `
+                <input type="text" class="account-name-input" value="${accountName}" id="edit-${accountType}-${index}">
+                <div class="account-actions">
+                    <button class="btn-account-action btn-save" onclick="saveAccount('${accountType}', ${index})">
+                        <i class="bi bi-check"></i>
+                    </button>
+                    <button class="btn-account-action btn-cancel" onclick="cancelEdit('${accountType}', ${index})">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            `;
+            
+            // Focus on input
+            document.getElementById(`edit-${accountType}-${index}`).focus();
+        }
+        
+        function saveAccount(accountType, index) {
+            const input = document.getElementById(`edit-${accountType}-${index}`);
+            const newName = input.value.trim();
+            const oldName = accountFolders[accountType][index];
+            
+            if (!newName || newName === oldName) {
+                cancelEdit(accountType, index);
+                return;
+            }
+            
+            fetch(`/api/accounts/${selectedBank}/${accountType}/${oldName}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    new_name: newName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    accountFolders[accountType][index] = newName;
+                    renderAccountList(accountType);
+                } else {
+                    alert('Error renaming account: ' + data.error);
+                    cancelEdit(accountType, index);
+                }
+            })
+            .catch(error => {
+                console.error('Error renaming account:', error);
+                alert('Error renaming account. Please try again.');
+                cancelEdit(accountType, index);
+            });
+        }
+        
+        function cancelEdit(accountType, index) {
+            renderAccountList(accountType);
+        }
+        
+        function deleteAccount(accountType, index) {
+            const accountName = accountFolders[accountType][index];
+            if (!confirm(`Are you sure you want to delete the account "${accountName}"?`)) return;
+            
+            fetch(`/api/accounts/${selectedBank}/${accountType}/${accountName}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    accountFolders[accountType].splice(index, 1);
+                    renderAccountList(accountType);
+                } else {
+                    alert('Error deleting account: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting account:', error);
+                alert('Error deleting account. Please try again.');
+            });
+        }
+        
+        function updateNextButton() {
+            const hasAccounts = accountFolders.credit.length > 0 && 
+                               accountFolders.chequing.length > 0 && 
+                               accountFolders.savings.length > 0;
+            
+            const nextBtn = document.getElementById('next-step-3');
+            nextBtn.disabled = !hasAccounts;
+        }
+        
+        function populateAccountDropdowns() {
+            // Populate account dropdowns for upload step
+            const accountTypes = ['credit', 'chequing', 'savings'];
+            
+            accountTypes.forEach(accountType => {
+                const select = document.getElementById(`${accountType}-account-select`);
+                select.innerHTML = '<option value="">Choose an account...</option>';
+                
+                accountFolders[accountType].forEach(accountName => {
+                    const option = document.createElement('option');
+                    option.value = accountName;
+                    option.textContent = accountName;
+                    select.appendChild(option);
+                });
+            });
         }
     </script>
 </body>
