@@ -431,29 +431,55 @@
                 <div class="step-indicator">
                     <div class="step active" id="step-1">
                         <div class="step-number">1</div>
-                        <div class="step-text">Choose Bank</div>
+                        <div class="step-text">Your Name</div>
                     </div>
                     <div class="step" id="step-2">
                         <div class="step-number">2</div>
-                        <div class="step-text">Create Folders</div>
+                        <div class="step-text">Choose Bank</div>
                     </div>
                     <div class="step" id="step-3">
                         <div class="step-number">3</div>
-                        <div class="step-text">Manage Accounts</div>
+                        <div class="step-text">Create Folders</div>
                     </div>
                     <div class="step" id="step-4">
                         <div class="step-number">4</div>
-                        <div class="step-text">Upload Statements</div>
+                        <div class="step-text">Manage Accounts</div>
                     </div>
                     <div class="step" id="step-5">
                         <div class="step-number">5</div>
+                        <div class="step-text">Upload Statements</div>
+                    </div>
+                    <div class="step" id="step-6">
+                        <div class="step-number">6</div>
                         <div class="step-text">Complete</div>
                     </div>
                 </div>
                 
-                <!-- Step 1: Choose Bank -->
+                <!-- Step 1: User Name -->
                 <div class="step-content active" id="step-1-content">
-                <h4 class="text-center mb-4">Step 1: Choose Your Bank</h4>
+                <h4 class="text-center mb-4">Step 1: Welcome! What should we call you?</h4>
+                <p class="text-center text-muted mb-4">Please enter your name or nickname. This will be used to personalize your dashboard experience.</p>
+                
+                <div class="row justify-content-center">
+                    <div class="col-md-6">
+                        <div class="mb-4">
+                            <label for="user-name" class="form-label">Your Name</label>
+                            <input type="text" class="form-control form-control-lg" id="user-name" placeholder="Enter your name or nickname" maxlength="50">
+                            <div class="form-text">This will be used in your dashboard headers and personalization.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                                    <div class="d-grid gap-2 mt-4">
+                        <button class="btn btn-setup" onclick="nextStep()" id="next-step-1" disabled>
+                            <i class="bi bi-arrow-right me-2"></i>Next: Choose Your Bank
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Step 2: Choose Bank -->
+                <div class="step-content" id="step-2-content">
+                <h4 class="text-center mb-4">Step 2: Choose Your Bank</h4>
                 <p class="text-center text-muted mb-4">Select your bank from the list below. This will configure the system with the correct branding and statement parsing patterns.</p>
                 
                 <div class="bank-grid">
@@ -487,16 +513,19 @@
                 </div>
                 
                     <div class="d-grid gap-2 mt-4">
-                        <button class="btn btn-setup" onclick="nextStep()" id="next-step-1" disabled>
+                        <button class="btn btn-setup" onclick="nextStep()" id="next-step-2" disabled>
                             <i class="bi bi-arrow-right me-2"></i>Next: Create Folders
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="previousStep()">
+                            <i class="bi bi-arrow-left me-2"></i>Back
                         </button>
                     </div>
                 </div>
                 
-                <!-- Step 2: Create Folders -->
-                <div class="step-content" id="step-2-content">
-                    <h4 class="text-center mb-4">Step 2: Create Folder Structure</h4>
-                    <p class="text-center text-muted mb-4">We'll create the necessary folders for your <span id="selected-bank-name-2"></span> statements.</p>
+                <!-- Step 3: Create Folders -->
+                <div class="step-content" id="step-3-content">
+                    <h4 class="text-center mb-4">Step 3: Create Folder Structure</h4>
+                    <p class="text-center text-muted mb-4">We'll create the necessary folders for your <span id="selected-bank-name-3"></span> statements.</p>
                     
                     <div class="setup-instructions">
                         <h5><i class="bi bi-info-circle me-2"></i>Folder Structure for <span id="selected-bank-name-3"></span></h5>
@@ -522,9 +551,9 @@
                     </div>
                 </div>
                 
-                                 <!-- Step 3: Manage Accounts -->
-                 <div class="step-content" id="step-3-content">
-                     <h4 class="text-center mb-4">Step 3: Manage Account Folders</h4>
+                                 <!-- Step 4: Manage Accounts -->
+                 <div class="step-content" id="step-4-content">
+                     <h4 class="text-center mb-4">Step 4: Manage Account Folders</h4>
                      <p class="text-center text-muted mb-4">Configure and manage the account folders for your <span id="selected-bank-name-4"></span> statements.</p>
                      
                      <div class="alert alert-info">
@@ -574,9 +603,9 @@
                      </div>
                  </div>
                 
-                <!-- Step 4: Upload Statements -->
-                <div class="step-content" id="step-4-content">
-                    <h4 class="text-center mb-4">Step 4: Upload Bank Statements</h4>
+                <!-- Step 5: Upload Statements -->
+                <div class="step-content" id="step-5-content">
+                    <h4 class="text-center mb-4">Step 5: Upload Bank Statements</h4>
                     <p class="text-center text-muted mb-4" id="upload-description">Upload your PDF bank statements to the appropriate accounts.</p>
                     
                     <div class="alert alert-info">
@@ -653,8 +682,8 @@
                     </div>
                 </div>
                 
-                <!-- Step 5: Complete -->
-                <div class="step-content" id="step-5-content">
+                <!-- Step 6: Complete -->
+                <div class="step-content" id="step-6-content">
                     <div class="success-message">
                         <i class="bi bi-check-circle"></i>
                         <h4>Setup Complete!</h4>
@@ -670,6 +699,7 @@
 
     <script>
         let selectedBank = null;
+        let userName = '';
         let currentStep = 1;
         let uploadedFiles = {
             credit: [],
@@ -681,6 +711,17 @@
             chequing: [],
             savings: []
         };
+        
+        // Add event listener for user name input
+        document.addEventListener('DOMContentLoaded', function() {
+            const userNameInput = document.getElementById('user-name');
+            const nextStep1Btn = document.getElementById('next-step-1');
+            
+            userNameInput.addEventListener('input', function() {
+                const name = this.value.trim();
+                nextStep1Btn.disabled = name.length === 0;
+            });
+        });
         
         function selectBank(bankName) {
             // Remove previous selection
@@ -697,15 +738,26 @@
             
             selectedBank = bankName;
             
-            // Enable next button
-            document.getElementById('next-step-1').disabled = false;
+            // Enable next button for step 2
+            document.getElementById('next-step-2').disabled = false;
             
             // Update upload text based on bank file format
             updateUploadTextForBank(bankName);
         }
         
         function nextStep() {
-            if (currentStep < 5) { // Updated to 5 for the new step
+            // Validate current step before proceeding
+            if (currentStep === 1) {
+                const nameInput = document.getElementById('user-name');
+                const name = nameInput.value.trim();
+                if (name.length === 0) {
+                    alert('Please enter your name to continue.');
+                    return;
+                }
+                userName = name;
+            }
+            
+            if (currentStep < 6) { // Updated to 6 for the new step
                 currentStep++;
                 updateStepDisplay();
             }
@@ -739,10 +791,12 @@
             
             // Update content based on step
             if (currentStep === 2) {
-                showFolderStructure();
+                // Bank selection step - no special handling needed
             } else if (currentStep === 3) {
-                loadAccountFolders();
+                showFolderStructure();
             } else if (currentStep === 4) {
+                loadAccountFolders();
+            } else if (currentStep === 5) {
                 populateAccountDropdowns();
             }
         }
@@ -972,7 +1026,31 @@
         }
         
         function completeSetup() {
-            window.location.href = '/';
+            // Send user name to server for storage
+            fetch('/save-user-name', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_name: userName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/';
+                } else {
+                    console.error('Error saving user name:', data.error);
+                    // Still redirect even if saving fails
+                    window.location.href = '/';
+                }
+            })
+            .catch(error => {
+                console.error('Error saving user name:', error);
+                // Still redirect even if saving fails
+                window.location.href = '/';
+            });
         }
         
         function updateUploadTextForBank(bankName) {
