@@ -23,7 +23,7 @@ class Config:
         self.CACHED_DATA_DIR = get_cached_data_dir()
         self.LOGS_DIR = get_logs_dir()
         self.UPLOAD_FOLDER = get_uploads_dir()
-        self.ALLOWED_EXTENSIONS = {'pdf'}
+        self.ALLOWED_EXTENSIONS = {'pdf', 'csv'}
         self.MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
         self.DATABANK_PATH = DATABANK_PATH
         self.MERCHANT_DB_PATH = MERCHANT_DB_PATH
