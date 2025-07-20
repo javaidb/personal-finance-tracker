@@ -12,28 +12,48 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 transaction_service = None
 
 def init_transaction_service():
-    """Initialize the transaction service if not already initialized."""
+    """Initialize the transaction service if not already initialized or if bank has changed."""
     global transaction_service
     try:
-        if transaction_service is None:
+        # Get base path - handle both Flask context and standalone usage
+        try:
+            # Try to get base path from Flask app context
             base_path = Path(current_app.root_path).parent.parent
-            
-            # Detect bank name from folder structure
-            bank_name = None
-            try:
-                from src.config.bank_config import BankConfig
-                bank_config = BankConfig(base_path)
-                bank_name = bank_config.detect_bank_from_structure()
-            except Exception as e:
-                print(f"Warning: Could not detect bank automatically: {str(e)}")
-            
-            if not bank_name:
-                print("Error: Could not detect bank name from folder structure")
-                return None
-            
+        except RuntimeError:
+            # If outside Flask context, use current working directory
+            import os
+            base_path = Path(os.getcwd())
+        
+        # Detect bank name from folder structure
+        bank_name = None
+        try:
+            from src.config.bank_config import BankConfig
+            bank_config = BankConfig(base_path)
+            bank_name = bank_config.detect_bank_from_structure()
+        except Exception as e:
+            print(f"Warning: Could not detect bank automatically: {str(e)}")
+        
+        if not bank_name:
+            print("Error: Could not detect bank name from folder structure")
+            return None
+        
+        # Check if we need to create a new service or if the bank has changed
+        if transaction_service is None:
+            # Create new service
             transaction_service = TransactionService(base_path=base_path, bank_name=bank_name)
             # Try to process statements immediately
-            transaction_service.process_statements()
+            success = transaction_service.process_statements()
+            if not success:
+                print(f"Warning: No transaction data found for bank {bank_name}")
+        elif transaction_service.bank_name != bank_name:
+            # Bank has changed, create new service
+            print(f"Bank changed from {transaction_service.bank_name} to {bank_name}, creating new service")
+            transaction_service = TransactionService(base_path=base_path, bank_name=bank_name)
+            # Try to process statements immediately
+            success = transaction_service.process_statements()
+            if not success:
+                print(f"Warning: No transaction data found for bank {bank_name}")
+        
         return transaction_service
     except Exception as e:
         print(f"Error initializing transaction service: {str(e)}")
@@ -209,7 +229,7 @@ def add_merchant():
         if not transaction_service:
             return jsonify({
                 "success": False,
-                "error": "Could not initialize transaction service"
+                "error": "Could not initialize transaction service. Please ensure you have uploaded bank statements for the detected bank."
             }), 500
         
         # Add merchant
@@ -332,26 +352,25 @@ def has_uncategorized_merchants():
 
 @api_bp.route('/clear_cache', methods=['POST'])
 def clear_cache():
-    """Clear the PDF cache."""
+    """Clear the PDF cache and force reinitialization of transaction service."""
     global transaction_service
-    service = init_transaction_service()
-    if service is None:
-        return jsonify({"error": "No statement reader initialized"}), 400
-    
     try:
-        success = service.clear_cache()
-        if success:
-            # Reset the transaction service to force reinitialization
-            transaction_service = None
-            # Also reset the service instance to ensure it's fully cleared
-            service.processed_df = None
-            # Force a reload of the data
-            service = init_transaction_service()
-            if service is not None:
-                service.process_statements()
-            return jsonify({"success": True, "message": "PDF cache cleared successfully and data reloaded"})
+        # Reset the transaction service to force reinitialization
+        transaction_service = None
+        print("Cache cleared - transaction service reset")
+        
+        # Force a reload of the data
+        service = init_transaction_service()
+        if service is not None:
+            service.process_statements()
+            return jsonify({
+                "success": True, 
+                "message": "Cache cleared successfully and data reloaded",
+                "bank": service.bank_name,
+                "transactions": len(service.processed_df) if service.processed_df is not None else 0
+            })
         else:
-            return jsonify({"error": "Failed to clear cache"}), 500
+            return jsonify({"error": "Failed to reinitialize transaction service"}), 500
     except Exception as e:
         return jsonify({"error": f"Failed to clear cache: {str(e)}"}), 500
 
@@ -469,7 +488,7 @@ def set_manual_category():
         if not transaction_service:
             return jsonify({
                 "success": False,
-                "error": "Could not initialize transaction service"
+                "error": "Could not initialize transaction service. Please ensure you have uploaded bank statements for the detected bank."
             }), 500
         
         success = transaction_service.set_manual_category(data['transaction_id'], data['category'])
@@ -508,7 +527,7 @@ def remove_manual_category():
         if not transaction_service:
             return jsonify({
                 "success": False,
-                "error": "Could not initialize transaction service"
+                "error": "Could not initialize transaction service. Please ensure you have uploaded bank statements for the detected bank."
             }), 500
         
         success = transaction_service.remove_manual_category(data['transaction_id'])
