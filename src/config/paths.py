@@ -62,6 +62,7 @@ class ProjectPaths:
             'category_colors': self._paths['cached_data'] / 'category_colors.json',
             'shopping_keywords': self._paths['cached_data'] / 'shopping_keywords.json',
             'dining_keywords': self._paths['cached_data'] / 'dining_keywords.json',
+            'user_settings': self._paths['cached_data'] / 'user_settings.json',
         }
         
         # Define test cached data files

@@ -1,9 +1,10 @@
-from flask import Blueprint, jsonify, request, render_template, redirect, url_for, current_app
+from flask import Blueprint, jsonify, request, render_template, redirect, url_for, current_app, session
 from pathlib import Path
 import logging
 from typing import Dict, Any, Tuple
 from ..services.merchant_service import MerchantService
 from ..services.bank_branding_service import BankBrandingService
+from ..services.user_settings_service import UserSettingsService
 from ..utils.error_handlers import handle_service_error, ServiceError
 from ..constants.categories import CATEGORY_COLORS, update_category_color
 
@@ -53,6 +54,10 @@ def index():
         except Exception as e:
             logger.error(f"Error getting bank branding: {str(e)}")
 
+        # Get user name from settings
+        user_settings_service = UserSettingsService()
+        user_name = user_settings_service.get_user_name()
+        
         return render_template('merchants.html',
                             merchant_count=stats.get('merchant_count', 0),
                             alias_count=stats.get('alias_count', 0),
@@ -60,7 +65,8 @@ def index():
                             has_review_data=has_uncategorized,
                             categoryColors=CATEGORY_COLORS,
                             bank_branding=bank_branding,
-                            detected_bank=detected_bank)
+                            detected_bank=detected_bank,
+                            user_name=user_name)
     except Exception as e:
         logger.error(f"Error in merchants index route: {str(e)}", exc_info=True)
         return render_template('error.html',
@@ -181,11 +187,16 @@ def merchants_review() -> str:
         except Exception as e:
             logger.error(f"Error getting bank branding: {str(e)}")
         
+        # Get user name from settings
+        user_settings_service = UserSettingsService()
+        user_name = user_settings_service.get_user_name()
+        
         return render_template('merchants_review.html',
                              merchant_count=merchant_count,
                              categories=categories,
                              bank_branding=bank_branding,
-                             detected_bank=detected_bank)
+                             detected_bank=detected_bank,
+                             user_name=user_name)
     except Exception as e:
         logger.error(f"Error in merchants_review: {str(e)}", exc_info=True)
         return handle_service_error(e)

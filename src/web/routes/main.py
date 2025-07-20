@@ -1,9 +1,10 @@
-from flask import Blueprint, render_template, request, redirect, url_for, current_app, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, current_app, jsonify, session
 from werkzeug.utils import secure_filename
 import os
 from pathlib import Path
 from ..services.transaction_service import TransactionService
 from ..services.bank_branding_service import BankBrandingService
+from ..services.user_settings_service import UserSettingsService
 from typing import List, Dict, Any
 import logging
 from .api import init_transaction_service
@@ -113,6 +114,10 @@ def index() -> str:
         except Exception as e:
             logger.error(f"Error getting coverage info: {str(e)}")
         
+        # Get user name from settings
+        user_settings_service = UserSettingsService()
+        user_name = user_settings_service.get_user_name()
+        
         return render_template('index.html',
                              banks=banks,
                              statement_counts=statement_counts,
@@ -120,10 +125,42 @@ def index() -> str:
                              coverage_info=coverage_info,
                              coverage_summary=coverage_summary,
                              bank_branding=bank_branding,
-                             detected_bank=detected_bank)
+                             detected_bank=detected_bank,
+                             user_name=user_name)
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}", exc_info=True)
         return render_template('error.html', message="Failed to load account types")
+
+@main_bp.route('/save-user-name', methods=['POST'])
+def save_user_name():
+    """Save user name to settings."""
+    try:
+        data = request.get_json()
+        user_name = data.get('user_name', '').strip()
+        
+        if user_name:
+            user_settings_service = UserSettingsService()
+            success = user_settings_service.set_user_name(user_name)
+            if success:
+                return jsonify({'success': True})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to save user name'})
+        else:
+            return jsonify({'success': False, 'error': 'User name is required'})
+    except Exception as e:
+        logger.error(f"Error saving user name: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@main_bp.route('/api/user-name', methods=['GET'])
+def get_user_name():
+    """Get current user name from settings."""
+    try:
+        user_settings_service = UserSettingsService()
+        user_name = user_settings_service.get_user_name()
+        return jsonify({'success': True, 'user_name': user_name})
+    except Exception as e:
+        logger.error(f"Error getting user name: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
 
 @main_bp.route('/setup')
 def setup() -> str:
@@ -170,7 +207,7 @@ def process_statements():
         service = init_transaction_service()
         if not service:
             return render_template('error.html',
-                                message="Could not initialize transaction service",
+                                message="Could not initialize transaction service. Please ensure you have uploaded bank statements for the detected bank.",
                                 show_details=False)
         
         success = service.process_statements()
@@ -229,11 +266,18 @@ def dashboard():
                                 show_details=False)
         
         # Get category colors from the service
-        category_colors = service.get_category_colors() if hasattr(service, 'get_category_colors') else {}
+        category_data = service.get_category_data() if hasattr(service, 'get_category_data') else {}
+        category_colors = category_data.get('colors', {})
+        
+        # Get user name from settings
+        user_settings_service = UserSettingsService()
+        user_name = user_settings_service.get_user_name()
+        
         return render_template('dashboard.html', 
                              categoryColors=category_colors,
                              bank_branding=bank_branding,
-                             detected_bank=detected_bank)
+                             detected_bank=detected_bank,
+                             user_name=user_name)
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
