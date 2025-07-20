@@ -749,14 +749,14 @@
                                         <div class="col-md-3">
                                             <label for="amount-filter-value" class="form-label">Amount</label>
                                             <div class="input-group">
-                                                <span class="input-group-text">$</span>
+                                                <span class="input-group-text">${currencySymbol}</span>
                                                 <input type="number" id="amount-filter-value" class="form-control" placeholder="0.00" step="0.01" min="0">
                                             </div>
                                         </div>
                                         <div class="col-md-3 amount-filter-second-value" style="display: none;">
                                             <label for="amount-filter-value-2" class="form-label">And</label>
                                             <div class="input-group">
-                                                <span class="input-group-text">$</span>
+                                                <span class="input-group-text">${currencySymbol}</span>
                                                 <input type="number" id="amount-filter-value-2" class="form-control" placeholder="0.00" step="0.01" min="0">
                                             </div>
                                         </div>
@@ -810,6 +810,21 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+        // Bank configuration for currency formatting
+        const detectedBank = '{{ detected_bank }}';
+        const currency = '{{ bank_branding.currency if bank_branding and bank_branding.currency else "USD" }}';
+        const currencySymbol = '{{ bank_branding.currency_symbol if bank_branding and bank_branding.currency_symbol else "$" }}';
+        
+        // Currency formatting function
+        function formatCurrency(amount, options = {}) {
+            const defaultOptions = {
+                style: 'currency',
+                currency: currency,
+                maximumFractionDigits: options.maximumFractionDigits !== undefined ? options.maximumFractionDigits : 2
+            };
+            return new Intl.NumberFormat('en-GB', defaultOptions).format(amount);
+        }
+        
         // Global validation function
         function validateAmountFilters() {
             const amountFilterType = document.getElementById('amount-filter-type')?.value;
@@ -1377,7 +1392,7 @@
                 
                 // Format amount with sign and color
                 const amount = parseFloat(transaction.Amount);
-                const formattedAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+                const formattedAmount = formatCurrency(amount);
                 
                 // Get account type style
                 const accountTypeClass = accountTypeColors[transaction['Account Type']] || 'bg-secondary';
@@ -1425,8 +1440,8 @@
                         </div>
                     </td>
                     <td><span class="badge ${accountTypeClass}">${transaction['Account Type'] || ''}</span></td>
-                    <td>${transaction.account_balance !== null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(transaction.account_balance) : '-'}</td>
-                    <td>${transaction.running_balance !== null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(transaction.running_balance) : '-'}</td>
+                                            <td>${transaction.account_balance !== null ? formatCurrency(transaction.account_balance) : '-'}</td>
+                        <td>${transaction.running_balance !== null ? formatCurrency(transaction.running_balance) : '-'}</td>
                 `;
                 
                 // Add event listeners for category selection
@@ -1699,11 +1714,7 @@
                                     size: 11
                                 },
                                 callback: function(value) {
-                                    return new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD',
-                                        maximumFractionDigits: 0
-                                    }).format(value);
+                                    return formatCurrency(value, { maximumFractionDigits: 0 });
                                 }
                             },
                             title: {
@@ -1744,10 +1755,7 @@
                             },
                             callbacks: {
                                 label: function(context) {
-                                    return context.dataset.label + ': ' + new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD'
-                                    }).format(context.raw);
+                                    return context.dataset.label + ': ' + formatCurrency(context.raw);
                                 }
                             }
                         }
@@ -1977,11 +1985,7 @@
                                 chartArea.appendChild(centerText);
                             }
                             
-                            const formattedTotal = new Intl.NumberFormat('en-US', {
-                                style: 'currency',
-                                currency: 'USD',
-                                maximumFractionDigits: 0
-                            }).format(total);
+                            const formattedTotal = formatCurrency(total);
                             
                             centerText.innerHTML = `
                                 <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Total ${chartType}</div>
@@ -2034,10 +2038,7 @@
                                     const label = context.label || '';
                                     const value = context.raw || 0;
                                     const percentage = Math.round((value / total) * 100);
-                                    return `${label}: ${new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD'
-                                    }).format(value)} (${percentage}%)`;
+                                    return `${label}: ${formatCurrency(value)} (${percentage}%)`;
                                 }
                             }
                         }
@@ -2105,10 +2106,7 @@
                                     const label = context.dataset.label || '';
                                     const value = context.raw || 0;
                                     const sign = value >= 0 ? '+' : '';
-                                    return `${label}: ${sign}${new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD'
-                                    }).format(value)}`;
+                                    return `${label}: ${sign}${formatCurrency(value)}`;
                                 }
                             }
                         },
@@ -2120,7 +2118,7 @@
                                     // Only show categories with significant transactions
                                     const dataset = data.datasets[legendItem.datasetIndex];
                                     const total = dataset.data.reduce((a, b) => Math.abs(a) + Math.abs(b), 0);
-                                    return total > 100; // Only show categories with more than $100 total
+                                    return total > 100; // Only show categories with more than 100 total
                                 }
                             },
                             onClick: function(e, legendItem, legend) {
@@ -2190,7 +2188,7 @@
                             beginAtZero: false, // Allow negative values
                             title: {
                                 display: true,
-                                text: 'Net Amount ($)'
+                                text: `Net Amount (${currencySymbol})`
                             },
                             grid: {
                                 color: function(context) {
@@ -2208,11 +2206,7 @@
                             },
                             ticks: {
                                 callback: function(value) {
-                                    return new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD',
-                                        maximumFractionDigits: 0
-                                    }).format(value);
+                                    return formatCurrency(value, { maximumFractionDigits: 0 });
                                 }
                             }
                         }
@@ -2348,11 +2342,7 @@
                                     family: 'Inter'
                                 },
                                 callback: function(value) {
-                                    return new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD',
-                                        maximumFractionDigits: 0
-                                    }).format(value);
+                                    return formatCurrency(value, { maximumFractionDigits: 0 });
                                 }
                             }
                         }
@@ -2370,10 +2360,7 @@
                             callbacks: {
                                 label: function(context) {
                                     const value = context.raw;
-                                    return `${context.dataset.label}: ${new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD'
-                                    }).format(value)}`;
+                                    return `${context.dataset.label}: ${formatCurrency(value)}`;
                                 }
                             },
                             displayColors: true,
@@ -2536,7 +2523,7 @@
                         y: {
                             title: {
                                 display: true,
-                                text: 'Weekly Rate of Change ($)'
+                                text: `Weekly Rate of Change (${currencySymbol})`
                             },
                             grid: {
                                 color: function(context) {
@@ -2554,11 +2541,7 @@
                             },
                             ticks: {
                                 callback: function(value) {
-                                    return new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD',
-                                        maximumFractionDigits: 0
-                                    }).format(value);
+                                    return formatCurrency(value, { maximumFractionDigits: 0 });
                                 }
                             }
                         }
@@ -2572,10 +2555,7 @@
                                     const value = context.raw;
                                     if (value === null) return null;
                                     const sign = value >= 0 ? '+' : '';
-                                    return `Rate of Change: ${sign}${new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD'
-                                    }).format(value)}/week`;
+                                    return `Rate of Change: ${sign}${formatCurrency(value)}/week`;
                                 }
                             }
                         },
@@ -2711,11 +2691,7 @@
                                     size: 11
                                 },
                                 callback: function(value) {
-                                    return new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD',
-                                        maximumFractionDigits: 0
-                                    }).format(value);
+                                    return formatCurrency(value, { maximumFractionDigits: 0 });
                                 }
                             }
                         },
@@ -2739,10 +2715,7 @@
                                     const label = context.dataset.label || '';
                                     const value = context.raw || 0;
                                     const sign = value >= 0 ? '+' : '';
-                                    return `${label}: ${sign}${new Intl.NumberFormat('en-US', {
-                                        style: 'currency',
-                                        currency: 'USD'
-                                    }).format(value)}`;
+                                    return `${label}: ${sign}${formatCurrency(value)}`;
                                 }
                             }
                         },
@@ -2884,10 +2857,10 @@
                 
                 timeEstimateElement.textContent = timeEstimate;
             }
-            if (remainingAmountElement) {
-                remainingAmountElement.textContent = trend > 0 ? 
-                    `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(remainingAmount)} more` : '';
-            }
+                            if (remainingAmountElement) {
+                    remainingAmountElement.textContent = trend > 0 ? 
+                        `Need ${formatCurrency(remainingAmount, { maximumFractionDigits: 0 })} more` : '';
+                }
         };
 
         function renderMilestoneChart(balanceData) {
@@ -2970,7 +2943,7 @@
                 }
                 if (remainingAmountElement) {
                     remainingAmountElement.textContent = trend > 0 ? 
-                        `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(remainingAmount)} more` : '';
+                        `Need ${formatCurrency(remainingAmount, { maximumFractionDigits: 0 })} more` : '';
                 }
             };
 
@@ -3048,11 +3021,7 @@
                     const newBalance = calculateBalanceFromProgress(newLeftPercent, currentBalance);
                     const currentBalanceValue = document.querySelector('.current-balance-value');
                     if (currentBalanceValue) {
-                        currentBalanceValue.textContent = new Intl.NumberFormat('en-US', { 
-                            style: 'currency', 
-                            currency: 'USD', 
-                            maximumFractionDigits: 0 
-                        }).format(newBalance);
+                        currentBalanceValue.textContent = formatCurrency(newBalance, { maximumFractionDigits: 0 });
                     }
                     
                     // Update milestone calculations
@@ -3091,11 +3060,7 @@
                     const newBalance = calculateBalanceFromProgress(clampedPercent, currentBalance);
                     const currentBalanceValue = document.querySelector('.current-balance-value');
                     if (currentBalanceValue) {
-                        currentBalanceValue.textContent = new Intl.NumberFormat('en-US', { 
-                            style: 'currency', 
-                            currency: 'USD', 
-                            maximumFractionDigits: 0 
-                        }).format(newBalance);
+                        currentBalanceValue.textContent = formatCurrency(newBalance, { maximumFractionDigits: 0 });
                     }
                     
                     updateMilestoneCalculations(newBalance);
@@ -3385,19 +3350,19 @@
                             <div class="timeline-marker" style="left: ${progress}%">
                                 <div class="current-balance">
                                     <div class="current-balance-value">
-                                        ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentBalance)}
+                                        ${formatCurrency(currentBalance, { maximumFractionDigits: 0 })}
                                     </div>
                                 </div>
                             </div>
                             <div class="original-balance-indicator" style="left: ${progress}%"></div>
                             <div class="milestone-marker" style="left: 0%">
                                 <div class="milestone-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(previousMilestone)}
+                                    ${formatCurrency(previousMilestone, { maximumFractionDigits: 0 })}
                                 </div>
                             </div>
                             <div class="milestone-marker" style="left: 100%">
                                 <div class="milestone-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone)}
+                                    ${formatCurrency(nextMilestone, { maximumFractionDigits: 0 })}
                                 </div>
                             </div>
                         </div>
@@ -3410,7 +3375,7 @@
                                 <div class="stat-label">Weekly Rate of Change</div>
                                 <div class="stat-value">
                                     <span id="trend-display">
-                                        ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(defaultTrend)}
+                                        ${formatCurrency(defaultTrend)}
                                     </span>
                                     <span class="trend-indicator ${defaultTrend >= 0 ? 'trend-positive' : 'trend-negative'}">
                                         ${defaultTrend >= 0 ? '↗' : '↘'} per week
@@ -3423,7 +3388,7 @@
                                            value="${defaultTrend.toFixed(0)}" 
                                            step="100" 
                                            placeholder="Enter rate">
-                                    <span class="rate-unit">$/week</span>
+                                    <span class="rate-unit">${currencySymbol}/week</span>
                                     <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
                                 </div>
                                 <div class="small text-muted mt-2">Based on PELT analysis</div>
@@ -3434,7 +3399,7 @@
                                     ${calculateTimeEstimate(defaultTrend)}
                                 </div>
                                 <div class="small text-muted mt-2" id="remaining-amount">
-                                    ${defaultTrend > 0 ? `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone - currentBalance)} more` : ''}
+                                    ${defaultTrend > 0 ? `Need ${formatCurrency(nextMilestone - currentBalance, { maximumFractionDigits: 0 })} more` : ''}
                                 </div>
                                 <button class="reset-button" id="reset-balance-btn" style="margin-top: 10px;">Reset to Actual Balance</button>
                             </div>
@@ -3475,11 +3440,7 @@
                                 draggedBalance = calculateBalanceFromProgress(markerLeft, currentBalance);
                             }
                             // Update the display
-                            trendDisplay.textContent = new Intl.NumberFormat('en-US', { 
-                                style: 'currency', 
-                                currency: 'USD', 
-                                maximumFractionDigits: 0 
-                            }).format(newRate);
+                            trendDisplay.textContent = formatCurrency(newRate);
                             // Update trend indicator
                             trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
                             trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per week`;
@@ -3771,19 +3732,19 @@
                             <div class="timeline-marker" style="left: ${progress}%">
                                 <div class="current-balance">
                                     <div class="current-balance-value">
-                                        ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentBalance)}
+                                        ${formatCurrency(currentBalance, { maximumFractionDigits: 0 })}
                                     </div>
                                 </div>
                             </div>
                             <div class="original-balance-indicator" style="left: ${progress}%"></div>
                             <div class="milestone-marker" style="left: 0%">
                                 <div class="milestone-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(previousMilestone)}
+                                    ${formatCurrency(previousMilestone, { maximumFractionDigits: 0 })}
                                 </div>
                             </div>
                             <div class="milestone-marker" style="left: 100%">
                                 <div class="milestone-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone)}
+                                    ${formatCurrency(nextMilestone, { maximumFractionDigits: 0 })}
                                 </div>
                             </div>
                         </div>
@@ -3791,7 +3752,7 @@
                             <div class="balance-slider-label">
                                 <span class="stat-label">Simulate Different Balance</span>
                                 <span class="balance-slider-value" id="balance-slider-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentBalance)}
+                                    ${formatCurrency(currentBalance, { maximumFractionDigits: 0 })}
                                 </span>
                             </div>
                             <input type="range" 
@@ -3802,8 +3763,8 @@
                                    step="1000" 
                                    value="${currentBalance}">
                             <div class="balance-slider-range">
-                                <span>$0</span>
-                                <span>$1,000,000</span>
+                                <span>${currencySymbol}0</span>
+                                <span>${currencySymbol}1,000,000</span>
                             </div>
                             <button class="reset-balance-button" id="reset-balance-btn">Reset to Actual Balance</button>
                         </div>
@@ -3816,7 +3777,7 @@
                                 <div class="stat-label">Weekly Rate of Change</div>
                                 <div class="stat-value">
                                     <span id="trend-display">
-                                        ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(defaultTrend)}
+                                        ${formatCurrency(defaultTrend)}
                                     </span>
                                     <span class="trend-indicator ${defaultTrend >= 0 ? 'trend-positive' : 'trend-negative'}">
                                         ${defaultTrend >= 0 ? '↗' : '↘'} per week
@@ -3829,7 +3790,7 @@
                                            value="${defaultTrend.toFixed(0)}" 
                                            step="100" 
                                            placeholder="Enter rate">
-                                    <span class="rate-unit">$/week</span>
+                                    <span class="rate-unit">${currencySymbol}/week</span>
                                     <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
                                 </div>
                                 <div class="small text-muted mt-2">Based on PELT analysis</div>
@@ -3840,7 +3801,7 @@
                                     ${calculateTimeEstimate(defaultTrend)}
                                 </div>
                                 <div class="small text-muted mt-2" id="remaining-amount">
-                                    ${defaultTrend > 0 ? `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone - currentBalance)} more` : ''}
+                                    ${defaultTrend > 0 ? `Need ${formatCurrency(nextMilestone - currentBalance, { maximumFractionDigits: 0 })} more` : ''}
                                 </div>
                             </div>
                         </div>
@@ -3880,11 +3841,7 @@
                                 draggedBalance = calculateBalanceFromProgress(markerLeft, currentBalance);
                             }
                             // Update the display
-                            trendDisplay.textContent = new Intl.NumberFormat('en-US', { 
-                                style: 'currency', 
-                                currency: 'USD', 
-                                maximumFractionDigits: 0 
-                            }).format(newRate);
+                            trendDisplay.textContent = formatCurrency(newRate);
                             // Update trend indicator
                             trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
                             trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per week`;
@@ -4118,11 +4075,7 @@
             // Update current balance display
             const currentBalanceValue = document.querySelector('.current-balance-value');
             if (currentBalanceValue) {
-                currentBalanceValue.textContent = new Intl.NumberFormat('en-US', { 
-                    style: 'currency', 
-                    currency: 'USD', 
-                    maximumFractionDigits: 0 
-                }).format(newBalance);
+                currentBalanceValue.textContent = formatCurrency(newBalance, { maximumFractionDigits: 0 });
             }
             
             // Update milestone values
@@ -4132,19 +4085,11 @@
                 const nextMilestoneValue = milestoneMarkers[1].querySelector('.milestone-value');
                 
                 if (previousMilestoneValue) {
-                    previousMilestoneValue.textContent = new Intl.NumberFormat('en-US', { 
-                        style: 'currency', 
-                        currency: 'USD', 
-                        maximumFractionDigits: 0 
-                    }).format(newPreviousMilestone);
+                    previousMilestoneValue.textContent = formatCurrency(newPreviousMilestone, { maximumFractionDigits: 0 });
                 }
                 
                 if (nextMilestoneValue) {
-                    nextMilestoneValue.textContent = new Intl.NumberFormat('en-US', { 
-                        style: 'currency', 
-                        currency: 'USD', 
-                        maximumFractionDigits: 0 
-                    }).format(newNextMilestone);
+                    nextMilestoneValue.textContent = formatCurrency(newNextMilestone, { maximumFractionDigits: 0 });
                 }
             }
             
