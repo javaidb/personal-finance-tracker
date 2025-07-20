@@ -55,16 +55,32 @@ class GeneralHelperFns:
                     return calendar.month_name[i]
 
     def grab_pdf_name_attributes(self, pdf_name):
-        pdf_name = pdf_name.replace('.pdf', '')
-        str_atts = re.split(r'[ _]', pdf_name)\
+        """Extract attributes from statement filename (PDF or CSV)."""
+        # Remove both .pdf and .csv extensions
+        pdf_name = pdf_name.replace('.pdf', '').replace('.csv', '')
+        str_atts = re.split(r'[ _]', pdf_name)
         
         result = {}
         for str_attribute in str_atts:
+            # First try to extract month from this attribute
             month_extracted = self.__extract_month(str_attribute)
             if month_extracted is not None:
                 result['month'] = month_extracted
+                # If we found a month, also try to extract year from the same attribute
+                # This handles cases like "30-MAY-25" where month and year are together
+                year_match = re.search(r'(\d{2})$', str_attribute)
+                if year_match:
+                    year_2digit = year_match.group(1)
+                    # Convert 2-digit year to 4-digit (assuming 20xx for years 00-99)
+                    year_4digit = f"20{year_2digit}"
+                    result['year'] = year_4digit
             elif re.match(r'^\d{4}$', str_attribute) and 1000 <= int(str_attribute) <= 9999:
+                # Handle 4-digit years
                 result['year'] = str_attribute
+            elif re.match(r'^\d{2}$', str_attribute) and 0 <= int(str_attribute) <= 99:
+                # Handle standalone 2-digit years
+                year_4digit = f"20{str_attribute}"
+                result['year'] = year_4digit
 
         return result
 
@@ -131,7 +147,7 @@ class GeneralHelperFns:
         return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
 
     def read_all_files(self, account_type, account_name, bank_name=None):
-        """Read all PDF files for a specific account."""
+        """Read all statement files (PDF and CSV) for a specific account."""
         if bank_name is None:
             bank_name = self.bank_name
         
@@ -146,8 +162,8 @@ class GeneralHelperFns:
             print(f"Warning: Account directory not found: {directory}")
             return []
         
-        pdf_files = os.listdir(directory)
-        return [f for f in pdf_files if f.endswith('.pdf')]
+        statement_files = os.listdir(directory)
+        return [f for f in statement_files if f.lower().endswith(('.pdf', '.csv'))]
 
     def sort_df(self, df):
         df = df.sort_values(by='DateTime')
