@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any
 from ..models.transaction import Transaction
-from src.modules.pdf_interpreter import PDFReader
+from src.modules.statement_interpreter import StatementInterpreter
 from src.modules.helper_fns import GeneralHelperFns
 import numpy as np
 from src.modules.merchant_categorizer import MerchantCategorizer, ManualTransactionCategorizer
@@ -18,7 +18,7 @@ class TransactionService:
     def __init__(self, base_path: Path, bank_name=None):
         self.base_path = base_path
         self.bank_name = bank_name
-        self.pdf_reader = PDFReader(base_path=base_path, bank_name=bank_name)
+        self.pdf_reader = StatementInterpreter(base_path=base_path, bank_name=bank_name)
         self.helper = GeneralHelperFns(base_path=base_path, bank_name=bank_name)
         self.processed_df = None
         self.databank_path = DATABANK_PATH
