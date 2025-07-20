@@ -212,10 +212,10 @@ class PDFReader(GeneralHelperFns):
         # First pass: find opening balance if it exists
         opening_balance = None
         for line in pdf_lines:
-            if 'OPENING BALANCE' in line.upper():
+            if 'OPENING BALANCE' in line.upper() or 'START BALANCE' in line.upper():
                 try:
-                    # Try to extract the opening balance amount
-                    balance_match = re.search(r'(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', line)
+                    # Try to extract the opening balance amount - look specifically for balance after "balance" keyword
+                    balance_match = re.search(r'balance\s+([\d,]+\.\d{2})', line, re.IGNORECASE)
                     if balance_match:
                         opening_balance = float(balance_match.group(1).replace(',', ''))
                         running_balance = opening_balance
@@ -225,7 +225,11 @@ class PDFReader(GeneralHelperFns):
                     print(f"DEBUG: Error extracting opening balance from line: {line}")
                     print(f"DEBUG: Error details: {str(e)}")
         
-        # Process transactions
+        # Special handling for Barclays multi-line transactions
+        if self.bank_name == "barclays" and account_type in ["Chequing", "Savings"]:
+            return self.__process_barclays_transactions(pdf_lines, account_type, pattern, running_balance)
+        
+        # Process transactions (original logic for other banks)
         skipped_lines = 0
         matched_lines = 0
         
@@ -302,9 +306,222 @@ class PDFReader(GeneralHelperFns):
 
         return transactions
 
+    def __process_barclays_transactions(self, pdf_lines, account_type, pattern, running_balance):
+        """Special processor for Barclays multi-line transactions with Date Description Amount Balance format."""
+        print(f"DEBUG: Starting Barclays transaction processing with pattern: {pattern}")
+        transactions = []
+        i = 0
+        
+        while i < len(pdf_lines):
+            line = pdf_lines[i].strip()
+            
+            # Skip empty lines and headers
+            if not line or line in ['Date Description Money out Money in Balance', 'Your transactions'] or 'Date' in line and 'Description' in line and 'Money out' in line and 'Money in' in line and 'Balance' in line:
+                i += 1
+                continue
+            
+            # Check if this line starts with a date (DD MMM format)
+            # Only match actual month names, not any 3-letter word
+            date_match = re.match(r'(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))', line)
+            if date_match:
+                date = date_match.group(1)
+                print(f"DEBUG: Found date line: '{line}'")
+                
+                # Skip balance lines and header lines
+                if any(skip_word in line.lower() for skip_word in ['start balance', 'end balance']):
+                    i += 1
+                    continue
+                
+                # Try to match the full pattern first (single-line transaction)
+                full_match = re.match(pattern, line)
+                if full_match:
+                    print(f"DEBUG: Full pattern match: '{line}'")
+                    # Single-line transaction with Date Description Amount Balance format
+                    match_groups = list(full_match.groups())
+                    transaction_type = match_groups[1].strip() if match_groups[1] is not None else ''
+                    amount_str = match_groups[2].strip() if match_groups[2] is not None else ''
+                    balance_str = match_groups[3].strip() if match_groups[3] is not None else None
+                    
+                    # Skip balance lines and header lines
+                    if any(skip_word in transaction_type.lower() for skip_word in ['start balance', 'end balance']):
+                        i += 1
+                        continue
+                    
+                    # Parse amount
+                    if amount_str:
+                        amount = float(amount_str.replace(',', ''))
+                    else:
+                        amount = 0.0
+                    
+                    # Determine if this is money out or money in based on transaction type
+                    is_money_out = any(indicator in transaction_type.lower() for indicator in [
+                        'card payment', 'bill payment', 'direct debit', 'withdrawal', 'transfer out'
+                    ])
+                    
+                    # Received From transactions are always money in
+                    is_money_in = 'received from' in transaction_type.lower()
+                    
+                    # If it's money out, make the amount negative
+                    if is_money_out and not is_money_in:
+                        amount = -abs(amount)
+                        print(f"DEBUG: Money out transaction: {amount}")
+                    else:
+                        print(f"DEBUG: Money in transaction: {amount}")
+                    
+                    # Handle balance
+                    if balance_str is not None:
+                        balance = float(balance_str.strip().replace(',', ''))
+                    else:
+                        # Estimate balance if not provided
+                        balance = running_balance + amount
+                    
+                    # Look for continuation lines (but limit the search)
+                    details = transaction_type
+                    j = i + 1
+                    continuation_count = 0
+                    while j < len(pdf_lines) and continuation_count < 3:  # Limit to 3 continuation lines
+                        next_line = pdf_lines[j].strip()
+                        # Stop if we hit another date or empty line
+                        if not next_line or re.match(r'^\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)', next_line):
+                            break
+                        # Stop if we hit another transaction line (has amount)
+                        if re.search(r'[\d,]+\.[\d]{2}', next_line):
+                            break
+                        # Skip reference lines and continuation indicators
+                        if (not next_line.startswith('Ref:') and 
+                            not next_line.startswith('On ') and 
+                            next_line != 'May' and
+                            not next_line.startswith('Continued')):
+                            details += f" - {next_line}"
+                            continuation_count += 1
+                        j += 1
+                    
+                    transaction = {
+                        'Transaction Date': date,
+                        'Transaction Type': transaction_type,
+                        'Amount': str(amount),
+                        'Balance': str(balance),
+                        'Details': details,
+                    }
+                    transactions.append(transaction)
+                    running_balance = balance
+                    i = j  # Skip to the line after continuations
+                else:
+                    print(f"DEBUG: No full pattern match for: '{line}'")
+                    # Multi-line transaction - process all transactions for this date
+                    
+                    # Look ahead to find all transaction lines for this date
+                    j = i + 1
+                    date_transactions = []
+                    
+                    while j < len(pdf_lines):
+                        next_line = pdf_lines[j].strip()
+                        
+                        # Stop if we hit another date or empty line
+                        if not next_line or re.match(r'^\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)', next_line):
+                            break
+                        
+                        # Look for amount patterns in this line
+                        amount_pattern = r'([\d,]+\.[\d]{2})'
+                        amount_matches = list(re.finditer(amount_pattern, next_line))
+                        
+                        if amount_matches:
+                            # This looks like a transaction line
+                            date_transactions.append((j, next_line, amount_matches))
+                        
+                        j += 1
+                    
+                    print(f"DEBUG: Found {len(date_transactions)} transactions for date {date}")
+                    
+                    # Process each transaction for this date
+                    for trans_idx, (line_idx, trans_line, amount_matches) in enumerate(date_transactions):
+                        print(f"DEBUG: Processing transaction {trans_idx + 1}: '{trans_line}'")
+                        
+                        # Parse the transaction line
+                        if len(amount_matches) >= 2:
+                            # Format: description amount balance
+                            amount_str = amount_matches[0].group(1)
+                            balance_str = amount_matches[1].group(1)
+                            description = trans_line[:amount_matches[0].start()].strip()
+                            
+                            amount = float(amount_str.replace(',', ''))
+                            balance = float(balance_str.replace(',', ''))
+                            
+                        elif len(amount_matches) == 1:
+                            # Format: description amount (no balance)
+                            amount_str = amount_matches[0].group(1)
+                            description = trans_line[:amount_matches[0].start()].strip()
+                            
+                            amount = float(amount_str.replace(',', ''))
+                            balance = running_balance + amount  # Estimate balance
+                        else:
+                            # No amount found, skip this line
+                            continue
+                        
+                        # Determine if this is money out or money in based on description
+                        is_money_out = any(indicator in description.lower() for indicator in [
+                            'card payment', 'bill payment', 'direct debit', 'withdrawal', 'transfer out'
+                        ])
+                        
+                        # Received From transactions are always money in
+                        is_money_in = 'received from' in description.lower()
+                        
+                        # If it's money out, make the amount negative
+                        if is_money_out and not is_money_in:
+                            amount = -abs(amount)
+                            print(f"DEBUG: Money out transaction: {amount}")
+                        else:
+                            print(f"DEBUG: Money in transaction: {amount}")
+                        
+                        # Look for additional details in subsequent lines (but limit search)
+                        details = description
+                        k = line_idx + 1
+                        continuation_count = 0
+                        while k < len(pdf_lines) and continuation_count < 2:  # Limit to 2 continuation lines
+                            next_line = pdf_lines[k].strip()
+                            # Stop if we hit another transaction line or date
+                            if not next_line or re.match(r'^\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)', next_line):
+                                break
+                            # Stop if we hit another transaction line (has amount)
+                            if re.search(r'[\d,]+\.[\d]{2}', next_line):
+                                break
+                            # Skip reference lines and continuation indicators
+                            if (not next_line.startswith('Ref:') and 
+                                not next_line.startswith('On ') and 
+                                next_line != 'May' and
+                                not next_line.startswith('Continued')):
+                                details += f" - {next_line}"
+                                continuation_count += 1
+                            k += 1
+                        
+                        transaction = {
+                            'Transaction Date': date,
+                            'Transaction Type': description,
+                            'Amount': str(amount),
+                            'Balance': str(balance),
+                            'Details': details,
+                        }
+                        transactions.append(transaction)
+                        running_balance = balance
+                    
+                    i = j  # Skip to the line after all transactions for this date
+            else:
+                i += 1
+        
+        print(f"DEBUG: Barclays processing summary:")
+        print(f"- Total lines: {len(pdf_lines)}")
+        print(f"- Transactions extracted: {len(transactions)}")
+        
+        return transactions
+
     def __calculate_transaction_year(self, row):
         """Calculate the transaction year based on statement month and transaction date."""
         try:
+            # Check if required columns exist
+            if 'Transaction Date' not in row or 'Statement Month' not in row or 'Statement Year' not in row:
+                print(f"Missing required columns in row: {row.keys()}")
+                return None
+                
             month_str = str(row['Transaction Date']).split()[0].lower()
             statement_month = str(row['Statement Month']).lower()
             statement_year = int(row['Statement Year'])
@@ -315,7 +532,7 @@ class PDFReader(GeneralHelperFns):
             return statement_year
         except Exception as e:
             print(f"Error calculating transaction year: {str(e)}")
-            return row['Statement Year']  # fallback to statement year
+            return row.get('Statement Year', None)  # fallback to statement year
 
     def __get_pdf_hash(self, pdf_file_path):
         """Generate a hash for the PDF file to use as cache identifier"""
@@ -502,6 +719,11 @@ class PDFReader(GeneralHelperFns):
         for pdf_file, row_count in sorted(pdf_row_counts.items()):
             print(f"- {pdf_file}: {row_count} rows")
         
+        # Check if DataFrame is empty
+        if overall_df.empty:
+            print("No transactions found - returning empty DataFrame")
+            return overall_df
+            
         # Calculate Transaction Year and DateTime
         try:
             # First ensure all required columns exist and are of the right type
@@ -509,22 +731,41 @@ class PDFReader(GeneralHelperFns):
             overall_df['Statement Month'] = overall_df['Statement Month'].astype(str)
             overall_df['Transaction Date'] = overall_df['Transaction Date'].astype(str)
             
-            # Calculate Transaction Year using vectorized operations
-            month_str = overall_df['Transaction Date'].str.split().str[0].str.lower()
-            statement_month = overall_df['Statement Month'].str.lower()
-            is_prev_year = (month_str.isin(['nov', 'dec'])) & (statement_month == 'january')
-            overall_df['Transaction Year'] = overall_df['Statement Year'].where(~is_prev_year, overall_df['Statement Year'] - 1)
-            
-            # Create DateTime column
-            overall_df['DateTime'] = overall_df['Transaction Date'] + ' ' + overall_df['Transaction Year'].astype(str)
-            overall_df['DateTime'] = pd.to_datetime(overall_df['DateTime'])
+            # Special handling for Barclays date format (DD MMM)
+            if self.bank_name == "barclays":
+                # For Barclays, Transaction Date is already in DD MMM format
+                # We need to add the year to make it a complete date
+                overall_df['Transaction Year'] = overall_df['Statement Year']
+                
+                # Create DateTime column with proper format for Barclays
+                overall_df['DateTime'] = overall_df['Transaction Date'] + ' ' + overall_df['Transaction Year'].astype(str)
+                # Use a specific format for parsing DD MMM YYYY
+                overall_df['DateTime'] = pd.to_datetime(overall_df['DateTime'], format='%d %b %Y', errors='coerce')
+            else:
+                # Original logic for other banks
+                # Calculate Transaction Year using vectorized operations
+                month_str = overall_df['Transaction Date'].str.split().str[0].str.lower()
+                statement_month = overall_df['Statement Month'].str.lower()
+                is_prev_year = (month_str.isin(['nov', 'dec'])) & (statement_month == 'january')
+                overall_df['Transaction Year'] = overall_df['Statement Year'].where(~is_prev_year, overall_df['Statement Year'] - 1)
+                
+                # Create DateTime column
+                overall_df['DateTime'] = overall_df['Transaction Date'] + ' ' + overall_df['Transaction Year'].astype(str)
+                overall_df['DateTime'] = pd.to_datetime(overall_df['DateTime'])
         except Exception as e:
             print(f"Error processing dates: {str(e)}")
+            if overall_df.empty:
+                print("DataFrame is empty - skipping date processing")
+                return overall_df
             print("Falling back to row-by-row processing...")
             # Fallback to row-by-row processing if vectorized operations fail
             overall_df['Transaction Year'] = overall_df.apply(self.__calculate_transaction_year, axis=1)
             overall_df['DateTime'] = overall_df['Transaction Date'] + ' ' + overall_df['Transaction Year'].astype(str)
             overall_df['DateTime'] = pd.to_datetime(overall_df['DateTime'])
+        
+        # Sort transactions by DateTime to ensure chronological order
+        if not overall_df.empty and 'DateTime' in overall_df.columns:
+            overall_df = overall_df.sort_values('DateTime', ascending=True).reset_index(drop=True)
             
         return overall_df
 
