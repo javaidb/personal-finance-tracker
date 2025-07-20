@@ -11,6 +11,7 @@ import os
 import re
 from ..constants.categories import CATEGORY_COLORS, get_category_color
 from src.config.paths import DATABANK_PATH, CATEGORY_COLORS_PATH
+import ruptures
 
 class TransactionService:
     """Service class for handling transaction-related operations."""
@@ -310,6 +311,7 @@ class TransactionService:
             
             # Count transactions by category
             category_counts = df['Classification'].value_counts().to_dict()
+            print(f"DEBUG: Found {len(category_counts)} categories in transactions: {list(category_counts.keys())}")
             
             # Calculate total spending by category (for negative amounts only - expenses)
             spending_df = df[df['Amount'] < 0]
@@ -338,6 +340,9 @@ class TransactionService:
             transaction_categories = set(list(category_counts.keys()) + list(category_spending.keys()) + list(category_income.keys()))
             databank_categories = set(self.categories)  # Get all categories from databank
             all_categories = transaction_categories.union(databank_categories)
+            print(f"DEBUG: Transaction categories: {list(transaction_categories)}")
+            print(f"DEBUG: Databank categories: {list(databank_categories)}")
+            print(f"DEBUG: All categories: {list(all_categories)}")
             
             # Initialize counts, spending, and income for all categories
             for category in all_categories:
@@ -361,6 +366,8 @@ class TransactionService:
             
         except Exception as e:
             print(f"Error generating category data: {str(e)}")
+            import traceback
+            print(f"Full traceback: {traceback.format_exc()}")
             return {
                 "error": str(e),
                 "counts": {},
@@ -465,6 +472,12 @@ class TransactionService:
             df['DateTime'] = pd.to_datetime(df['DateTime'])
             df = df.sort_values('DateTime')
             
+            # Check if running_balance column exists
+            if 'running_balance' not in df.columns:
+                print("Warning: running_balance column not found, attempting to calculate...")
+                # Try to calculate running balance from Amount column
+                df['running_balance'] = df['Amount'].cumsum()
+            
             # Group by date to get daily balances using running_balance
             daily_df = df.groupby('DateTime').agg({
                 'running_balance': 'last'  # Take the last balance for each day
@@ -475,6 +488,8 @@ class TransactionService:
             
             # Drop any rows where running_balance is NaN after conversion
             daily_df = daily_df.dropna(subset=['running_balance'])
+            
+            print(f"PELT Analysis: Processing {len(daily_df)} data points")
             
             if len(daily_df) < 2:
                 return {
@@ -491,15 +506,23 @@ class TransactionService:
             # Set PELT parameters - tuned for fewer, broader segments (target ~6 segments)
             segment_settings = {
                 'penalty': 300,  # Much higher penalty for fewer segments (was 50)
-                'min_size': 30,  # Minimum 1 month of data for a segment (was 14)
+                'min_size': min(30, len(daily_df) // 4),  # Adaptive min_size based on data length
                 'jump': 7,       # Slightly larger jump for broader trends
                 'model': "l2"   # Linear model for financial trends
             }
             
-            from ruptures import Pelt
-            model = Pelt(model=segment_settings['model'], min_size=segment_settings['min_size'], jump=segment_settings['jump'])
+            print(f"PELT parameters: penalty={segment_settings['penalty']}, min_size={segment_settings['min_size']}, jump={segment_settings['jump']}")
+            
+            # Ensure we have enough data for the minimum segment size
+            if len(daily_df) < segment_settings['min_size'] * 2:
+                segment_settings['min_size'] = max(2, len(daily_df) // 4)
+                print(f"Adjusted min_size to {segment_settings['min_size']} due to limited data")
+            
+            model = ruptures.Pelt(model=segment_settings['model'], min_size=segment_settings['min_size'], jump=segment_settings['jump'])
             model.fit(daily_df['running_balance'].values.reshape(-1, 1))
             change_points = model.predict(pen=segment_settings['penalty'])
+            
+            print(f"Initial change points detected: {change_points}")
             
             # Ensure first and last points are included
             if change_points[0] != 0:
@@ -516,10 +539,16 @@ class TransactionService:
                 segment_time = daily_df['numeric_time'].iloc[start_idx:end_idx].values
                 segment_balance = daily_df['running_balance'].iloc[start_idx:end_idx].values
                 if len(segment_time) >= 2:
-                    coeffs = np.polyfit(segment_time, segment_balance, 1)
-                    segment_gradients.append(coeffs[0])
+                    try:
+                        coeffs = np.polyfit(segment_time, segment_balance, 1)
+                        segment_gradients.append(coeffs[0])
+                    except np.RankWarning:
+                        # Handle case where polyfit fails due to insufficient rank
+                        segment_gradients.append(0.0)
                 else:
                     segment_gradients.append(0.0)
+            
+            print(f"Segment gradients calculated: {len(segment_gradients)} segments")
 
             # Merge logic: if next gradient is within 25% of current, merge
             merged_change_points = [change_points[0]]
@@ -614,6 +643,8 @@ class TransactionService:
             # Convert running_balance to float for JSON serialization
             balance_data = [float(x) for x in daily_df['running_balance'].tolist()]
             
+            print(f"PELT Analysis completed: {len(change_dates)} change points detected")
+            
             # Prepare data for chart.js
             chart_data = {
                 "labels": daily_df['DateTime'].dt.strftime('%Y-%m-%d').tolist(),
@@ -647,9 +678,11 @@ class TransactionService:
             return chart_data
             
         except Exception as e:
+            import traceback
             print(f"Error performing PELT analysis: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
             return {
-                "error": str(e),
+                "error": f"PELT analysis failed: {str(e)}",
                 "labels": [],
                 "datasets": [],
                 "changePoints": [],
