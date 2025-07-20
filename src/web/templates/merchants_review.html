@@ -3,11 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Review uncategorized Merchants | Personal Finance Tracker</title>
+    <title>{% if bank_branding %}{{ bank_branding.display_name }} - {% endif %}Review uncategorized Merchants | Personal Finance Tracker</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bank-themes.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    {% if bank_branding %}
+    <style>
+        :root {
+            --bank-primary: {{ bank_branding.colors.primary }};
+            --bank-secondary: {{ bank_branding.colors.secondary }};
+            --bank-accent: {{ bank_branding.colors.accent }};
+            --bank-text: {{ bank_branding.colors.text }};
+            --bank-background: {{ bank_branding.colors.background }};
+            --bank-success: {{ bank_branding.colors.success }};
+            --bank-warning: {{ bank_branding.colors.warning }};
+            --bank-error: {{ bank_branding.colors.error }};
+        }
+    </style>
+    {% endif %}
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -137,7 +152,7 @@
         }
     </style>
 </head>
-<body>
+<body {% if bank_branding %}class="{{ bank_branding.theme_class }}"{% endif %}>
     <div class="header-section">
         <div class="container">
             <div class="d-flex justify-content-between align-items-center">
@@ -216,6 +231,21 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Bank configuration for currency formatting
+        const detectedBank = '{{ detected_bank }}';
+        const currency = '{{ bank_branding.currency if bank_branding and bank_branding.currency else "USD" }}';
+        const currencySymbol = '{{ bank_branding.currency_symbol if bank_branding and bank_branding.currency_symbol else "$" }}';
+        
+        // Currency formatting function
+        function formatCurrency(amount, options = {}) {
+            const defaultOptions = {
+                style: 'currency',
+                currency: currency,
+                maximumFractionDigits: options.maximumFractionDigits || 2
+            };
+            return new Intl.NumberFormat('en-GB', defaultOptions).format(amount);
+        }
+        
         // DOM elements
         const merchantsContainer = document.getElementById('merchants-container');
         const paginationContainer = document.querySelector('.pagination');
@@ -310,7 +340,7 @@
                             <strong>Occurrences:</strong> ${merchant.count}
                         </div>
                         <div class="stat-box">
-                            <strong>Total Amount:</strong> $${merchant.total_amount.toFixed(2)}
+                            <strong>Total Amount:</strong> ${formatCurrency(merchant.total_amount)}
                         </div>
                     </div>
                     <button class="btn btn-sm btn-primary categorize-btn" data-merchant="${merchant.merchant}">Categorize</button>
