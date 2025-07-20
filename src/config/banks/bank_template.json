@@ -2,6 +2,8 @@
   "_comment": "DEVELOPER USE ONLY: Template for creating new preset bank configurations. Users do not need to configure banks themselves.",
   "bank_name": "BANK_NAME",
   "display_name": "Bank Display Name",
+  "currency": "USD",
+  "currency_symbol": "$",
   "branding": {
     "primary_color": "#007bff",
     "secondary_color": "#6c757d",

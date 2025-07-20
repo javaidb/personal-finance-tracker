@@ -3,6 +3,7 @@ from pathlib import Path
 import logging
 from typing import Dict, Any, Tuple
 from ..services.merchant_service import MerchantService
+from ..services.bank_branding_service import BankBrandingService
 from ..utils.error_handlers import handle_service_error, ServiceError
 from ..constants.categories import CATEGORY_COLORS, update_category_color
 
@@ -38,12 +39,28 @@ def index():
         categories = merchant_service.get_categories()
         has_uncategorized = merchant_service.has_uncategorized_merchants()
 
+        # Get bank branding information
+        bank_branding_service = BankBrandingService()
+        detected_bank = None
+        bank_branding = None
+        
+        try:
+            from src.config.bank_config import BankConfig
+            bank_config = BankConfig()
+            detected_bank = bank_config.detect_bank_from_structure()
+            if detected_bank:
+                bank_branding = bank_branding_service.get_bank_display_info(detected_bank)
+        except Exception as e:
+            logger.error(f"Error getting bank branding: {str(e)}")
+
         return render_template('merchants.html',
                             merchant_count=stats.get('merchant_count', 0),
                             alias_count=stats.get('alias_count', 0),
                             categories=categories,
                             has_review_data=has_uncategorized,
-                            categoryColors=CATEGORY_COLORS)
+                            categoryColors=CATEGORY_COLORS,
+                            bank_branding=bank_branding,
+                            detected_bank=detected_bank)
     except Exception as e:
         logger.error(f"Error in merchants index route: {str(e)}", exc_info=True)
         return render_template('error.html',
@@ -150,9 +167,25 @@ def merchants_review() -> str:
         if merchant_count == 0:
             return redirect(url_for('merchants.merchants_dashboard'))
         
+        # Get bank branding information
+        bank_branding_service = BankBrandingService()
+        detected_bank = None
+        bank_branding = None
+        
+        try:
+            from src.config.bank_config import BankConfig
+            bank_config = BankConfig()
+            detected_bank = bank_config.detect_bank_from_structure()
+            if detected_bank:
+                bank_branding = bank_branding_service.get_bank_display_info(detected_bank)
+        except Exception as e:
+            logger.error(f"Error getting bank branding: {str(e)}")
+        
         return render_template('merchants_review.html',
                              merchant_count=merchant_count,
-                             categories=categories)
+                             categories=categories,
+                             bank_branding=bank_branding,
+                             detected_bank=detected_bank)
     except Exception as e:
         logger.error(f"Error in merchants_review: {str(e)}", exc_info=True)
         return handle_service_error(e)

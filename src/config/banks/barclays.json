@@ -1,6 +1,8 @@
 {
   "bank_name": "barclays",
   "display_name": "Barclays",
+  "currency": "GBP",
+  "currency_symbol": "£",
   "branding": {
     "primary_color": "#0066CC",
     "secondary_color": "#003366",

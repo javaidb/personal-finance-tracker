@@ -122,6 +122,7 @@ class BankBrandingService:
     
     def get_bank_display_info(self, bank_name: str) -> Dict[str, Any]:
         """Get comprehensive display information for a bank."""
+        config = self.bank_config.get_bank_config(bank_name)
         branding = self.get_bank_branding(bank_name)
         colors = self.get_bank_colors(bank_name)
         theme = self.get_bank_theme(bank_name)
@@ -129,6 +130,8 @@ class BankBrandingService:
         return {
             'name': bank_name,
             'display_name': self.bank_config.get_bank_display_name(bank_name),
+            'currency': config.get('currency', 'USD'),
+            'currency_symbol': config.get('currency_symbol', '$'),
             'colors': colors,
             'logo_path': self.get_bank_logo_path_with_fallback(bank_name),
             'favicon_path': self.get_bank_favicon_path(bank_name),
