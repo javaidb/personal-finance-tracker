@@ -28,8 +28,9 @@
       }
     }
   },
-  "pdf_naming_convention": {
-    "pattern": "{month} {year} statement.pdf",
+  "file_format": "csv",
+  "csv_naming_convention": {
+    "pattern": "{month} {year} statement.csv",
     "month_format": "full_name",
     "year_format": "YYYY"
   },
@@ -48,32 +49,63 @@
     }
   },
   "statement_parsing": {
-    "opening_balance_keywords": ["OPENING BALANCE", "BALANCE BROUGHT FORWARD"],
-    "closing_balance_keywords": ["CLOSING BALANCE", "BALANCE CARRIED FORWARD"],
-    "date_formats": ["MMM d", "MMM dd", "dd/MM/yyyy"],
-    "amount_formats": ["#,##0.00", "#,###.##", "£#,##0.00"]
+    "opening_balance_keywords": ["OPENING BALANCE", "BALANCE BROUGHT FORWARD", "START BALANCE"],
+    "closing_balance_keywords": ["CLOSING BALANCE", "BALANCE CARRIED FORWARD", "END BALANCE"],
+    "date_formats": ["dd/MM/yyyy", "dd MMM"],
+    "amount_formats": ["#,##0.00", "#,###.##", "£#,##0.00"],
+    "csv_headers": ["Number", "Date", "Account", "Amount", "Subcategory", "Memo", "Balance"],
+    "csv_delimiter": ",",
+    "csv_encoding": "utf-8"
   },
   "patterns": {
     "credit_card": {
-      "pattern": "(\\d{1,2}/\\d{1,2}/\\d{4})\\s+(\\d{1,2}/\\d{1,2}/\\d{4})\\s+(.+?)\\s+([\\d,]+\\.[\\d]{2})\\s*([\\d,]+\\.[\\d]{2})?",
-      "groups": {
-        "transaction_date": 1,
-        "post_date": 2,
-        "description": 3,
-        "amount": 4,
-        "balance": 5
-      },
-      "example": "15/03/2024 16/03/2024 AMAZON.CO.UK 45.67 1,234.56"
-    },
-    "deposit_account": {
-      "pattern": "(\\d{1,2}/\\d{1,2}/\\d{4})\\s+(.+?)\\s+([\\d,]+\\.[\\d]{2})\\s+([\\d,]+\\.[\\d]{2})",
+      "pattern": "(\\d{1,2}\\s+\\w{3})\\s+(.+?)\\s+([\\d,]+\\.\\d{2})\\s*([\\d,]+\\.\\d{2})?",
       "groups": {
         "date": 1,
         "description": 2,
         "amount": 3,
         "balance": 4
       },
-      "example": "15/03/2024 Salary Payment 2,500.00 5,234.56"
+      "example": "01 May Card Payment to Tesco Stores 2637 3.00 8,146.50"
+    },
+    "deposit_account": {
+      "pattern": "(\\d{1,2}\\s+\\w{3})\\s+(.+?)\\s+([\\d,]+\\.\\d{2})\\s*([\\d,]+\\.\\d{2})?",
+      "groups": {
+        "date": 1,
+        "description": 2,
+        "amount": 3,
+        "balance": 4
+      },
+      "example": "01 May Bill Payment to Axmo Ltd 1,095.00 8,146.50"
+    },
+    "two_column_format": {
+      "pattern": "(\\d{1,2}\\s+\\w{3})\\s+(.+?)\\s+([\\d,]+\\.\\d{2})?\\s+([\\d,]+\\.\\d{2})?\\s+([\\d,]+\\.\\d{2})",
+      "groups": {
+        "date": 1,
+        "description": 2,
+        "money_out": 3,
+        "money_in": 4,
+        "balance": 5
+      },
+      "example": "01 May Bill Payment to Axmo Ltd 1,095.00 8,146.50"
     }
+  },
+  "transaction_mapping": {
+    "date_field": "Date",
+    "description_field": "Memo",
+    "amount_field": "Amount",
+    "category_field": "Subcategory",
+    "account_field": "Account",
+    "reference_field": "Number",
+    "balance_field": "Balance"
+  },
+  "category_mapping": {
+    "Contactless Card Purchase": "Transportation",
+    "Card Purchase": "Shopping",
+    "Bill Payment": "Bills",
+    "Direct Debit": "Bills",
+    "Counter Credit": "Income",
+    "Credit": "Income",
+    "Received From": "Income"
   }
 } 
