@@ -13,9 +13,21 @@ from typing import Dict, Optional
 from src.config.paths import CATEGORY_COLORS_PATH
 CATEGORY_COLORS_FILE = CATEGORY_COLORS_PATH
 
-# Minimal default color mapping for categories (only used if category_colors.json doesn't exist)
+# Default color mapping for categories (only used if category_colors.json doesn't exist)
 DEFAULT_CATEGORY_COLORS = {
-    'uncategorized': '#607D8B'  # Blue Grey
+    "Groceries": "#8fae4c",
+    "Dining": "#ff7b00",
+    "Transport": "#52d4ff",
+    "Shopping": "#3727b0",
+    "Bills": "#f5c238",
+    "Entertainment": "#a600ff",
+    "Travel": "#8B4513",
+    "Income": "#37a03c",
+    "Investments": "#388E3C",
+    "Rent": "#D32F2F",
+    "Subscription": "#1c1c1c",
+    "uncategorized": "#b3b3b3",
+    "Investment": "#318da0",
 }
 
 def load_category_colors() -> Dict[str, str]:
