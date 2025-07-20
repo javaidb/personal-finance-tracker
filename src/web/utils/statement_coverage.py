@@ -18,14 +18,27 @@ def extract_date_from_filename(filename: str) -> Tuple[int, int]:
         r'(\w+)\s+(\d{4})\s+e?-?statement',  # "May 2025 e-statement"
         r'(\w+)\s+(\d{4})\s+e?-?statement\s*',  # "May 2025 e-Statement "
         r'(\w+)\s+(\d{4})_e?statement',  # "APR 2022_eStatement"
+        r'(\w+)_(\d{4})_e?-?statement',  # "June_2025_e-statement" (Scotiabank format)
         r'(\w+)\s+(\d{4})',  # "May 2025"
+        r'(\w+)-(\d{4})',  # "MAY-2025" (new pattern for your format)
+        r'[Ss]tatement_(\d{1,2})-(\w+)-(\d{2})',  # "Statement_30-MAY-25" (case insensitive)
+        r'(\d{1,2})-(\w+)-(\d{2})',  # "30-MAY-25" (fallback for DD-MONTHNAME-YY format)
     ]
     
     for pattern in patterns:
         match = re.search(pattern, name)
         if match:
-            month_str = match.group(1)
-            year = int(match.group(2))
+            # Handle different pattern formats
+            if len(match.groups()) == 3:
+                # DD-MONTHNAME-YY format: "Statement_30-MAY-25" or "30-MAY-25"
+                day = int(match.group(1))
+                month_str = match.group(2)
+                year_str = match.group(3)
+                year = 2000 + int(year_str)  # Convert "25" to "2025"
+            else:
+                # Standard format: "May 2025"
+                month_str = match.group(1)
+                year = int(match.group(2))
             
             # Convert month name to number
             month_map = {
@@ -93,9 +106,9 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
                     account_path = os.path.join(account_type_path, account_name)
                     if not os.path.isdir(account_path):
                         continue
-                    pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
-                    for pdf_file in pdf_files:
-                        year, month = extract_date_from_filename(pdf_file)
+                    statement_files = [f for f in os.listdir(account_path) if f.lower().endswith(('.pdf', '.csv'))]
+                    for statement_file in statement_files:
+                        year, month = extract_date_from_filename(statement_file)
                         if year and month:
                             all_statement_dates.add((year, month))
     else:
@@ -108,9 +121,9 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
                 account_path = os.path.join(account_type_path, account_name)
                 if not os.path.isdir(account_path):
                     continue
-                pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
-                for pdf_file in pdf_files:
-                    year, month = extract_date_from_filename(pdf_file)
+                statement_files = [f for f in os.listdir(account_path) if f.lower().endswith(('.pdf', '.csv'))]
+                for statement_file in statement_files:
+                    year, month = extract_date_from_filename(statement_file)
                     if year and month:
                         all_statement_dates.add((year, month))
     
@@ -152,9 +165,9 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
                     if not os.path.isdir(account_path):
                         continue
                     account_dates = set()
-                    pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
-                    for pdf_file in pdf_files:
-                        year, month = extract_date_from_filename(pdf_file)
+                    statement_files = [f for f in os.listdir(account_path) if f.lower().endswith(('.pdf', '.csv'))]
+                    for statement_file in statement_files:
+                        year, month = extract_date_from_filename(statement_file)
                         if year and month:
                             account_dates.add((year, month))
                     # Generate monthly coverage for this account
@@ -181,9 +194,9 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
                 if not os.path.isdir(account_path):
                     continue
                 account_dates = set()
-                pdf_files = [f for f in os.listdir(account_path) if f.lower().endswith('.pdf')]
-                for pdf_file in pdf_files:
-                    year, month = extract_date_from_filename(pdf_file)
+                statement_files = [f for f in os.listdir(account_path) if f.lower().endswith(('.pdf', '.csv'))]
+                for statement_file in statement_files:
+                    year, month = extract_date_from_filename(statement_file)
                     if year and month:
                         account_dates.add((year, month))
                 # Generate monthly coverage for this account
