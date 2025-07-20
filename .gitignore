@@ -2,7 +2,7 @@
 cached_data/*
 /bank_statements/sample_bank/*
 # Ignore all .pdf files in sdf/ and its subfolders
-bank_statements/**/*.pdf
+bank_statements/**
 
 # Ignore personal configs
 src/config/config.py
