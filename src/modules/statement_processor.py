@@ -27,8 +27,10 @@ from src.config.paths import (
 class StatementProcessor:
     """Handles the processing and analysis of bank statement transactions."""
     
-    def __init__(self, base_path=None):
+    def __init__(self, base_path=None, bank_name=None, file_format=None):
         self.base_path = base_path
+        self.bank_name = bank_name
+        self.file_format = file_format
         self.databank_path = DATABANK_PATH
         self.uncategorized_path = UNCATEGORIZED_MERCHANTS_PATH
     
@@ -249,6 +251,11 @@ class StatementProcessor:
     def recalibrate_amounts(self, df_in: pd.DataFrame) -> pd.DataFrame:
         """Adjusts amounts based on account type."""
         print(f"Recalibrating amounts in bank statements.")
+
+        # Skip amount recalibration for Barclays CSVs - use amounts as-is
+        if self.bank_name == 'barclays' and self.file_format == 'csv':
+            print("Skipping amount recalibration for Barclays CSV - using amounts as-is")
+            return df_in.copy()
 
         df = df_in.copy()
         for account_type in df['Account Type'].unique():
@@ -580,6 +587,11 @@ class StatementProcessor:
     def _apply_custom_conditions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Adjusts the 'Amount' column in the DataFrame based on the transaction details and type."""
         df = df.copy()
+        
+        # Skip custom sign adjustments for Barclays CSVs - use amounts as-is
+        if self.bank_name == 'barclays' and self.file_format == 'csv':
+            print("Skipping custom amount conditions for Barclays CSV - using amounts as-is")
+            return df
         
         def determine_amount_sign(row):
             details_lower = str(row['Details']).lower()
