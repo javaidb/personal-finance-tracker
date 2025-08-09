@@ -455,7 +455,7 @@ class TransactionService:
             }
 
     def get_pelt_analysis_data(self) -> Dict[str, Any]:
-        """Get PELT analysis data."""
+        """Get PELT analysis data with improved changepoint detection."""
         if self.processed_df is None:
             return {
                 "error": "No data has been processed yet",
@@ -503,19 +503,20 @@ class TransactionService:
             # Calculate numeric time and change points
             daily_df['numeric_time'] = (daily_df['DateTime'] - daily_df['DateTime'].min()).dt.total_seconds()
             
-            # Set PELT parameters - tuned for fewer, broader segments (target ~6 segments)
+            # IMPROVED PELT parameters based on analysis
+            # Balanced parameters for optimal changepoint detection
             segment_settings = {
-                'penalty': 300,  # Much higher penalty for fewer segments (was 50)
-                'min_size': min(30, len(daily_df) // 4),  # Adaptive min_size based on data length
-                'jump': 7,       # Slightly larger jump for broader trends
-                'model': "l2"   # Linear model for financial trends
+                'penalty': 100,  # Balanced penalty (not too high, not too low)
+                'min_size': min(20, len(daily_df) // 5),  # Moderate segment size
+                'jump': 1,      # Keep jump=1 for precise detection (no offset)
+                'model': "l2"   # Keep linear model for financial trends
             }
             
-            print(f"PELT parameters: penalty={segment_settings['penalty']}, min_size={segment_settings['min_size']}, jump={segment_settings['jump']}")
+            print(f"IMPROVED PELT parameters: penalty={segment_settings['penalty']}, min_size={segment_settings['min_size']}, jump={segment_settings['jump']}")
             
             # Ensure we have enough data for the minimum segment size
             if len(daily_df) < segment_settings['min_size'] * 2:
-                segment_settings['min_size'] = max(2, len(daily_df) // 4)
+                segment_settings['min_size'] = max(2, len(daily_df) // 8)
                 print(f"Adjusted min_size to {segment_settings['min_size']} due to limited data")
             
             model = ruptures.Pelt(model=segment_settings['model'], min_size=segment_settings['min_size'], jump=segment_settings['jump'])
@@ -530,74 +531,92 @@ class TransactionService:
             if change_points[-1] != len(daily_df):
                 change_points = change_points + [len(daily_df)]
             
-            # --- SECOND PASS: Merge adjacent segments with similar gradients (within 25%) ---
+            # IMPROVED POST-PROCESSING: More conservative merging with validation
             # First, extract gradients for each segment
             segment_gradients = []
+            segment_sizes = []
             for i in range(len(change_points) - 1):
                 start_idx = change_points[i]
                 end_idx = change_points[i + 1]
                 segment_time = daily_df['numeric_time'].iloc[start_idx:end_idx].values
                 segment_balance = daily_df['running_balance'].iloc[start_idx:end_idx].values
+                segment_sizes.append(end_idx - start_idx)
+                
                 if len(segment_time) >= 2:
                     try:
                         coeffs = np.polyfit(segment_time, segment_balance, 1)
                         segment_gradients.append(coeffs[0])
                     except np.RankWarning:
-                        # Handle case where polyfit fails due to insufficient rank
                         segment_gradients.append(0.0)
                 else:
                     segment_gradients.append(0.0)
             
             print(f"Segment gradients calculated: {len(segment_gradients)} segments")
 
-            # Merge logic: if next gradient is within 25% of current, merge
+            # IMPROVED MERGE LOGIC: More intelligent merging with validation
+            # Only merge if segments are very similar AND both are small
             merged_change_points = [change_points[0]]
             i = 0
             while i < len(segment_gradients) - 1:
                 g1 = segment_gradients[i]
                 g2 = segment_gradients[i + 1]
-                # Avoid division by zero, treat both zero as similar
+                size1 = segment_sizes[i]
+                size2 = segment_sizes[i + 1]
+                
+                # More intelligent similarity check
                 if g1 == 0 and g2 == 0:
                     similar = True
                 elif g1 == 0 or g2 == 0:
                     similar = False
                 else:
                     ratio = abs(g2 - g1) / max(abs(g1), abs(g2))
-                    similar = ratio <= 0.25
-                if similar:
+                    # Adaptive threshold based on segment sizes
+                    threshold = 0.20 if min(size1, size2) < 10 else 0.15
+                    similar = ratio <= threshold
+                
+                # Only merge if segments are similar AND at least one is small
+                # AND the combined segment wouldn't be too large
+                should_merge = similar and (size1 < 15 or size2 < 15) and (size1 + size2 < 40)
+                
+                if should_merge:
                     # Merge: skip the next change point
                     i += 1
+                    print(f"Merged segments {i-1} and {i} (gradients: {g1:.4f}, {g2:.4f}, sizes: {size1}, {size2})")
                 else:
                     merged_change_points.append(change_points[i + 1])
                     i += 1
+            
             # Always include the last point
             if merged_change_points[-1] != change_points[-1]:
                 merged_change_points.append(change_points[-1])
             change_points = merged_change_points
 
-            # --- Continue with segment calculation as before, but using merged change_points ---
-            # Calculate segments and trends
+            # Continue with segment calculation using merged change_points
             segments = []
             concat_y_segments = []
             concat_coeffs = []
             change_dates = []
-            change_directions = []  # New: direction of each changepoint
+            change_directions = []
             trend_values = np.full(len(daily_df), np.nan)
             rate_of_change = np.full(len(daily_df), np.nan)
+            
             for i in range(len(change_points) - 1):
                 start_idx = change_points[i]
                 end_idx = change_points[i + 1]
                 segment_time = daily_df['numeric_time'].iloc[start_idx:end_idx].values
                 segment_balance = daily_df['running_balance'].iloc[start_idx:end_idx].values
+                
                 if len(segment_time) >= 2:
                     coeffs = np.polyfit(segment_time, segment_balance, 1)
                     segment_y_values = np.polyval(coeffs, segment_time)
                     trend_values[start_idx:end_idx] = segment_y_values
                     weekly_change_rate = coeffs[0] * (7 * 24 * 60 * 60)
                     rate_of_change[start_idx:end_idx] = weekly_change_rate
+                    
                     if i < len(change_points) - 2:
                         change_dates.append(daily_df['DateTime'].iloc[change_points[i+1]].strftime('%Y-%m-%d'))
-                        # Determine direction: compare average of last 5 points of this segment to average of first 5 points of next segment
+                        
+                        # Determine direction: compare averages of segments
                         this_segment_end = segment_balance[-5:] if len(segment_balance) >= 5 else segment_balance
                         next_segment_start_idx = change_points[i+1]
                         next_segment_end_idx = change_points[i+2] if i+2 < len(change_points) else len(daily_df)
@@ -618,7 +637,7 @@ class TransactionService:
                         rate = (segment_balance[-1] - segment_balance[0]) / (segment_time[-1] - segment_time[0])
                         weekly_rate = rate * (7 * 24 * 60 * 60)
                         rate_of_change[start_idx:end_idx] = weekly_rate
-                        # For short segments, use the same logic but with available points
+                        
                         if i < len(change_points) - 2:
                             change_dates.append(daily_df['DateTime'].iloc[change_points[i+1]].strftime('%Y-%m-%d'))
                             this_segment_end = segment_balance[-min(5, len(segment_balance)):]
@@ -627,7 +646,6 @@ class TransactionService:
                             next_segment_balance = daily_df['running_balance'].iloc[next_segment_start_idx:next_segment_end_idx].values
                             next_segment_start = next_segment_balance[:min(5, len(next_segment_balance))]
                             
-                            # Calculate averages
                             this_avg = np.mean(this_segment_end)
                             next_avg = np.mean(next_segment_start)
                             
@@ -643,7 +661,7 @@ class TransactionService:
             # Convert running_balance to float for JSON serialization
             balance_data = [float(x) for x in daily_df['running_balance'].tolist()]
             
-            print(f"PELT Analysis completed: {len(change_dates)} change points detected")
+            print(f"IMPROVED PELT Analysis completed: {len(change_dates)} change points detected")
             
             # Prepare data for chart.js
             chart_data = {
@@ -668,7 +686,7 @@ class TransactionService:
                     }
                 ],
                 "changePoints": change_dates,
-                "changePointDirections": change_directions,  # New: up/down for each changepoint
+                "changePointDirections": change_directions,
                 "rateOfChange": {
                     "labels": daily_df['DateTime'].dt.strftime('%Y-%m-%d').tolist(),
                     "data": rate_of_change
@@ -679,7 +697,7 @@ class TransactionService:
             
         except Exception as e:
             import traceback
-            print(f"Error performing PELT analysis: {str(e)}")
+            print(f"Error performing IMPROVED PELT analysis: {str(e)}")
             print(f"Traceback: {traceback.format_exc()}")
             return {
                 "error": f"PELT analysis failed: {str(e)}",
