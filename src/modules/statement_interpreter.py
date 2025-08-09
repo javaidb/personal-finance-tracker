@@ -737,6 +737,12 @@ class StatementInterpreter(GeneralHelperFns):
         print("DEBUG: Processing raw data...")
         print(f"DEBUG: Raw DataFrame size: {len(self.df_raw) if self.df_raw is not None else 'None'}")
         
+        # Handle empty DataFrame case
+        if self.df_raw is None or self.df_raw.empty:
+            print("DEBUG: No raw data available for processing")
+            self.filtered_df = pd.DataFrame()
+            return self.filtered_df
+        
         filtered_df = self.df_preprocessing(self.df_raw)
         print(f"DEBUG: After preprocessing: {len(filtered_df)} rows")
         
@@ -891,14 +897,30 @@ class StatementInterpreter(GeneralHelperFns):
                     'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
                     'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
                 }[x.group(1)], regex=True)
-            df['DateTime'] = pd.to_datetime(df['DateTime'])
+            
+            # Try to parse dates with more flexible format handling
+            try:
+                df['DateTime'] = pd.to_datetime(df['DateTime'], format='mixed', errors='coerce')
+            except Exception as e:
+                print(f"Error with mixed format parsing: {str(e)}")
+                try:
+                    # Try with dayfirst=True for some date formats
+                    df['DateTime'] = pd.to_datetime(df['DateTime'], dayfirst=False, errors='coerce')
+                except Exception as e2:
+                    print(f"Error with default parsing: {str(e2)}")
+                    # Last resort: try to infer format
+                    df['DateTime'] = pd.to_datetime(df['DateTime'], infer_datetime_format=True, errors='coerce')
             
         except Exception as e:
             print(f"Error processing dates: {str(e)}")
             # Fallback processing
             df['Transaction Year'] = df.apply(self.__calculate_transaction_year, axis=1)
             df['DateTime'] = df['Transaction Date'] + ' ' + df['Transaction Year'].astype(str)
-            df['DateTime'] = pd.to_datetime(df['DateTime'])
+            try:
+                df['DateTime'] = pd.to_datetime(df['DateTime'], format='mixed', errors='coerce')
+            except Exception as e2:
+                print(f"Error with fallback date parsing: {str(e2)}")
+                df['DateTime'] = pd.to_datetime(df['DateTime'], errors='coerce')
         
         return df
     
@@ -984,9 +1006,11 @@ class StatementInterpreter(GeneralHelperFns):
         self.cached_files_count = 0
         self.df_raw = self.generate_fin_df()
         
-        # Initialize processor
+        # Initialize processor with bank information
         from src.modules.statement_processor import StatementProcessor
-        self.processor = StatementProcessor(base_path)
+        bank_config = self._get_bank_config()
+        file_format = bank_config.get('file_format', 'pdf')
+        self.processor = StatementProcessor(base_path, bank_name=self.bank_name, file_format=file_format)
     
     def df_preprocessing(self, df_in):
         """Preprocess the DataFrame by cleaning and converting data types."""
