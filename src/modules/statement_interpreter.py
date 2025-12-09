@@ -671,9 +671,9 @@ class CSVParser(StatementParser):
             # Skip rows with empty dates
             if pd.isna(row['parsed_date']):
                 continue
-                
-            # Convert date to expected format
-            formatted_date = row['parsed_date'].strftime('%d %b')
+
+            # Convert date to expected format - include year for full date parsing
+            formatted_date = row['parsed_date'].strftime('%d %b %Y')
             
             # Get amount and convert to float
             amount_str = str(row.get(amount_field, 0))
@@ -731,9 +731,17 @@ class CSVParser(StatementParser):
                         except ValueError:
                             pass
 
-                    # Convert to a format that matches the expected pattern (e.g., "30 May")
+                    # Convert to a format that matches the expected pattern
+                    # If date includes year (Wells Fargo), keep it; otherwise use "DD Mon" format
                     if date_obj:
-                        formatted_date = date_obj.strftime('%d %b')
+                        # Check if the original date had a year (4 digits)
+                        has_year = any(len(part) == 4 and part.isdigit() for part in date_str.split('/'))
+                        if has_year:
+                            # Keep full date with year (e.g., "05 Dec 2025")
+                            formatted_date = date_obj.strftime('%d %b %Y')
+                        else:
+                            # Use day + month only (e.g., "30 May")
+                            formatted_date = date_obj.strftime('%d %b')
                     else:
                         formatted_date = date_str
                 except ValueError:
@@ -834,17 +842,20 @@ class StatementInterpreter(GeneralHelperFns):
                 
                 for file_name in files:
                     file_attrs = self.grab_pdf_name_attributes(file_name)
-                    
+
                     if self.base_path:
                         file_path = os.path.join(self.base_path, "bank_statements", self.bank_name, account_type, account_name, file_name)
                     else:
                         file_path = self.process_import_path(file_name, account_type, account_name)
-                    
+
                     # Check if file has already been processed
                     file_hash = self.__get_file_hash(file_path)
+
+                    # Handle files without month/year in filename (e.g., Wells Fargo CSVs)
+                    # Use 'Unknown' as defaults if not found
                     metadata = {
-                        "year": file_attrs['year'],
-                        "month": file_attrs['month'],
+                        "year": file_attrs.get('year', 'Unknown'),
+                        "month": file_attrs.get('month', 'Unknown'),
                         "account_type": account_type,
                         "account_name": account_name,
                         "file_name": file_name
@@ -933,34 +944,49 @@ class StatementInterpreter(GeneralHelperFns):
     def _process_dates(self, df: pd.DataFrame) -> pd.DataFrame:
         """Process and standardize date columns."""
         try:
+            # Check if Statement Year/Month are Unknown (for files without date in filename)
+            has_unknown_dates = (df['Statement Year'] == 'Unknown').any() or (df['Statement Month'] == 'Unknown').any()
+
+            if has_unknown_dates:
+                # Transaction dates should already have year (from CSV parser)
+                # Try to parse dates with year format first (e.g., "05 Dec 2025")
+                df['DateTime'] = pd.to_datetime(df['Transaction Date'], format='%d %b %Y', errors='coerce')
+
+                # If that fails, try without year (e.g., "05 Dec") and add current year
+                if df['DateTime'].isna().all():
+                    import datetime
+                    current_year = datetime.datetime.now().year
+                    df['DateTime'] = pd.to_datetime(df['Transaction Date'] + f' {current_year}', format='%d %b %Y', errors='coerce')
+                return df
+
             df['Statement Year'] = pd.to_numeric(df['Statement Year'], errors='coerce')
             df['Statement Month'] = df['Statement Month'].astype(str)
             df['Transaction Date'] = df['Transaction Date'].astype(str)
-            
+
             # Calculate Transaction Year
             month_str = df['Transaction Date'].str.split().str[0].str.lower()
             statement_month = df['Statement Month'].str.lower()
             is_prev_year = (month_str.isin(['nov', 'dec'])) & (statement_month == 'january')
             df['Transaction Year'] = df['Statement Year'].where(~is_prev_year, df['Statement Year'] - 1)
-            
+
             # Create DateTime column
             df['DateTime'] = df['Transaction Date'] + ' ' + df['Transaction Year'].astype(str)
             # Handle abbreviated month names by converting them to full names
-            df['DateTime'] = df['DateTime'].str.replace(r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b', 
+            df['DateTime'] = df['DateTime'].str.replace(r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b',
                 lambda x: {
                     'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
                     'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
                     'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
                 }[x.group(1)], regex=True)
             df['DateTime'] = pd.to_datetime(df['DateTime'])
-            
+
         except Exception as e:
             print(f"Error processing dates: {str(e)}")
             # Fallback processing
             df['Transaction Year'] = df.apply(self.__calculate_transaction_year, axis=1)
             df['DateTime'] = df['Transaction Date'] + ' ' + df['Transaction Year'].astype(str)
             df['DateTime'] = pd.to_datetime(df['DateTime'])
-        
+
         return df
     
     def __calculate_transaction_year(self, row):
