@@ -472,6 +472,8 @@
                                 Canadian bank with red and navy branding
                             {% elif bank.name == 'barclays' %}
                                 UK bank with blue and gold branding
+                            {% elif bank.name == 'wellsfargo' %}
+                                US bank with red and yellow branding
                             {% else %}
                                 Configured bank with custom branding
                             {% endif %}
@@ -761,7 +763,7 @@
             
             // Create folder structure example
             let fileType = 'PDF statements here';
-            if (selectedBank === 'barclays') {
+            if (selectedBank === 'barclays' || selectedBank === 'wellsfargo') {
                 fileType = 'CSV statements here';
             }
             
@@ -845,9 +847,9 @@
         function addFilesToAccountType(files, accountType) {
             // Filter files based on selected bank's file format
             let allowedFiles = [];
-            
-            if (selectedBank === 'barclays') {
-                // Barclays supports CSV files
+
+            if (selectedBank === 'barclays' || selectedBank === 'wellsfargo') {
+                // Barclays and Wells Fargo support CSV files
                 allowedFiles = files.filter(file => file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv'));
             } else {
                 // Other banks support PDF files
@@ -979,9 +981,9 @@
             const accountTypes = ['credit', 'chequing', 'savings'];
             let uploadText = 'Click or drag PDF files here';
             let descriptionText = 'Upload your PDF bank statements to the appropriate accounts.';
-            
-            // Check if this is Barclays (CSV format)
-            if (bankName === 'barclays') {
+
+            // Check if this is Barclays or Wells Fargo (CSV format)
+            if (bankName === 'barclays' || bankName === 'wellsfargo') {
                 uploadText = 'Click or drag CSV files here';
                 descriptionText = 'Upload your CSV bank statements to the appropriate accounts.';
             }

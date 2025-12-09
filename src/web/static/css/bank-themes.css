@@ -35,6 +35,18 @@
   --bank-error: #DC3545;
 }
 
+/* Wells Fargo Theme */
+.theme-wellsfargo {
+  --bank-primary: #D71E28;
+  --bank-secondary: #FFCD41;
+  --bank-accent: #F4A900;
+  --bank-text: #333333;
+  --bank-background: #FFFFFF;
+  --bank-success: #28A745;
+  --bank-warning: #FFC107;
+  --bank-error: #DC3545;
+}
+
 /* Bank-specific component styles */
 .bank-header {
   background: var(--bank-primary);
