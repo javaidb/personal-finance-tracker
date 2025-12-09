@@ -111,6 +111,7 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
                         year, month = extract_date_from_filename(statement_file)
                         if year and month:
                             all_statement_dates.add((year, month))
+                        # Note: files without dates are still counted but don't affect date range
     else:
         # Old structure: bank_statements/[account_type]/[account_name]/
         for account_type in os.listdir(statements_dir):
@@ -127,9 +128,12 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
                     if year and month:
                         all_statement_dates.add((year, month))
     
+    # If no dated files, use default range (last year to now) for undated files
     if not all_statement_dates:
-        return coverage
-    min_date = min(all_statement_dates)
+        min_date = (current_year - 1, 1)  # Start from last year
+    else:
+        min_date = min(all_statement_dates)
+
     # Use current month as end date (but don't include current month in coverage)
     end_year = current_year
     end_month = current_month - 1  # Go up to previous month
@@ -166,10 +170,14 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
                         continue
                     account_dates = set()
                     statement_files = [f for f in os.listdir(account_path) if f.lower().endswith(('.pdf', '.csv'))]
+                    files_without_dates = 0  # Count files that don't have extractable dates
                     for statement_file in statement_files:
                         year, month = extract_date_from_filename(statement_file)
                         if year and month:
                             account_dates.add((year, month))
+                        else:
+                            # For files without dates in filename (e.g., Wells Fargo arbitrary names)
+                            files_without_dates += 1
                     # Generate monthly coverage for this account
                     monthly_coverage = {}
                     for year, month in expected_months:
@@ -177,9 +185,11 @@ def get_simple_coverage(statements_dir: str) -> Dict[str, Dict]:
                             monthly_coverage[year] = {}
                         has_coverage = (year, month) in account_dates
                         monthly_coverage[year][month] = has_coverage
+                    # Total statements includes both dated and undated files
+                    total_statements = len(account_dates) + files_without_dates
                     coverage[account_type][account_name] = {
                         'monthly_coverage': monthly_coverage,
-                        'total_statements': len(account_dates),
+                        'total_statements': total_statements,
                         'date_range': (min_date, (end_year, end_month))
                     }
     else:
