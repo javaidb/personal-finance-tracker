@@ -1,0 +1,104 @@
+{
+  "bank_name": "wellsfargo",
+  "display_name": "Wells Fargo",
+  "branding": {
+    "primary_color": "#D71E28",
+    "secondary_color": "#FFCD41",
+    "accent_color": "#F4A900",
+    "text_color": "#333333",
+    "background_color": "#FFFFFF",
+    "success_color": "#28A745",
+    "warning_color": "#FFC107",
+    "error_color": "#DC3545",
+    "logo_path": "/static/images/banks/wellsfargo/logo.svg",
+    "favicon_path": "/static/images/banks/wellsfargo/favicon.svg",
+    "css_variables": {
+      "--bank-primary": "#D71E28",
+      "--bank-secondary": "#FFCD41",
+      "--bank-accent": "#F4A900",
+      "--bank-text": "#333333",
+      "--bank-background": "#FFFFFF"
+    },
+    "theme": {
+      "name": "wellsfargo_red_yellow",
+      "description": "Wells Fargo's signature red and yellow theme",
+      "gradients": {
+        "primary": "linear-gradient(135deg, #D71E28 0%, #B01820 100%)",
+        "secondary": "linear-gradient(135deg, #FFCD41 0%, #F4A900 100%)"
+      }
+    }
+  },
+  "file_format": "csv",
+  "csv_naming_convention": {
+    "pattern": "{any}.csv",
+    "month_format": "full_name",
+    "year_format": "YYYY"
+  },
+  "account_types": {
+    "Credit": {
+      "statement_format": "credit_card",
+      "balance_calculation": "running_balance"
+    },
+    "Chequing": {
+      "statement_format": "deposit_account",
+      "balance_calculation": "fixed_balance"
+    },
+    "Savings": {
+      "statement_format": "deposit_account",
+      "balance_calculation": "fixed_balance"
+    }
+  },
+  "statement_parsing": {
+    "opening_balance_keywords": ["OPENING BALANCE", "BEGINNING BALANCE"],
+    "closing_balance_keywords": ["CLOSING BALANCE", "ENDING BALANCE"],
+    "date_formats": ["MM/d/yyyy", "MM/dd/yyyy"],
+    "amount_formats": ["#,##0.00", "#,###.##"],
+    "csv_headers": ["Date", "Amount", "Status", "Balance", "Description"],
+    "csv_delimiter": ",",
+    "csv_encoding": "utf-8",
+    "csv_skip_header": false
+  },
+  "patterns": {
+    "credit_card": {
+      "pattern": "(\\d{1,2}/\\d{1,2}/\\d{4}),([\\-\\d\\.]+),([^,]*),([^,]*),(.+)",
+      "groups": {
+        "date": 1,
+        "amount": 2,
+        "status": 3,
+        "unused": 4,
+        "description": 5
+      },
+      "example": "12/5/2025,-195.41,*,,PURCHASE AUTHORIZED ON 12/04 STATE FARM INSURA"
+    },
+    "deposit_account": {
+      "pattern": "(\\d{1,2}/\\d{1,2}/\\d{4}),([\\-\\d\\.]+),([^,]*),([^,]*),(.+)",
+      "groups": {
+        "date": 1,
+        "amount": 2,
+        "status": 3,
+        "unused": 4,
+        "description": 5
+      },
+      "example": "12/5/2025,776.56,*,,RYDER TRUCK RENT PAYROLL 251205 25120500382534 IMN"
+    }
+  },
+  "transaction_mapping": {
+    "date_field": "Date",
+    "description_field": "Description",
+    "amount_field": "Amount",
+    "category_field": null,
+    "account_field": null,
+    "reference_field": null,
+    "balance_field": "Balance",
+    "status_field": "Status"
+  },
+  "category_mapping": {
+    "PURCHASE": "Shopping",
+    "CASH APP": "Transfers",
+    "PAYROLL": "Income",
+    "STATE FARM": "Insurance",
+    "ATM": "Cash Withdrawal",
+    "DEPOSIT": "Income",
+    "TRANSFER": "Transfers"
+  }
+}

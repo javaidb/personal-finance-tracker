@@ -126,6 +126,7 @@ class PDFParser(StatementParser):
             print(f"No pattern found for account type: {account_type} (statement_format: {statement_format})")
             return transactions
         
+        
         # Special handling for Barclays multi-line format
         if config.get('bank_name') == 'barclays':
             return self._parse_barclays_transactions(lines, pattern, groups, running_balance, config)
@@ -137,7 +138,9 @@ class PDFParser(StatementParser):
                 transaction = self._create_transaction(match, groups, running_balance, config)
                 if transaction:
                     transactions.append(transaction)
-                    running_balance = transaction.get('Balance', running_balance)
+                    # Convert Balance back to float for running balance calculation
+                    balance_str = transaction.get('Balance', str(running_balance))
+                    running_balance = float(balance_str) if balance_str else running_balance
         
         return transactions
     
@@ -160,7 +163,10 @@ class PDFParser(StatementParser):
     def _match_pattern(self, line: str, pattern: str, groups: Dict) -> Optional[Dict]:
         """Match a line against the pattern and return groups."""
         import re
-        match = re.match(pattern, line)
+        # Fix double-escaped backslashes in JSON patterns
+        fixed_pattern = pattern.replace('\\\\', '\\')
+        # Use re.search instead of re.match to handle lines that don't start with the pattern
+        match = re.search(fixed_pattern, line)
         if match:
             result = {}
             for group_name, group_index in groups.items():
@@ -194,8 +200,10 @@ class PDFParser(StatementParser):
         ref_num = match.get('reference_number', '')
         transaction_date = match.get('transaction_date', '')
         post_date = match.get('post_date', '')
-        details = match.get('details', '').strip()
-        amount = float(match.get('amount', 0))
+        details_raw = match.get('details', '')
+        details = details_raw.strip() if details_raw else ''
+        amount_str = match.get('amount', '0')
+        amount = float(amount_str) if amount_str else 0.0
         
         # Handle negative indicator
         if match.get('negative_indicator') == '-':
@@ -556,12 +564,29 @@ class CSVParser(StatementParser):
             return []
         
         # Read CSV file
-        df = pd.read_csv(
-            file_path,
-            delimiter=statement_parsing.get('csv_delimiter', ','),
-            encoding=statement_parsing.get('csv_encoding', 'utf-8'),
-            skip_blank_lines=True
-        )
+        csv_headers = statement_parsing.get('csv_headers', None)
+        skip_header = statement_parsing.get('csv_skip_header', False)
+
+        # If headers are provided in config, use them as column names
+        if csv_headers and len(csv_headers) > 0:
+            df = pd.read_csv(
+                file_path,
+                delimiter=statement_parsing.get('csv_delimiter', ','),
+                encoding=statement_parsing.get('csv_encoding', 'utf-8'),
+                skip_blank_lines=True,
+                header=None,  # No header in file
+                names=csv_headers  # Use configured column names
+            )
+        else:
+            # Use the file's header row
+            header_param = 0 if not skip_header else None
+            df = pd.read_csv(
+                file_path,
+                delimiter=statement_parsing.get('csv_delimiter', ','),
+                encoding=statement_parsing.get('csv_encoding', 'utf-8'),
+                skip_blank_lines=True,
+                header=header_param
+            )
         
         # Map columns
         date_field = transaction_mapping.get('date_field', 'Date')
@@ -572,25 +597,35 @@ class CSVParser(StatementParser):
         reference_field = transaction_mapping.get('reference_field', 'Number')
         balance_field = transaction_mapping.get('balance_field', 'Balance')
         
-        # Check if this is Barclays CSV with balance column
-        is_barclays = config.get('bank_name') == 'barclays'
-        has_balance_column = balance_field in df.columns
-        
-        if is_barclays and has_balance_column:
-            return self._parse_barclays_csv_with_balance(df, date_field, description_field, amount_field, 
-                                                       category_field, account_field, reference_field, 
-                                                       balance_field, category_mapping)
+        # Check if this CSV has a balance column (for balance calculation)
+        has_balance_column = balance_field and balance_field in df.columns
+
+        if has_balance_column:
+            return self._parse_csv_with_balance(df, date_field, description_field, amount_field,
+                                               category_field, account_field, reference_field,
+                                               balance_field, category_mapping, config)
         else:
-            return self._parse_standard_csv(df, date_field, description_field, amount_field, 
+            return self._parse_standard_csv(df, date_field, description_field, amount_field,
                                           category_field, account_field, reference_field, category_mapping)
     
-    def _parse_barclays_csv_with_balance(self, df, date_field, description_field, amount_field, 
-                                        category_field, account_field, reference_field, balance_field, category_mapping):
-        """Parse Barclays CSV with balance calculations."""
+    def _parse_csv_with_balance(self, df, date_field, description_field, amount_field,
+                                category_field, account_field, reference_field, balance_field, category_mapping, config):
+        """Parse CSV with balance calculations (supports multiple banks)."""
         transactions = []
-        
-        # Convert dates and sort by date (earliest first)
-        df['parsed_date'] = pd.to_datetime(df[date_field], format='%d/%m/%Y', errors='coerce')
+
+        # Try multiple date formats
+        date_formats = ['%d/%m/%Y', '%m/%d/%Y']  # Barclays and Wells Fargo formats
+        df['parsed_date'] = None
+
+        for date_format in date_formats:
+            try:
+                df['parsed_date'] = pd.to_datetime(df[date_field], format=date_format, errors='coerce')
+                # If we got valid dates, break
+                if df['parsed_date'].notna().any():
+                    break
+            except:
+                continue
+
         df = df.sort_values('parsed_date', ascending=True)
         
         # Find opening balance (first non-empty balance value)
@@ -624,10 +659,10 @@ class CSVParser(StatementParser):
                 break
         
         if opening_balance is None:
-            print("Warning: No opening balance found in Barclays CSV")
+            print(f"Warning: No opening balance found in CSV for {config.get('bank_name', 'unknown bank')}")
             opening_balance = 0.0
-        
-        print(f"Barclays CSV: Opening balance = {opening_balance}")
+
+        print(f"CSV Parser: Opening balance = {opening_balance} for {config.get('bank_name', 'unknown bank')}")
         
         # Calculate running balances
         running_balance = opening_balance
@@ -669,21 +704,38 @@ class CSVParser(StatementParser):
         
         return transactions
     
-    def _parse_standard_csv(self, df, date_field, description_field, amount_field, 
+    def _parse_standard_csv(self, df, date_field, description_field, amount_field,
                            category_field, account_field, reference_field, category_mapping):
         """Parse standard CSV without balance calculations."""
         transactions = []
-        
+
         for _, row in df.iterrows():
-            # Convert date from dd/MM/yyyy to a format the system can handle
+            # Convert date to a format the system can handle
             date_str = str(row.get(date_field, ''))
             if date_str and '/' in date_str:
                 try:
-                    # Parse dd/MM/yyyy format
+                    # Try multiple date formats
                     from datetime import datetime
-                    date_obj = datetime.strptime(date_str, '%d/%m/%Y')
+                    date_obj = None
+
+                    # Try dd/MM/yyyy format (Barclays)
+                    try:
+                        date_obj = datetime.strptime(date_str, '%d/%m/%Y')
+                    except ValueError:
+                        pass
+
+                    # Try MM/d/yyyy or MM/dd/yyyy format (Wells Fargo)
+                    if not date_obj:
+                        try:
+                            date_obj = datetime.strptime(date_str, '%m/%d/%Y')
+                        except ValueError:
+                            pass
+
                     # Convert to a format that matches the expected pattern (e.g., "30 May")
-                    formatted_date = date_obj.strftime('%d %b')
+                    if date_obj:
+                        formatted_date = date_obj.strftime('%d %b')
+                    else:
+                        formatted_date = date_str
                 except ValueError:
                     formatted_date = date_str
             else:
@@ -825,6 +877,10 @@ class StatementInterpreter(GeneralHelperFns):
         print(f"- {processed_files} files newly processed")
         print(f"- {len(overall_df)} total transactions found")
         
+        # Report zero-transaction files if any
+        if self.zero_transaction_files:
+            print(f"- WARNING: {len(self.zero_transaction_files)} files had 0 transactions (check logs/zero_transactions.log)")
+        
         # Process dates and sort
         if not overall_df.empty:
             overall_df = self._process_dates(overall_df)
@@ -856,6 +912,11 @@ class StatementInterpreter(GeneralHelperFns):
             config['bank_name'] = self.bank_name
             config['file_path'] = file_path  # Pass file path for CSV parsing
             transactions = parser.parse_transactions([], config)
+        
+        # Sanity check: Log PDFs with 0 transactions
+        if len(transactions) == 0:
+            self._log_zero_transactions_warning(file_path, account_type)
+            self.zero_transaction_files.append((file_path, account_type))
         
         return transactions
     
@@ -963,6 +1024,18 @@ class StatementInterpreter(GeneralHelperFns):
             cache_data = json.load(f)
         return cache_data["transactions"], cache_data["metadata"]
     
+    def get_cache_info(self):
+        """Get information about cached files"""
+        cache_dir = paths.ensure_pdf_cache_exists()
+        if not os.path.exists(cache_dir):
+            return {"cached_pdfs_count": 0, "cache_size_kb": 0}
+        
+        cached_files = [f for f in os.listdir(cache_dir) if f.endswith('.json')]
+        return {
+            "cached_pdfs_count": len(cached_files),
+            "cache_size_kb": sum(os.path.getsize(os.path.join(cache_dir, f)) for f in cached_files) // 1024
+        }
+    
     # Include all the existing processing methods from the original PDFReader
     # (df_preprocessing, recalibrate_amounts, combine_balances_across_accounts, etc.)
     # These methods remain the same as in the original pdf_interpreter.py
@@ -982,6 +1055,7 @@ class StatementInterpreter(GeneralHelperFns):
         # Create cached_data directory if it doesn't exist
         paths.ensure_cached_data_exists()
         self.cached_files_count = 0
+        self.zero_transaction_files = []  # Track files with 0 transactions
         self.df_raw = self.generate_fin_df()
         
         # Initialize processor
@@ -1006,4 +1080,29 @@ class StatementInterpreter(GeneralHelperFns):
     
     def df_postprocessing(self, df_in):
         """Post-process the DataFrame."""
-        return self.processor.postprocess_dataframe(df_in) 
+        return self.processor.postprocess_dataframe(df_in)
+    
+    def _log_zero_transactions_warning(self, file_path: str, account_type: str):
+        """Log warning when a PDF has 0 transactions - may indicate parsing issue."""
+        import os
+        from datetime import datetime
+        
+        file_name = os.path.basename(file_path)
+        warning_msg = f"[SANITY CHECK] PDF with 0 transactions: {account_type}/{file_name}"
+        
+        # Log to console
+        print(f"WARNING: {warning_msg}")
+        
+        # Log to file for review
+        try:
+            log_dir = os.path.join(self.base_path, "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            
+            log_file = os.path.join(log_dir, "zero_transactions.log")
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(f"[{timestamp}] {warning_msg} (Path: {file_path})\n")
+                
+        except Exception as e:
+            print(f"Failed to write to zero transactions log: {e}") 
