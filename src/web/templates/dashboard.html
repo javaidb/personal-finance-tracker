@@ -563,8 +563,15 @@
                 <section id="trends" class="mb-5">
                     <h2>Spending Summary</h2>
                     <div class="card mt-4">
-                        <div class="card-header">
-                            <h5>Monthly Spending Summary</h5>
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Spending Summary</h5>
+                            <div class="btn-group btn-group-sm" role="group" aria-label="View mode">
+                                <input type="radio" class="btn-check" name="trendsViewMode" id="trendsViewMonth" autocomplete="off" checked>
+                                <label class="btn btn-outline-primary" for="trendsViewMonth">Monthly</label>
+
+                                <input type="radio" class="btn-check" name="trendsViewMode" id="trendsViewWeek" autocomplete="off">
+                                <label class="btn btn-outline-primary" for="trendsViewWeek">Weekly</label>
+                            </div>
                         </div>
                         <div class="card-body">
                             <div class="chart-container">
@@ -928,7 +935,24 @@
             const groupRangeSelect = document.getElementById('group-range-select');
             if (applyTrendsFilter) applyTrendsFilter.addEventListener('click', fetchSpendingTrends);
             if (groupRangeSelect) groupRangeSelect.addEventListener('change', fetchSpendingTrends);
-            
+
+            // Event listeners for trends view mode toggle
+            const trendsViewMonth = document.getElementById('trendsViewMonth');
+            const trendsViewWeek = document.getElementById('trendsViewWeek');
+            if (trendsViewMonth) {
+                trendsViewMonth.addEventListener('change', function() {
+                    if (this.checked) {
+                        fetchMonthlyTrends();
+                    }
+                });
+            }
+            if (trendsViewWeek) {
+                trendsViewWeek.addEventListener('change', function() {
+                    if (this.checked) {
+                        fetchWeeklyTrends();
+                    }
+                });
+            }
 
             const accountTypeFilter = document.getElementById('account-type-filter');
             if (accountTypeFilter) accountTypeFilter.addEventListener('change', fetchTransactions);
@@ -2255,6 +2279,21 @@
                 return data;
             } catch (error) {
                 console.error('Error fetching monthly trends data:', error);
+                throw error;
+            }
+        }
+
+        async function fetchWeeklyTrends() {
+            try {
+                const response = await fetch('/api/weekly-trends');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                renderTrendsChart(data);
+                return data;
+            } catch (error) {
+                console.error('Error fetching weekly trends data:', error);
                 throw error;
             }
         }
