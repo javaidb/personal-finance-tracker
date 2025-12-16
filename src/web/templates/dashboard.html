@@ -182,7 +182,7 @@
         }
         .chart-container {
             position: relative;
-            height: 400px;
+            height: 550px;
             margin-bottom: 30px;
             padding: 10px;
         }
@@ -3032,10 +3032,10 @@
                             goalsMap.set(goal.amount, goal);
                         });
 
-                        // Find the next goal with a target date
+                        // Find the next goal with a target date (sorted by date, most recent first)
                         const goalsWithTargets = goalsData.goals
                             .filter(g => g.target_date && g.amount > currentBalance)
-                            .sort((a, b) => a.amount - b.amount);
+                            .sort((a, b) => new Date(a.target_date) - new Date(b.target_date));
 
                         if (goalsWithTargets.length > 0) {
                             nextGoalWithDate = goalsWithTargets[0];
@@ -3064,10 +3064,44 @@
                     // Use target-based rate if available, otherwise use PELT (both are now monthly)
                     let defaultTrend = targetBasedRate > 0 ? targetBasedRate : peltTrend;
 
+                    // Calculate actual 2-month average savings rate - simpler approach
+                    let twoMonthAvgRate = 0;
+                    try {
+                        if (balanceData && balanceData.datasets && balanceData.datasets[0] && balanceData.datasets[0].data) {
+                            const balances = balanceData.datasets[0].data;
+
+                            if (balances && balances.length >= 2) {
+                                // Simple approach: compare last balance to balance from 60 days ago
+                                // If we have less than 60 days of data, use what we have
+                                const daysToLookBack = Math.min(60, balances.length - 1);
+                                const indexToCompare = Math.max(0, balances.length - 1 - daysToLookBack);
+
+                                const currentBalance = balances[balances.length - 1];
+                                const oldBalance = balances[indexToCompare];
+                                const balanceChange = currentBalance - oldBalance;
+
+                                // Convert days to months (approximate)
+                                const monthsElapsed = daysToLookBack / 30.44;
+
+                                if (monthsElapsed > 0) {
+                                    twoMonthAvgRate = balanceChange / monthsElapsed;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error calculating 2-month average:', error);
+                        twoMonthAvgRate = 0;
+                    }
+
                     // Calculate max goal amount and generate milestone markers for all goals
                     const allGoals = goalsData && goalsData.success && goalsData.goals ? goalsData.goals : [];
-                    const sortedGoals = [...allGoals].sort((a, b) => a.amount - b.amount);
-                    const maxGoalAmount = sortedGoals.length > 0 ? sortedGoals[sortedGoals.length - 1].amount : currentBalance * 2;
+                    // Sort goals by target date (chronologically)
+                    const sortedGoals = [...allGoals].sort((a, b) => {
+                        if (!a.target_date) return 1;
+                        if (!b.target_date) return -1;
+                        return new Date(a.target_date) - new Date(b.target_date);
+                    });
+                    const maxGoalAmount = allGoals.length > 0 ? Math.max(...allGoals.map(g => g.amount)) : currentBalance * 2;
                     const minAmount = 0;
 
                     // Find next milestone (next goal after current balance)
@@ -3176,14 +3210,185 @@
                         }
                     };
 
+                    // Create a map of goal ID to cumulative previous goals total
+                    const cumulativeTotals = new Map();
+                    let runningTotal = 0;
+                    sortedGoals.forEach(g => {
+                        cumulativeTotals.set(g.id || g.goal_id, runningTotal);
+                        runningTotal += g.amount;
+                    });
+
+                    // Find the first unachieved goal (chronologically) to highlight as "next"
+                    const nextUnachievedGoal = sortedGoals.find(g => currentBalance < g.amount);
+
+                    // Generate goal cards HTML
+                    const goalCardsHTML = sortedGoals.map((goal, index) => {
+                        const goalProgress = Math.min(100, (currentBalance / goal.amount) * 100);
+                        const isAchieved = currentBalance >= goal.amount;
+                        const isNext = !isAchieved && nextUnachievedGoal && (goal.id || goal.goal_id) === (nextUnachievedGoal.id || nextUnachievedGoal.goal_id);
+
+                        let targetDateFormatted = '';
+                        let daysRemaining = 0;
+                        if (goal.target_date) {
+                            const targetDate = new Date(goal.target_date);
+                            const today = new Date();
+                            daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+                            targetDateFormatted = targetDate.toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                            });
+                        }
+
+                        const remaining = Math.max(0, goal.amount - currentBalance);
+
+                        // Get cumulative total of previous goals (by date)
+                        const previousGoalsTotal = cumulativeTotals.get(goal.id || goal.goal_id) || 0;
+
+                        // Calculate cumulative-adjusted values (accounting for prior goals)
+                        const totalTargetWithPrior = goal.amount + previousGoalsTotal;
+                        const cumulativeProgress = previousGoalsTotal > 0 ? Math.min(100, (currentBalance / totalTargetWithPrior) * 100) : goalProgress;
+                        const cumulativeRemaining = Math.max(0, totalTargetWithPrior - currentBalance);
+
+                        // Calculate time to goal based on default trend
+                        let timeToGoal = '';
+                        let cumulativeTimeToGoal = '';
+                        let timeToGoalClass = 'goal-time-estimate';
+                        let cumulativeTimeToGoalClass = 'goal-time-estimate';
+                        let monthsToGoal = 0;
+                        let cumulativeMonthsToGoal = 0;
+                        if (!isAchieved && defaultTrend > 0 && remaining > 0) {
+                            monthsToGoal = remaining / defaultTrend;
+                            if (monthsToGoal < 12) {
+                                timeToGoal = `${monthsToGoal.toFixed(1)} month${monthsToGoal !== 1 ? 's' : ''}`;
+                            } else {
+                                const years = Math.floor(monthsToGoal / 12);
+                                const remainingMonths = monthsToGoal % 12;
+                                if (remainingMonths < 0.1) {
+                                    timeToGoal = `${years} year${years !== 1 ? 's' : ''}`;
+                                } else {
+                                    timeToGoal = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                }
+                            }
+
+                            // Calculate cumulative time (for goal + prior goals)
+                            if (previousGoalsTotal > 0 && cumulativeRemaining > 0) {
+                                cumulativeMonthsToGoal = cumulativeRemaining / defaultTrend;
+                                if (cumulativeMonthsToGoal < 12) {
+                                    cumulativeTimeToGoal = `${cumulativeMonthsToGoal.toFixed(1)} month${cumulativeMonthsToGoal !== 1 ? 's' : ''}`;
+                                } else {
+                                    const years = Math.floor(cumulativeMonthsToGoal / 12);
+                                    const remainingMonths = cumulativeMonthsToGoal % 12;
+                                    if (remainingMonths < 0.1) {
+                                        cumulativeTimeToGoal = `${years} year${years !== 1 ? 's' : ''}`;
+                                    } else {
+                                        cumulativeTimeToGoal = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                    }
+                                }
+                            }
+
+                            // Determine color based on comparison with time left
+                            if (daysRemaining > 0) {
+                                const monthsRemaining = daysRemaining / 30.44;
+                                // Add tolerance of 0.5 months to account for rounding
+                                if (monthsToGoal <= monthsRemaining + 0.5) {
+                                    timeToGoalClass = 'goal-time-estimate on-track'; // Green
+                                } else {
+                                    timeToGoalClass = 'goal-time-estimate off-track'; // Red
+                                }
+
+                                // Determine cumulative color
+                                if (cumulativeMonthsToGoal > 0) {
+                                    if (cumulativeMonthsToGoal <= monthsRemaining + 0.5) {
+                                        cumulativeTimeToGoalClass = 'goal-time-estimate on-track'; // Green
+                                    } else {
+                                        cumulativeTimeToGoalClass = 'goal-time-estimate off-track'; // Red
+                                    }
+                                }
+                            }
+                        }
+
+                        return `
+                            <div class="goal-card ${isAchieved ? 'achieved' : ''} ${isNext ? 'next-goal' : ''}" data-goal-id="${goal.id || goal.goal_id}">
+                                <div class="goal-card-header">
+                                    <div class="goal-icon-wrapper">
+                                        <i class="fas fa-${goal.icon}"></i>
+                                    </div>
+                                    <div class="goal-info">
+                                        <h4 class="goal-name">${goal.name}</h4>
+                                        <div class="goal-amount">
+                                            ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(goal.amount)}
+                                            ${previousGoalsTotal > 0 ? `<span class="cumulative-total">+ ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(previousGoalsTotal)}</span>` : ''}
+                                        </div>
+                                    </div>
+                                    ${isAchieved ? '<div class="achievement-badge"><i class="fas fa-check-circle"></i></div>' : ''}
+                                </div>
+                                <div class="goal-progress-bar">
+                                    <div class="goal-progress-fill" style="width: ${goalProgress}%"></div>
+                                </div>
+                                <div class="goal-details">
+                                    <div class="goal-stat">
+                                        <span class="stat-label">Progress</span>
+                                        <span class="stat-value">
+                                            ${goalProgress.toFixed(1)}%
+                                            ${previousGoalsTotal > 0 ? `<span class="cumulative-indicator">(${cumulativeProgress.toFixed(1)}%)</span>` : ''}
+                                        </span>
+                                    </div>
+                                    ${!isAchieved ? `
+                                        <div class="goal-stat">
+                                            <span class="stat-label">Remaining</span>
+                                            <span class="stat-value">
+                                                ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(remaining)}
+                                                ${previousGoalsTotal > 0 ? `<span class="cumulative-indicator">(${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cumulativeRemaining)})</span>` : ''}
+                                            </span>
+                                        </div>
+                                    ` : ''}
+                                    ${targetDateFormatted ? `
+                                        <div class="goal-stat">
+                                            <span class="stat-label">Target Date</span>
+                                            <span class="stat-value">${targetDateFormatted}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${daysRemaining > 0 && !isAchieved ? `
+                                        <div class="goal-stat">
+                                            <span class="stat-label">Time Left</span>
+                                            <span class="stat-value ${daysRemaining < 30 ? 'urgent' : ''}">${
+                                                daysRemaining < 30 ? `${daysRemaining} days` :
+                                                daysRemaining < 365 ? `${Math.ceil(daysRemaining / 30)} months` :
+                                                `${Math.floor(daysRemaining / 365)}y ${Math.ceil((daysRemaining % 365) / 30)}m`
+                                            }</span>
+                                        </div>
+                                    ` : ''}
+                                    ${!isAchieved && timeToGoal ? `
+                                        <div class="goal-stat">
+                                            <span class="stat-label">Time to Goal</span>
+                                            <span class="stat-value ${timeToGoalClass}">
+                                                ${timeToGoal}
+                                            </span>
+                                        </div>
+                                    ` : ''}
+                                    ${!isAchieved && cumulativeTimeToGoal ? `
+                                        <div class="goal-stat">
+                                            <span class="stat-label">Time to Goal + Prior</span>
+                                            <span class="stat-value ${cumulativeTimeToGoalClass}">
+                                                ${cumulativeTimeToGoal}
+                                            </span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
                     // Create the milestone visualization
                     const milestoneInfo = document.createElement('div');
                     milestoneInfo.className = 'milestone-timeline-container';
                     milestoneInfo.innerHTML = `
                         <style>
                             .milestone-timeline-container {
-                                padding: 30px 20px;
-                                font-family: 'Inter', sans-serif;
+                                padding: 24px;
+                                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                                min-height: 550px;
                             }
                             .timeline-track {
                                 height: 8px;
@@ -3425,64 +3630,319 @@
                                 padding: 0;
                                 margin-top: 10px;
                             }
-                            .reset-balance-button:hover {
-                                color: #1a73e8;
+                            /* New modern goal card design */
+                            .stats-row {
+                                display: grid;
+                                grid-template-columns: 1fr 1fr;
+                                gap: 16px;
+                                margin-bottom: 24px;
+                            }
+                            .stat-card-compact {
+                                background: white;
+                                border-radius: 12px;
+                                padding: 20px 24px;
+                                border: 2px solid #e5e7eb;
+                                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+                            }
+                            .stat-card-label {
+                                font-size: 0.7rem;
+                                color: #6b7280;
+                                margin-bottom: 4px;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                                letter-spacing: 0.05em;
+                            }
+                            .stat-card-value {
+                                font-size: 1.5rem;
+                                font-weight: 700;
+                                line-height: 1.2;
+                                color: #1f2937;
+                            }
+                            .rate-controls-inline {
+                                margin-top: 12px;
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                            }
+                            .rate-input-inline {
+                                width: 100px;
+                                padding: 6px 10px;
+                                border: 1px solid #d1d5db;
+                                border-radius: 6px;
+                                font-size: 0.85rem;
+                                font-weight: 600;
+                            }
+                            .rate-input-inline:focus {
+                                outline: none;
+                                border-color: #8b5cf6;
+                                box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+                            }
+                            .rate-unit-inline {
+                                color: #6b7280;
+                                font-size: 0.75rem;
+                                font-weight: 500;
+                            }
+                            .reset-btn-inline {
+                                padding: 4px 10px;
+                                background: #f3f4f6;
+                                border: none;
+                                border-radius: 6px;
+                                color: #6366f1;
+                                font-weight: 600;
+                                cursor: pointer;
+                                font-size: 0.75rem;
+                                transition: all 0.2s ease;
+                            }
+                            .reset-btn-inline:hover {
+                                background: #e5e7eb;
+                            }
+
+                            .goals-container {
+                                display: grid;
+                                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                                gap: 16px;
+                                margin-bottom: 20px;
+                            }
+                            .goal-card {
+                                background: white;
+                                border-radius: 12px;
+                                padding: 20px;
+                                border: 2px solid #e5e7eb;
+                                transition: all 0.3s ease;
+                                position: relative;
+                                overflow: hidden;
+                                min-height: 280px;
+                                display: flex;
+                                flex-direction: column;
+                            }
+                            .goal-card::before {
+                                content: '';
+                                position: absolute;
+                                top: 0;
+                                left: 0;
+                                width: 4px;
+                                height: 100%;
+                                background: linear-gradient(180deg, #8b5cf6, #6366f1);
+                                transform: scaleY(0);
+                                transition: transform 0.3s ease;
+                            }
+                            .goal-card:hover::before {
+                                transform: scaleY(1);
+                            }
+                            .goal-card.next-goal {
+                                border-color: #8b5cf6;
+                                box-shadow: 0 4px 24px rgba(139, 92, 246, 0.15);
+                                background: linear-gradient(to bottom right, #ffffff, #f8f7ff);
+                            }
+                            .goal-card.next-goal::before {
+                                transform: scaleY(1);
+                            }
+                            .goal-card.achieved {
+                                border-color: #10b981;
+                                background: linear-gradient(to bottom right, #ffffff, #f0fdf4);
+                            }
+                            .goal-card.achieved::before {
+                                background: linear-gradient(180deg, #10b981, #059669);
+                                transform: scaleY(1);
+                            }
+                            .goal-card-header {
+                                display: flex;
+                                align-items: center;
+                                gap: 14px;
+                                margin-bottom: 16px;
+                                position: relative;
+                            }
+                            .goal-icon-wrapper {
+                                width: 56px;
+                                height: 56px;
+                                border-radius: 14px;
+                                background: linear-gradient(135deg, #8b5cf6, #6366f1);
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                color: white;
+                                font-size: 1.5rem;
+                                flex-shrink: 0;
+                                box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+                            }
+                            .goal-card.achieved .goal-icon-wrapper {
+                                background: linear-gradient(135deg, #10b981, #059669);
+                                box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+                            }
+                            .goal-info {
+                                flex: 1;
+                            }
+                            .goal-name {
+                                font-size: 1.05rem;
+                                font-weight: 600;
+                                color: #1f2937;
+                                margin: 0 0 4px 0;
+                            }
+                            .goal-amount {
+                                font-size: 1.4rem;
+                                font-weight: 700;
+                                background: linear-gradient(135deg, #8b5cf6, #6366f1);
+                                -webkit-background-clip: text;
+                                -webkit-text-fill-color: transparent;
+                                background-clip: text;
+                            }
+                            .goal-card.achieved .goal-amount {
+                                background: linear-gradient(135deg, #10b981, #059669);
+                                -webkit-background-clip: text;
+                                -webkit-text-fill-color: transparent;
+                                background-clip: text;
+                            }
+                            .cumulative-total {
+                                font-size: 0.85rem;
+                                font-weight: 500;
+                                color: #9ca3af;
+                                margin-left: 6px;
+                                background: none;
+                                -webkit-text-fill-color: #9ca3af;
+                            }
+                            .cumulative-indicator {
+                                font-size: 0.75rem;
+                                font-weight: 500;
+                                color: #9ca3af;
+                                margin-left: 4px;
+                                font-style: italic;
+                            }
+                            .achievement-badge {
+                                position: absolute;
+                                right: 0;
+                                top: 0;
+                                color: #10b981;
+                                font-size: 1.5rem;
+                                animation: checkBounce 0.6s ease;
+                            }
+                            @keyframes checkBounce {
+                                0%, 100% { transform: scale(1); }
+                                50% { transform: scale(1.2); }
+                            }
+                            .goal-progress-bar {
+                                height: 8px;
+                                background: #e5e7eb;
+                                border-radius: 8px;
+                                overflow: hidden;
+                                margin-bottom: 16px;
+                            }
+                            .goal-progress-fill {
+                                height: 100%;
+                                background: linear-gradient(90deg, #8b5cf6, #6366f1);
+                                border-radius: 8px;
+                                transition: width 1s ease;
+                                position: relative;
+                            }
+                            .goal-card.achieved .goal-progress-fill {
+                                background: linear-gradient(90deg, #10b981, #059669);
+                            }
+                            .goal-progress-fill::after {
+                                content: '';
+                                position: absolute;
+                                top: 0;
+                                left: 0;
+                                right: 0;
+                                bottom: 0;
+                                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+                                animation: shimmer 2s infinite;
+                            }
+                            @keyframes shimmer {
+                                0% { transform: translateX(-100%); }
+                                100% { transform: translateX(100%); }
+                            }
+                            .goal-details {
+                                display: grid;
+                                grid-template-columns: 1fr 1fr;
+                                gap: 12px;
+                                flex: 1;
+                            }
+                            .goal-stat {
+                                display: flex;
+                                flex-direction: column;
+                                gap: 4px;
+                            }
+                            .stat-label {
+                                font-size: 0.7rem;
+                                color: #6b7280;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                                letter-spacing: 0.05em;
+                            }
+                            .stat-value {
+                                font-size: 0.9rem;
+                                color: #1f2937;
+                                font-weight: 600;
+                            }
+                            .stat-value.urgent {
+                                color: #ef4444;
+                                font-weight: 700;
+                            }
+                            .goal-time-estimate {
+                                color: #8b5cf6;
+                                font-weight: 700;
+                            }
+                            .goal-time-estimate.on-track {
+                                color: #10b981;
+                            }
+                            .goal-time-estimate.off-track {
+                                color: #ef4444;
+                            }
+
+                            #projection-indicator {
+                                display: inline-block;
+                                margin-left: 12px;
+                                padding: 4px 10px;
+                                background: #eff6ff;
+                                border-left: 3px solid #3b82f6;
+                                border-radius: 4px;
+                                font-size: 0.7rem;
+                                color: #1e40af;
+                                white-space: nowrap;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
+                                max-width: 300px;
                             }
                         </style>
-                        <div class="timeline-track">
-                            <div class="timeline-progress" style="width: ${progress}%"></div>
-                            <div class="timeline-marker" style="left: ${progress}%">
-                                <div class="current-balance">
-                                    <div class="current-balance-value">
-                                        ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentBalance)}
+
+                        <div class="stats-row">
+                            <div class="stat-card-compact">
+                                <div class="stat-card-label">Current Balance</div>
+                                <div class="stat-card-value">
+                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(currentBalance)}
+                                </div>
+                            </div>
+                            <div class="stat-card-compact">
+                                <div class="stat-card-label" style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                                    <span>Monthly Savings Rate</span>
+                                    <span style="font-size: 0.85em; font-weight: 600; color: #4b5563;">
+                                        Actual: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(twoMonthAvgRate)}/mo
+                                    </span>
+                                </div>
+                                <div class="stat-card-value" id="trend-display">
+                                    ${defaultTrend >= 0 ? '↗' : '↘'}
+                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Math.abs(defaultTrend))}
+                                </div>
+                                <div class="rate-controls-inline">
+                                    <input type="number"
+                                           id="weekly-rate-input"
+                                           class="rate-input-inline"
+                                           value="${defaultTrend.toFixed(0)}"
+                                           step="100"
+                                           placeholder="Rate">
+                                    <span class="rate-unit-inline">/mo</span>
+                                    <button class="reset-btn-inline" id="reset-rate-btn">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                    <div id="projection-indicator" style="display: none;">
+                                        <i class="fas fa-chart-line"></i>
+                                        <span id="projection-text"></span>
                                     </div>
                                 </div>
                             </div>
-                            <div class="original-balance-indicator" style="left: ${progress}%"></div>
-                            ${milestoneMarkersHTML}
                         </div>
-                        <div class="milestone-stats">
-                            <div class="stat-card">
-                                <div class="stat-label">Progress to Next Milestone</div>
-                                <div class="stat-value">${progress.toFixed(1)}%</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-label">Monthly Savings Rate</div>
-                                <div class="stat-value">
-                                    <span id="trend-display">
-                                        ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(defaultTrend)}
-                                    </span>
-                                    <span class="trend-indicator ${defaultTrend >= 0 ? 'trend-positive' : 'trend-negative'}">
-                                        ${defaultTrend >= 0 ? '↗' : '↘'} per month
-                                    </span>
-                                </div>
-                                <div class="rate-input-container">
-                                    <input type="number" 
-                                           id="weekly-rate-input" 
-                                           class="rate-input" 
-                                           value="${defaultTrend.toFixed(0)}" 
-                                           step="100" 
-                                           placeholder="Enter rate">
-                                    <span class="rate-unit">$/month</span>
-                                    <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
-                                </div>
-                                <div class="small text-muted mt-2">Based on PELT analysis</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-label">Estimated Time to Next Milestone</div>
-                                <div class="stat-value" id="time-estimate-value">
-                                    ${calculateTimeEstimate(defaultTrend)}
-                                </div>
-                                <div class="small text-muted mt-2" id="remaining-amount">
-                                    ${defaultTrend > 0 ? `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone - currentBalance)} more` : ''}
-                                </div>
-                                <div id="projection-indicator" class="mt-2" style="display: none; padding: 10px; background: #e3f2fd; border-left: 3px solid #2196f3; border-radius: 4px;">
-                                    <div style="color: #1976d2; font-weight: 500; font-size: 14px;">
-                                        <i class="fas fa-chart-line"></i> <span id="projection-text"></span>
-                                    </div>
-                                </div>
-                                <button class="reset-button" id="reset-balance-btn" style="margin-top: 10px;">Reset to Actual Balance</button>
-                            </div>
+
+                        <div class="goals-container">
+                            ${goalCardsHTML}
                         </div>
                     `;
                     
@@ -3505,31 +3965,112 @@
                     // Add event listeners for the interactive elements
                     const rateInput = document.getElementById('weekly-rate-input');
                     const resetButton = document.getElementById('reset-rate-btn');
-                    const resetBalanceButton = document.getElementById('reset-balance-btn');
                     const trendDisplay = document.getElementById('trend-display');
-                    const trendIndicator = trendDisplay.nextElementSibling;
 
                     if (rateInput) {
                         rateInput.addEventListener('input', function() {
                             const newRate = parseFloat(this.value) || 0;
-                            // Get the balance at the marker's current position
-                            const timelineMarker = document.querySelector('.timeline-marker');
-                            let draggedBalance = currentBalance;
-                            if (timelineMarker) {
-                                const markerLeft = parseFloat(timelineMarker.style.left) || 0;
-                                draggedBalance = calculateBalanceFromProgress(markerLeft, currentBalance);
-                            }
+
                             // Update the display
-                            trendDisplay.textContent = new Intl.NumberFormat('en-US', { 
-                                style: 'currency', 
-                                currency: 'USD', 
-                                maximumFractionDigits: 0 
-                            }).format(newRate);
-                            // Update trend indicator
-                            trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
-                            trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per month`;
-                            // Update time estimate using dragged balance
-                            updateTimeEstimate(newRate, draggedBalance);
+                            trendDisplay.innerHTML = `${newRate >= 0 ? '↗' : '↘'} ${new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                maximumFractionDigits: 0
+                            }).format(Math.abs(newRate))}`;
+
+                            // Update time to goal for all goal cards
+                            document.querySelectorAll('.goal-card').forEach(card => {
+                                const goalId = card.getAttribute('data-goal-id');
+                                const goal = sortedGoals.find(g => (g.id || g.goal_id) === goalId);
+
+                                if (goal && currentBalance < goal.amount && newRate > 0) {
+                                    const remaining = goal.amount - currentBalance;
+                                    const monthsToGoal = remaining / newRate;
+
+                                    // Find both time estimate elements
+                                    const timeEstimates = card.querySelectorAll('.goal-time-estimate');
+                                    const regularTimeEstimate = timeEstimates[0]; // First one is regular time
+                                    const cumulativeTimeEstimate = timeEstimates[1]; // Second one is cumulative
+
+                                    // Update regular time to goal
+                                    if (regularTimeEstimate) {
+                                        let timeText = '';
+                                        if (monthsToGoal < 12) {
+                                            timeText = `${monthsToGoal.toFixed(1)} month${monthsToGoal !== 1 ? 's' : ''}`;
+                                        } else {
+                                            const years = Math.floor(monthsToGoal / 12);
+                                            const remainingMonths = monthsToGoal % 12;
+                                            if (remainingMonths < 0.1) {
+                                                timeText = `${years} year${years !== 1 ? 's' : ''}`;
+                                            } else {
+                                                timeText = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                            }
+                                        }
+
+                                        // Update color class based on time comparison
+                                        regularTimeEstimate.classList.remove('on-track', 'off-track');
+                                        if (goal.target_date) {
+                                            const targetDate = new Date(goal.target_date);
+                                            const today = new Date();
+                                            const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+                                            if (daysRemaining > 0) {
+                                                const monthsRemaining = daysRemaining / 30.44;
+                                                // Add tolerance of 0.5 months to account for rounding
+                                                if (monthsToGoal <= monthsRemaining + 0.5) {
+                                                    regularTimeEstimate.classList.add('on-track');
+                                                } else {
+                                                    regularTimeEstimate.classList.add('off-track');
+                                                }
+                                            }
+                                        }
+
+                                        regularTimeEstimate.innerHTML = timeText;
+                                    }
+
+                                    // Update cumulative time to goal
+                                    const previousGoalsTotal = cumulativeTotals.get(goalId) || 0;
+                                    if (cumulativeTimeEstimate && previousGoalsTotal > 0) {
+                                        const totalTargetWithPrior = goal.amount + previousGoalsTotal;
+                                        const cumulativeRemaining = Math.max(0, totalTargetWithPrior - currentBalance);
+
+                                        if (cumulativeRemaining > 0) {
+                                            const cumulativeMonths = cumulativeRemaining / newRate;
+                                            let cumulativeText = '';
+
+                                            if (cumulativeMonths < 12) {
+                                                cumulativeText = `${cumulativeMonths.toFixed(1)} month${cumulativeMonths !== 1 ? 's' : ''}`;
+                                            } else {
+                                                const years = Math.floor(cumulativeMonths / 12);
+                                                const remainingMonths = cumulativeMonths % 12;
+                                                if (remainingMonths < 0.1) {
+                                                    cumulativeText = `${years} year${years !== 1 ? 's' : ''}`;
+                                                } else {
+                                                    cumulativeText = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                                }
+                                            }
+
+                                            // Update cumulative color class
+                                            cumulativeTimeEstimate.classList.remove('on-track', 'off-track');
+                                            if (goal.target_date) {
+                                                const targetDate = new Date(goal.target_date);
+                                                const today = new Date();
+                                                const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+                                                if (daysRemaining > 0) {
+                                                    const monthsRemaining = daysRemaining / 30.44;
+                                                    // Add tolerance of 0.5 months to account for rounding
+                                                    if (cumulativeMonths <= monthsRemaining + 0.5) {
+                                                        cumulativeTimeEstimate.classList.add('on-track');
+                                                    } else {
+                                                        cumulativeTimeEstimate.classList.add('off-track');
+                                                    }
+                                                }
+                                            }
+
+                                            cumulativeTimeEstimate.innerHTML = cumulativeText;
+                                        }
+                                    }
+                                }
+                            });
 
                             // Show projection if rate is different from default
                             const projectionIndicator = document.getElementById('projection-indicator');
@@ -3539,7 +4080,7 @@
                                 const targetDate = new Date(nextGoalWithDate.target_date);
                                 const today = new Date();
                                 const monthsToTarget = Math.max(1, (targetDate - today) / (1000 * 60 * 60 * 24 * 30.44));
-                                const projectedAmount = draggedBalance + (newRate * monthsToTarget);
+                                const projectedAmount = currentBalance + (newRate * monthsToTarget);
                                 const goalAmount = nextGoalWithDate.amount;
 
                                 const formattedAmount = new Intl.NumberFormat('en-US', {
@@ -3555,13 +4096,13 @@
                                 });
 
                                 if (projectedAmount >= goalAmount) {
-                                    projectionText.innerHTML = `At this rate, you'll reach <strong>${formattedAmount}</strong> by ${formattedDate} (${nextGoalWithDate.name} goal: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(goalAmount)}) ✓`;
+                                    projectionText.innerHTML = `${formattedAmount} by ${formattedDate} ✓`;
                                     projectionIndicator.style.background = '#e8f5e9';
                                     projectionIndicator.style.borderColor = '#4caf50';
                                     projectionText.style.color = '#2e7d32';
                                 } else {
-                                    const shortfall = goalAmount - projectedAmount;
-                                    projectionText.innerHTML = `At this rate, you'll reach <strong>${formattedAmount}</strong> by ${formattedDate} (${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(shortfall)} short of ${nextGoalWithDate.name})`;
+                                    const shortfall = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(goalAmount - projectedAmount);
+                                    projectionText.innerHTML = `${formattedAmount} by ${formattedDate} (${shortfall} short)`;
                                     projectionIndicator.style.background = '#fff3e0';
                                     projectionIndicator.style.borderColor = '#ff9800';
                                     projectionText.style.color = '#e65100';
@@ -3919,7 +4460,12 @@
                                 <div class="stat-value">${progress.toFixed(1)}%</div>
                             </div>
                             <div class="stat-card">
-                                <div class="stat-label">Monthly Savings Rate</div>
+                                <div class="stat-label" style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span>Monthly Savings Rate</span>
+                                    <span style="font-size: 0.85em; font-weight: 600; color: #4b5563;">
+                                        Actual: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(twoMonthAvgRate)}/mo
+                                    </span>
+                                </div>
                                 <div class="stat-value">
                                     <span id="trend-display">
                                         ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(defaultTrend)}
@@ -3929,16 +4475,18 @@
                                     </span>
                                 </div>
                                 <div class="rate-input-container">
-                                    <input type="number" 
-                                           id="weekly-rate-input" 
-                                           class="rate-input" 
-                                           value="${defaultTrend.toFixed(0)}" 
-                                           step="100" 
+                                    <input type="number"
+                                           id="weekly-rate-input"
+                                           class="rate-input"
+                                           value="${defaultTrend.toFixed(0)}"
+                                           step="100"
                                            placeholder="Enter rate">
                                     <span class="rate-unit">$/month</span>
                                     <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
                                 </div>
-                                <div class="small text-muted mt-2">Based on PELT analysis</div>
+                                <div class="small text-muted mt-2">
+                                    Based on PELT analysis
+                                </div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">Estimated Time to Next Milestone</div>
@@ -3971,31 +4519,112 @@
                     // Add event listeners for the interactive elements
                     const rateInput = document.getElementById('weekly-rate-input');
                     const resetButton = document.getElementById('reset-rate-btn');
-                    const resetBalanceButton = document.getElementById('reset-balance-btn');
                     const trendDisplay = document.getElementById('trend-display');
-                    const trendIndicator = trendDisplay.nextElementSibling;
 
                     if (rateInput) {
                         rateInput.addEventListener('input', function() {
                             const newRate = parseFloat(this.value) || 0;
-                            // Get the balance at the marker's current position
-                            const timelineMarker = document.querySelector('.timeline-marker');
-                            let draggedBalance = currentBalance;
-                            if (timelineMarker) {
-                                const markerLeft = parseFloat(timelineMarker.style.left) || 0;
-                                draggedBalance = calculateBalanceFromProgress(markerLeft, currentBalance);
-                            }
+
                             // Update the display
-                            trendDisplay.textContent = new Intl.NumberFormat('en-US', { 
-                                style: 'currency', 
-                                currency: 'USD', 
-                                maximumFractionDigits: 0 
-                            }).format(newRate);
-                            // Update trend indicator
-                            trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
-                            trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per month`;
-                            // Update time estimate using dragged balance
-                            updateTimeEstimate(newRate, draggedBalance);
+                            trendDisplay.innerHTML = `${newRate >= 0 ? '↗' : '↘'} ${new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                maximumFractionDigits: 0
+                            }).format(Math.abs(newRate))}`;
+
+                            // Update time to goal for all goal cards
+                            document.querySelectorAll('.goal-card').forEach(card => {
+                                const goalId = card.getAttribute('data-goal-id');
+                                const goal = sortedGoals.find(g => (g.id || g.goal_id) === goalId);
+
+                                if (goal && currentBalance < goal.amount && newRate > 0) {
+                                    const remaining = goal.amount - currentBalance;
+                                    const monthsToGoal = remaining / newRate;
+
+                                    // Find both time estimate elements
+                                    const timeEstimates = card.querySelectorAll('.goal-time-estimate');
+                                    const regularTimeEstimate = timeEstimates[0]; // First one is regular time
+                                    const cumulativeTimeEstimate = timeEstimates[1]; // Second one is cumulative
+
+                                    // Update regular time to goal
+                                    if (regularTimeEstimate) {
+                                        let timeText = '';
+                                        if (monthsToGoal < 12) {
+                                            timeText = `${monthsToGoal.toFixed(1)} month${monthsToGoal !== 1 ? 's' : ''}`;
+                                        } else {
+                                            const years = Math.floor(monthsToGoal / 12);
+                                            const remainingMonths = monthsToGoal % 12;
+                                            if (remainingMonths < 0.1) {
+                                                timeText = `${years} year${years !== 1 ? 's' : ''}`;
+                                            } else {
+                                                timeText = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                            }
+                                        }
+
+                                        // Update color class based on time comparison
+                                        regularTimeEstimate.classList.remove('on-track', 'off-track');
+                                        if (goal.target_date) {
+                                            const targetDate = new Date(goal.target_date);
+                                            const today = new Date();
+                                            const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+                                            if (daysRemaining > 0) {
+                                                const monthsRemaining = daysRemaining / 30.44;
+                                                // Add tolerance of 0.5 months to account for rounding
+                                                if (monthsToGoal <= monthsRemaining + 0.5) {
+                                                    regularTimeEstimate.classList.add('on-track');
+                                                } else {
+                                                    regularTimeEstimate.classList.add('off-track');
+                                                }
+                                            }
+                                        }
+
+                                        regularTimeEstimate.innerHTML = timeText;
+                                    }
+
+                                    // Update cumulative time to goal
+                                    const previousGoalsTotal = cumulativeTotals.get(goalId) || 0;
+                                    if (cumulativeTimeEstimate && previousGoalsTotal > 0) {
+                                        const totalTargetWithPrior = goal.amount + previousGoalsTotal;
+                                        const cumulativeRemaining = Math.max(0, totalTargetWithPrior - currentBalance);
+
+                                        if (cumulativeRemaining > 0) {
+                                            const cumulativeMonths = cumulativeRemaining / newRate;
+                                            let cumulativeText = '';
+
+                                            if (cumulativeMonths < 12) {
+                                                cumulativeText = `${cumulativeMonths.toFixed(1)} month${cumulativeMonths !== 1 ? 's' : ''}`;
+                                            } else {
+                                                const years = Math.floor(cumulativeMonths / 12);
+                                                const remainingMonths = cumulativeMonths % 12;
+                                                if (remainingMonths < 0.1) {
+                                                    cumulativeText = `${years} year${years !== 1 ? 's' : ''}`;
+                                                } else {
+                                                    cumulativeText = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                                }
+                                            }
+
+                                            // Update cumulative color class
+                                            cumulativeTimeEstimate.classList.remove('on-track', 'off-track');
+                                            if (goal.target_date) {
+                                                const targetDate = new Date(goal.target_date);
+                                                const today = new Date();
+                                                const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+                                                if (daysRemaining > 0) {
+                                                    const monthsRemaining = daysRemaining / 30.44;
+                                                    // Add tolerance of 0.5 months to account for rounding
+                                                    if (cumulativeMonths <= monthsRemaining + 0.5) {
+                                                        cumulativeTimeEstimate.classList.add('on-track');
+                                                    } else {
+                                                        cumulativeTimeEstimate.classList.add('off-track');
+                                                    }
+                                                }
+                                            }
+
+                                            cumulativeTimeEstimate.innerHTML = cumulativeText;
+                                        }
+                                    }
+                                }
+                            });
 
                             // Show projection if rate is different from default
                             const projectionIndicator = document.getElementById('projection-indicator');
@@ -4005,7 +4634,7 @@
                                 const targetDate = new Date(nextGoalWithDate.target_date);
                                 const today = new Date();
                                 const monthsToTarget = Math.max(1, (targetDate - today) / (1000 * 60 * 60 * 24 * 30.44));
-                                const projectedAmount = draggedBalance + (newRate * monthsToTarget);
+                                const projectedAmount = currentBalance + (newRate * monthsToTarget);
                                 const goalAmount = nextGoalWithDate.amount;
 
                                 const formattedAmount = new Intl.NumberFormat('en-US', {
@@ -4021,13 +4650,13 @@
                                 });
 
                                 if (projectedAmount >= goalAmount) {
-                                    projectionText.innerHTML = `At this rate, you'll reach <strong>${formattedAmount}</strong> by ${formattedDate} (${nextGoalWithDate.name} goal: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(goalAmount)}) ✓`;
+                                    projectionText.innerHTML = `${formattedAmount} by ${formattedDate} ✓`;
                                     projectionIndicator.style.background = '#e8f5e9';
                                     projectionIndicator.style.borderColor = '#4caf50';
                                     projectionText.style.color = '#2e7d32';
                                 } else {
-                                    const shortfall = goalAmount - projectedAmount;
-                                    projectionText.innerHTML = `At this rate, you'll reach <strong>${formattedAmount}</strong> by ${formattedDate} (${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(shortfall)} short of ${nextGoalWithDate.name})`;
+                                    const shortfall = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(goalAmount - projectedAmount);
+                                    projectionText.innerHTML = `${formattedAmount} by ${formattedDate} (${shortfall} short)`;
                                     projectionIndicator.style.background = '#fff3e0';
                                     projectionIndicator.style.borderColor = '#ff9800';
                                     projectionText.style.color = '#e65100';
