@@ -14,6 +14,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230d6efd'><path d='M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z'/></svg>">
     {% if bank_branding %}
     <style>
@@ -493,6 +494,9 @@
                             <div class="card">
                                 <div class="card-header d-flex justify-content-between align-items-center">
                                     <h5>Financial Milestones</h5>
+                                    <button class="btn btn-sm btn-primary" onclick="openGoalsModal()">
+                                        <i class="fas fa-cog"></i> Manage Goals
+                                    </button>
                                 </div>
                                 <div class="card-body">
                                     <div class="chart-container">
@@ -2536,7 +2540,7 @@
                         y: {
                             title: {
                                 display: true,
-                                text: 'Weekly Rate of Change ($)'
+                                text: 'Monthly Savings Rate ($)'
                             },
                             grid: {
                                 color: function(context) {
@@ -2811,7 +2815,7 @@
 
         // Initialize milestone chart
         let milestoneChart = null;
-        const milestones = [10000, 50000, 100000, 250000, 500000, 1000000];
+        let milestones = [];
 
         // Global function to calculate balance from progress percentage
         const calculateBalanceFromProgress = (progressPercent, currentBalance) => {
@@ -3102,22 +3106,56 @@
                 });
             };
             
+            // Fetch goals to calculate target-based savings rate and get icons
+            let targetBasedRate = 0;
+            let nextGoalWithDate = null;
+            let goalsMap = new Map(); // Map milestone amounts to goal objects
+
+            fetch('/api/goals')
+                .then(response => response.json())
+                .then(goalsData => {
+                    if (goalsData.success && goalsData.goals) {
+                        // Create a map of milestone amounts to goals
+                        goalsData.goals.forEach(goal => {
+                            goalsMap.set(goal.amount, goal);
+                        });
+
+                        // Find the next goal with a target date
+                        const goalsWithTargets = goalsData.goals
+                            .filter(g => g.target_date && g.amount > currentBalance)
+                            .sort((a, b) => a.amount - b.amount);
+
+                        if (goalsWithTargets.length > 0) {
+                            nextGoalWithDate = goalsWithTargets[0];
+                            const targetDate = new Date(nextGoalWithDate.target_date);
+                            const today = new Date();
+                            const monthsRemaining = Math.max(1, (targetDate - today) / (1000 * 60 * 60 * 24 * 30.44));
+                            const amountNeeded = nextGoalWithDate.amount - currentBalance;
+                            targetBasedRate = amountNeeded / monthsRemaining;
+                        }
+                    }
+                })
+                .catch(err => console.error('Error fetching goals:', err));
+
             // Fetch PELT analysis data for trend calculation
             fetch('/api/pelt-analysis')
                 .then(response => response.json())
                 .then(peltData => {
-                    // Get the most recent rate of change
-                    let defaultTrend = 0;
+                    // Get the most recent rate of change (PELT is weekly, convert to monthly)
+                    let peltTrend = 0;
                     if (peltData && peltData.rateOfChange && peltData.rateOfChange.data) {
                         const rateData = peltData.rateOfChange.data;
                         // Get the last non-null value from the rate of change data
                         for (let i = rateData.length - 1; i >= 0; i--) {
                             if (rateData[i] !== null) {
-                                defaultTrend = rateData[i];
+                                peltTrend = rateData[i] * 4.33; // Convert weekly to monthly
                                 break;
                             }
                         }
                     }
+
+                    // Use target-based rate if available, otherwise use PELT (both are now monthly)
+                    let defaultTrend = targetBasedRate > 0 ? targetBasedRate : peltTrend;
 
                     // Create the milestone visualization
                     const milestoneInfo = document.createElement('div');
@@ -3407,13 +3445,13 @@
                                 <div class="stat-value">${progress.toFixed(1)}%</div>
                             </div>
                             <div class="stat-card">
-                                <div class="stat-label">Weekly Rate of Change</div>
+                                <div class="stat-label">Monthly Savings Rate</div>
                                 <div class="stat-value">
                                     <span id="trend-display">
                                         ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(defaultTrend)}
                                     </span>
                                     <span class="trend-indicator ${defaultTrend >= 0 ? 'trend-positive' : 'trend-negative'}">
-                                        ${defaultTrend >= 0 ? '↗' : '↘'} per week
+                                        ${defaultTrend >= 0 ? '↗' : '↘'} per month
                                     </span>
                                 </div>
                                 <div class="rate-input-container">
@@ -3423,7 +3461,7 @@
                                            value="${defaultTrend.toFixed(0)}" 
                                            step="100" 
                                            placeholder="Enter rate">
-                                    <span class="rate-unit">$/week</span>
+                                    <span class="rate-unit">$/month</span>
                                     <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
                                 </div>
                                 <div class="small text-muted mt-2">Based on PELT analysis</div>
@@ -3435,6 +3473,11 @@
                                 </div>
                                 <div class="small text-muted mt-2" id="remaining-amount">
                                     ${defaultTrend > 0 ? `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone - currentBalance)} more` : ''}
+                                </div>
+                                <div id="projection-indicator" class="mt-2" style="display: none; padding: 10px; background: #e3f2fd; border-left: 3px solid #2196f3; border-radius: 4px;">
+                                    <div style="color: #1976d2; font-weight: 500; font-size: 14px;">
+                                        <i class="fas fa-chart-line"></i> <span id="projection-text"></span>
+                                    </div>
                                 </div>
                                 <button class="reset-button" id="reset-balance-btn" style="margin-top: 10px;">Reset to Actual Balance</button>
                             </div>
@@ -3482,9 +3525,50 @@
                             }).format(newRate);
                             // Update trend indicator
                             trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
-                            trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per week`;
+                            trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per month`;
                             // Update time estimate using dragged balance
                             updateTimeEstimate(newRate, draggedBalance);
+
+                            // Show projection if rate is different from default
+                            const projectionIndicator = document.getElementById('projection-indicator');
+                            const projectionText = document.getElementById('projection-text');
+
+                            if (projectionIndicator && projectionText && Math.abs(newRate - defaultTrend) > 1 && newRate > 0 && nextGoalWithDate) {
+                                const targetDate = new Date(nextGoalWithDate.target_date);
+                                const today = new Date();
+                                const monthsToTarget = Math.max(1, (targetDate - today) / (1000 * 60 * 60 * 24 * 30.44));
+                                const projectedAmount = draggedBalance + (newRate * monthsToTarget);
+                                const goalAmount = nextGoalWithDate.amount;
+
+                                const formattedAmount = new Intl.NumberFormat('en-US', {
+                                    style: 'currency',
+                                    currency: 'USD',
+                                    maximumFractionDigits: 0
+                                }).format(projectedAmount);
+
+                                const formattedDate = targetDate.toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                });
+
+                                if (projectedAmount >= goalAmount) {
+                                    projectionText.innerHTML = `At this rate, you'll reach <strong>${formattedAmount}</strong> by ${formattedDate} (${nextGoalWithDate.name} goal: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(goalAmount)}) ✓`;
+                                    projectionIndicator.style.background = '#e8f5e9';
+                                    projectionIndicator.style.borderColor = '#4caf50';
+                                    projectionText.style.color = '#2e7d32';
+                                } else {
+                                    const shortfall = goalAmount - projectedAmount;
+                                    projectionText.innerHTML = `At this rate, you'll reach <strong>${formattedAmount}</strong> by ${formattedDate} (${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(shortfall)} short of ${nextGoalWithDate.name})`;
+                                    projectionIndicator.style.background = '#fff3e0';
+                                    projectionIndicator.style.borderColor = '#ff9800';
+                                    projectionText.style.color = '#e65100';
+                                }
+
+                                projectionIndicator.style.display = 'block';
+                            } else if (projectionIndicator) {
+                                projectionIndicator.style.display = 'none';
+                            }
                         });
                     }
 
@@ -3813,13 +3897,13 @@
                                 <div class="stat-value">${progress.toFixed(1)}%</div>
                             </div>
                             <div class="stat-card">
-                                <div class="stat-label">Weekly Rate of Change</div>
+                                <div class="stat-label">Monthly Savings Rate</div>
                                 <div class="stat-value">
                                     <span id="trend-display">
                                         ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(defaultTrend)}
                                     </span>
                                     <span class="trend-indicator ${defaultTrend >= 0 ? 'trend-positive' : 'trend-negative'}">
-                                        ${defaultTrend >= 0 ? '↗' : '↘'} per week
+                                        ${defaultTrend >= 0 ? '↗' : '↘'} per month
                                     </span>
                                 </div>
                                 <div class="rate-input-container">
@@ -3829,7 +3913,7 @@
                                            value="${defaultTrend.toFixed(0)}" 
                                            step="100" 
                                            placeholder="Enter rate">
-                                    <span class="rate-unit">$/week</span>
+                                    <span class="rate-unit">$/month</span>
                                     <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
                                 </div>
                                 <div class="small text-muted mt-2">Based on PELT analysis</div>
@@ -3887,9 +3971,50 @@
                             }).format(newRate);
                             // Update trend indicator
                             trendIndicator.className = `trend-indicator ${newRate >= 0 ? 'trend-positive' : 'trend-negative'}`;
-                            trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per week`;
+                            trendIndicator.innerHTML = `${newRate >= 0 ? '↗' : '↘'} per month`;
                             // Update time estimate using dragged balance
                             updateTimeEstimate(newRate, draggedBalance);
+
+                            // Show projection if rate is different from default
+                            const projectionIndicator = document.getElementById('projection-indicator');
+                            const projectionText = document.getElementById('projection-text');
+
+                            if (projectionIndicator && projectionText && Math.abs(newRate - defaultTrend) > 1 && newRate > 0 && nextGoalWithDate) {
+                                const targetDate = new Date(nextGoalWithDate.target_date);
+                                const today = new Date();
+                                const monthsToTarget = Math.max(1, (targetDate - today) / (1000 * 60 * 60 * 24 * 30.44));
+                                const projectedAmount = draggedBalance + (newRate * monthsToTarget);
+                                const goalAmount = nextGoalWithDate.amount;
+
+                                const formattedAmount = new Intl.NumberFormat('en-US', {
+                                    style: 'currency',
+                                    currency: 'USD',
+                                    maximumFractionDigits: 0
+                                }).format(projectedAmount);
+
+                                const formattedDate = targetDate.toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                });
+
+                                if (projectedAmount >= goalAmount) {
+                                    projectionText.innerHTML = `At this rate, you'll reach <strong>${formattedAmount}</strong> by ${formattedDate} (${nextGoalWithDate.name} goal: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(goalAmount)}) ✓`;
+                                    projectionIndicator.style.background = '#e8f5e9';
+                                    projectionIndicator.style.borderColor = '#4caf50';
+                                    projectionText.style.color = '#2e7d32';
+                                } else {
+                                    const shortfall = goalAmount - projectedAmount;
+                                    projectionText.innerHTML = `At this rate, you'll reach <strong>${formattedAmount}</strong> by ${formattedDate} (${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(shortfall)} short of ${nextGoalWithDate.name})`;
+                                    projectionIndicator.style.background = '#fff3e0';
+                                    projectionIndicator.style.borderColor = '#ff9800';
+                                    projectionText.style.color = '#e65100';
+                                }
+
+                                projectionIndicator.style.display = 'block';
+                            } else if (projectionIndicator) {
+                                projectionIndicator.style.display = 'none';
+                            }
                         });
                     }
 
@@ -3914,20 +4039,31 @@
         // Add milestone chart initialization to the balance data fetch
         async function fetchBalanceData() {
             try {
+                // First, load milestones from API
+                const milestonesResponse = await fetch('/api/goals/milestones');
+                if (milestonesResponse.ok) {
+                    const milestonesData = await milestonesResponse.json();
+                    if (milestonesData.success) {
+                        milestones.length = 0;
+                        milestones.push(...milestonesData.milestones);
+                    }
+                }
+
+                // Then fetch balance data
                 const response = await fetch('/api/balance-chart');
                 if (!response.ok) {
                     throw new Error('Failed to fetch balance data');
                 }
                 const data = await response.json();
-                
+
                 if (!data || !data.datasets || !data.datasets[0] || !data.datasets[0].data) {
                     throw new Error('Invalid balance data format');
                 }
-                
+
                 // Extract the last balance value from the datasets
                 const lastDataset = data.datasets[0];
                 const lastBalance = lastDataset.data[lastDataset.data.length - 1] || 0;
-                
+
                 // Create a simplified data object for the milestone chart
                 const milestoneData = {
                     datasets: [{
@@ -3937,7 +4073,7 @@
                         borderWidth: 1
                     }]
                 };
-                
+
                 // Render both charts
                 renderBalanceChart(data);
                 renderMilestoneChart(milestoneData);
@@ -4159,6 +4295,571 @@
             const currentRate = rateInput ? parseFloat(rateInput.value) || 0 : 0;
             updateTimeEstimate(currentRate, newBalance);
         };
+
+        // Goals Management
+        let currentGoals = [];
+        let hasCustomGoals = false;
+
+        // Fetch goals from API
+        async function fetchGoals() {
+            try {
+                const response = await fetch('/api/goals');
+                const data = await response.json();
+                if (data.success) {
+                    currentGoals = data.goals;
+                    hasCustomGoals = data.has_custom_goals;
+                    return data.goals;
+                }
+                return [];
+            } catch (error) {
+                console.error('Error fetching goals:', error);
+                return [];
+            }
+        }
+
+        // Open goals modal
+        async function openGoalsModal() {
+            await fetchGoals();
+            renderGoalsList();
+            const modal = new bootstrap.Modal(document.getElementById('goalsModal'));
+            modal.show();
+        }
+
+        // Render goals list in modal
+        function renderGoalsList() {
+            const goalsList = document.getElementById('goalsList');
+            const goalsType = document.getElementById('goalsType');
+
+            console.log('Rendering goals list:', {
+                hasCustomGoals: hasCustomGoals,
+                goalsCount: currentGoals.length,
+                goals: currentGoals
+            });
+
+            // Count predefined vs custom goals
+            const predefinedCount = currentGoals.filter(g => g.is_predefined).length;
+            const customCount = currentGoals.length - predefinedCount;
+
+            let badgeHTML = '';
+            if (predefinedCount > 0 && customCount > 0) {
+                badgeHTML = `<span class="badge bg-info">${predefinedCount} Predefined</span> <span class="badge bg-success">${customCount} Custom</span>`;
+            } else if (customCount > 0) {
+                badgeHTML = `<span class="badge bg-success">${customCount} Custom</span>`;
+            } else {
+                badgeHTML = `<span class="badge bg-info">${predefinedCount} Predefined</span>`;
+            }
+            goalsType.innerHTML = badgeHTML;
+
+            goalsList.innerHTML = currentGoals.map((goal, index) => {
+                // Calculate monthly savings needed
+                let monthlySavings = '';
+                if (goal.target_date) {
+                    const targetDate = new Date(goal.target_date);
+                    const today = new Date();
+                    const monthsRemaining = Math.max(0, Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24 * 30.44)));
+
+                    if (monthsRemaining > 0) {
+                        const monthlyAmount = goal.amount / monthsRemaining;
+                        monthlySavings = `
+                            <div class="text-muted small mt-1">
+                                <i class="fas fa-calendar"></i> Target: ${targetDate.toLocaleDateString()}
+                                <br>
+                                <i class="fas fa-piggy-bank"></i> Save ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(monthlyAmount)}/month (${monthsRemaining} months)
+                            </div>
+                        `;
+                    } else {
+                        monthlySavings = `
+                            <div class="text-danger small mt-1">
+                                <i class="fas fa-exclamation-triangle"></i> Target date has passed!
+                            </div>
+                        `;
+                    }
+                }
+
+                const icon = goal.icon || 'piggy-bank';
+
+                return `
+                    <div class="list-group-item d-flex justify-content-between align-items-start">
+                        <div class="goal-icon-display">
+                            <i class="fas fa-${icon}"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div>
+                                <strong>${goal.name}</strong>
+                                <span class="text-muted ms-2">
+                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(goal.amount)}
+                                </span>
+                            </div>
+                            ${monthlySavings}
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-primary" onclick="editGoalById('${goal.id}')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteGoal('${goal.id}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Add new goal
+        async function addGoal() {
+            const nameInput = document.getElementById('goalName');
+            const amountInput = document.getElementById('goalAmount');
+            const targetDateInput = document.getElementById('goalTargetDate');
+            const iconInput = document.getElementById('goalIcon');
+            const errorDiv = document.getElementById('goalError');
+
+            const name = nameInput.value.trim();
+            const amount = parseFloat(amountInput.value);
+            const targetDate = targetDateInput.value;
+            const icon = iconInput.value;
+
+            // Validate inputs
+            if (!name) {
+                errorDiv.textContent = 'Please enter a goal name';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (isNaN(amount) || amount <= 0) {
+                errorDiv.textContent = 'Please enter a valid amount greater than 0';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // Validate target date if provided
+            if (targetDate) {
+                const target = new Date(targetDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                if (target < today) {
+                    errorDiv.textContent = 'Target date must be in the future';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+            }
+
+            try {
+                const goalData = { name, amount, icon };
+                if (targetDate) {
+                    goalData.target_date = targetDate;
+                }
+
+                const response = await fetch('/api/goals', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(goalData)
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    // Clear inputs
+                    nameInput.value = '';
+                    amountInput.value = '';
+                    targetDateInput.value = '';
+                    errorDiv.style.display = 'none';
+
+                    // Refresh goals list
+                    await fetchGoals();
+                    renderGoalsList();
+
+                    // Reload milestone chart with new goals
+                    await reloadMilestones();
+                } else {
+                    errorDiv.textContent = data.error || 'Failed to add goal';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error adding goal:', error);
+                errorDiv.textContent = 'Error adding goal';
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        // Delete goal
+        async function deleteGoal(goalId) {
+            if (!confirm('Are you sure you want to delete this goal?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/goals/${goalId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    // Refresh goals list
+                    await fetchGoals();
+                    renderGoalsList();
+
+                    // Reload milestone chart with new goals
+                    await reloadMilestones();
+                } else {
+                    alert(data.error || 'Failed to delete goal');
+                }
+            } catch (error) {
+                console.error('Error deleting goal:', error);
+                alert('Error deleting goal');
+            }
+        }
+
+        // Reload milestones from API
+        async function reloadMilestones() {
+            try {
+                const response = await fetch('/api/goals/milestones');
+                const data = await response.json();
+                if (data.success) {
+                    // Update the global milestones array
+                    milestones.length = 0;
+                    milestones.push(...data.milestones);
+
+                    // Re-render the milestone chart
+                    const balanceResponse = await fetch('/api/balance-chart');
+                    const balanceData = await balanceResponse.json();
+                    renderMilestoneChart(balanceData);
+                }
+            } catch (error) {
+                console.error('Error reloading milestones:', error);
+            }
+        }
+
+        // Edit goal
+        let editingGoal = null;
+
+        function editGoalById(goalId) {
+            // Find the goal in currentGoals array
+            const goal = currentGoals.find(g => g.id === goalId);
+            if (!goal) {
+                console.error('Goal not found:', goalId);
+                return;
+            }
+            editGoal(goal);
+        }
+
+        function editGoal(goal) {
+            editingGoal = goal;
+
+            // Populate the edit form
+            document.getElementById('editGoalName').value = goal.name;
+            document.getElementById('editGoalAmount').value = goal.amount;
+
+            // Format date for input (HTML date input expects YYYY-MM-DD)
+            if (goal.target_date) {
+                const date = new Date(goal.target_date);
+                const formattedDate = date.toISOString().split('T')[0];
+                document.getElementById('editGoalTargetDate').value = formattedDate;
+            } else {
+                document.getElementById('editGoalTargetDate').value = '';
+            }
+
+            // Set the icon
+            const icon = goal.icon || 'piggy-bank';
+            document.getElementById('editGoalIcon').value = icon;
+
+            // Clear any previous errors
+            document.getElementById('editGoalError').style.display = 'none';
+
+            // Open the edit modal
+            const modal = new bootstrap.Modal(document.getElementById('editGoalModal'));
+            modal.show();
+
+            // Select the correct icon after modal is shown
+            setTimeout(() => {
+                const iconPicker = document.getElementById('editGoalIconPicker');
+                if (iconPicker) {
+                    iconPicker.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected'));
+                    const selectedIcon = iconPicker.querySelector(`[data-icon="${icon}"]`);
+                    if (selectedIcon) {
+                        selectedIcon.classList.add('selected');
+                    }
+                }
+            }, 100);
+        }
+
+        async function saveGoalEdit() {
+            const nameInput = document.getElementById('editGoalName');
+            const amountInput = document.getElementById('editGoalAmount');
+            const targetDateInput = document.getElementById('editGoalTargetDate');
+            const iconInput = document.getElementById('editGoalIcon');
+            const errorDiv = document.getElementById('editGoalError');
+
+            const name = nameInput.value.trim();
+            const amount = parseFloat(amountInput.value);
+            const targetDate = targetDateInput.value;
+            const icon = iconInput.value;
+
+            // Validate inputs
+            if (!name) {
+                errorDiv.textContent = 'Please enter a goal name';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (isNaN(amount) || amount <= 0) {
+                errorDiv.textContent = 'Please enter a valid amount greater than 0';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // Validate target date if provided
+            if (targetDate) {
+                const target = new Date(targetDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                if (target < today) {
+                    errorDiv.textContent = 'Target date must be in the future';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+            }
+
+            try {
+                const goalData = { name, amount, icon };
+                if (targetDate) {
+                    goalData.target_date = targetDate;
+                }
+
+                const response = await fetch(`/api/goals/${editingGoal.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(goalData)
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    // Close the edit modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editGoalModal'));
+                    modal.hide();
+
+                    // Refresh goals list
+                    await fetchGoals();
+                    renderGoalsList();
+
+                    // Reload milestone chart with updated goals
+                    await reloadMilestones();
+                } else {
+                    errorDiv.textContent = data.error || 'Failed to update goal';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error updating goal:', error);
+                errorDiv.textContent = 'Error updating goal';
+                errorDiv.style.display = 'block';
+            }
+        }
+    </script>
+
+    <!-- Goals Management Modal -->
+    <div class="modal fade" id="goalsModal" tabindex="-1" aria-labelledby="goalsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="goalsModalLabel">Manage Financial Goals</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <h6>Current Goals <span id="goalsType"></span></h6>
+                        <div class="list-group" id="goalsList"></div>
+                    </div>
+
+                    <hr>
+
+                    <div class="mb-3">
+                        <h6>Add Custom Goal</h6>
+                        <div class="alert alert-info">
+                            <small>
+                                <i class="fas fa-info-circle"></i>
+                                Adding a custom goal will replace the predefined goals. All your custom goals will be used as milestones.
+                            </small>
+                        </div>
+                        <div id="goalError" class="alert alert-danger" style="display: none;"></div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label for="goalName" class="form-label">Goal Name</label>
+                                <input type="text" class="form-control" id="goalName" placeholder="e.g., New Car">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="goalAmount" class="form-label">Amount ($)</label>
+                                <input type="number" class="form-control" id="goalAmount" placeholder="e.g., 25000" step="100">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="goalTargetDate" class="form-label">Target Date</label>
+                                <input type="date" class="form-control" id="goalTargetDate">
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label">Choose Icon</label>
+                            <div id="goalIconPicker" class="icon-picker">
+                                <div class="icon-option" data-icon="piggy-bank"><i class="fas fa-piggy-bank"></i></div>
+                                <div class="icon-option" data-icon="motorcycle"><i class="fas fa-motorcycle"></i></div>
+                                <div class="icon-option" data-icon="plane"><i class="fas fa-plane"></i></div>
+                                <div class="icon-option" data-icon="car"><i class="fas fa-car"></i></div>
+                                <div class="icon-option" data-icon="home"><i class="fas fa-home"></i></div>
+                                <div class="icon-option" data-icon="graduation-cap"><i class="fas fa-graduation-cap"></i></div>
+                                <div class="icon-option" data-icon="ring"><i class="fas fa-ring"></i></div>
+                                <div class="icon-option" data-icon="laptop"><i class="fas fa-laptop"></i></div>
+                                <div class="icon-option" data-icon="shopping-bag"><i class="fas fa-shopping-bag"></i></div>
+                                <div class="icon-option" data-icon="gamepad"><i class="fas fa-gamepad"></i></div>
+                                <div class="icon-option" data-icon="camera"><i class="fas fa-camera"></i></div>
+                                <div class="icon-option" data-icon="bicycle"><i class="fas fa-bicycle"></i></div>
+                            </div>
+                            <input type="hidden" id="goalIcon" value="piggy-bank">
+                        </div>
+                        <button class="btn btn-primary mt-3" onclick="addGoal()">
+                            <i class="fas fa-plus"></i> Add Goal
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Goal Modal -->
+    <div class="modal fade" id="editGoalModal" tabindex="-1" aria-labelledby="editGoalModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editGoalModalLabel">Edit Goal</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="editGoalError" class="alert alert-danger" style="display: none;"></div>
+                    <div class="mb-3">
+                        <label for="editGoalName" class="form-label">Goal Name</label>
+                        <input type="text" class="form-control" id="editGoalName">
+                    </div>
+                    <div class="mb-3">
+                        <label for="editGoalAmount" class="form-label">Amount ($)</label>
+                        <input type="number" class="form-control" id="editGoalAmount" step="100">
+                    </div>
+                    <div class="mb-3">
+                        <label for="editGoalTargetDate" class="form-label">Target Date</label>
+                        <input type="date" class="form-control" id="editGoalTargetDate">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Choose Icon</label>
+                        <div id="editGoalIconPicker" class="icon-picker">
+                            <div class="icon-option" data-icon="piggy-bank"><i class="fas fa-piggy-bank"></i></div>
+                            <div class="icon-option" data-icon="motorcycle"><i class="fas fa-motorcycle"></i></div>
+                            <div class="icon-option" data-icon="plane"><i class="fas fa-plane"></i></div>
+                            <div class="icon-option" data-icon="car"><i class="fas fa-car"></i></div>
+                            <div class="icon-option" data-icon="home"><i class="fas fa-home"></i></div>
+                            <div class="icon-option" data-icon="graduation-cap"><i class="fas fa-graduation-cap"></i></div>
+                            <div class="icon-option" data-icon="ring"><i class="fas fa-ring"></i></div>
+                            <div class="icon-option" data-icon="laptop"><i class="fas fa-laptop"></i></div>
+                            <div class="icon-option" data-icon="shopping-bag"><i class="fas fa-shopping-bag"></i></div>
+                            <div class="icon-option" data-icon="gamepad"><i class="fas fa-gamepad"></i></div>
+                            <div class="icon-option" data-icon="camera"><i class="fas fa-camera"></i></div>
+                            <div class="icon-option" data-icon="bicycle"><i class="fas fa-bicycle"></i></div>
+                        </div>
+                        <input type="hidden" id="editGoalIcon" value="piggy-bank">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveGoalEdit()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .icon-picker {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .icon-option {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 24px;
+            color: #495057;
+        }
+        .icon-option:hover {
+            border-color: #4285f4;
+            background: #f8f9fa;
+            transform: scale(1.1);
+        }
+        .icon-option.selected {
+            border-color: #4285f4;
+            background: #e3f2fd;
+            color: #4285f4;
+            box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.2);
+        }
+        .goal-icon-display {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        .goal-icon-display i {
+            color: white;
+            font-size: 20px;
+        }
+    </style>
+
+    <script>
+        // Icon picker functionality
+        function setupIconPicker(pickerSelector, hiddenInputSelector) {
+            const picker = document.querySelector(pickerSelector);
+            const hiddenInput = document.querySelector(hiddenInputSelector);
+
+            if (!picker || !hiddenInput) return;
+
+            // Select first icon by default
+            const firstIcon = picker.querySelector('.icon-option');
+            if (firstIcon) {
+                firstIcon.classList.add('selected');
+            }
+
+            picker.querySelectorAll('.icon-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    // Remove selection from all
+                    picker.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected'));
+                    // Add selection to clicked
+                    this.classList.add('selected');
+                    // Update hidden input
+                    hiddenInput.value = this.getAttribute('data-icon');
+                });
+            });
+        }
+
+        // Setup both icon pickers when modal opens
+        document.getElementById('goalsModal').addEventListener('shown.bs.modal', function() {
+            setupIconPicker('#goalIconPicker', '#goalIcon');
+        });
+
+        document.getElementById('editGoalModal').addEventListener('shown.bs.modal', function() {
+            setupIconPicker('#editGoalIconPicker', '#editGoalIcon');
+        });
     </script>
 </body>
 </html>
