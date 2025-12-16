@@ -700,6 +700,64 @@ class TransactionService:
             'datasets': datasets
         }
 
+    def get_weekly_trends_data(self) -> Dict[str, Any]:
+        """Get weekly trends data."""
+        if self.processed_df is None:
+            return {}
+
+        df = self.processed_df.copy()
+
+        # Ensure DateTime is in proper format
+        df['DateTime'] = pd.to_datetime(df['DateTime'])
+
+        # Create a helper column to group by year-month and week number within that month
+        df['YearMonth'] = df['DateTime'].dt.to_period('M')
+        df['WeekOfYear'] = df['DateTime'].dt.isocalendar().week
+
+        # Calculate which week of the month each transaction belongs to
+        # Group by year-month, then assign week numbers based on chronological order
+        df['YearMonthWeek'] = df.groupby('YearMonth')['DateTime'].transform(
+            lambda x: 'W' + (((x.dt.day - 1) // 7) + 1).astype(str)
+        )
+
+        # Create formatted label (e.g., "OCTW1", "OCTW2")
+        df['WeekLabel'] = df['DateTime'].dt.strftime('%b').str.upper() + df['YearMonthWeek']
+
+        # Create a sortable key (year-month + week number)
+        df['SortKey'] = df['DateTime'].dt.strftime('%Y-%m') + '-' + df['YearMonthWeek']
+
+        # Sort weeks chronologically using the sort key
+        week_info = df[['SortKey', 'WeekLabel']].drop_duplicates().sort_values('SortKey')
+        weeks = week_info['WeekLabel'].tolist()
+
+        # Initialize datasets for each category
+        datasets = []
+        categories = sorted(df['Classification'].unique())
+
+        for category in categories:
+            category_data = []
+            for week_label in weeks:
+                week_df = df[(df['WeekLabel'] == week_label) & (df['Classification'] == category)]
+                # Calculate net amount (positive + negative) for this category in this week
+                net_amount = week_df['Amount'].sum()
+                category_data.append(float(net_amount))
+
+            # Get color for category
+            color = self.get_category_color(category)
+
+            datasets.append({
+                'label': category,
+                'data': category_data,
+                'backgroundColor': color,
+                'borderColor': color,
+                'borderWidth': 1
+            })
+
+        return {
+            'labels': weeks,
+            'datasets': datasets
+        }
+
     def get_spending_trends_data(self, start_date: str = None, end_date: str = None, group_range: str = 'month', categories: list = None) -> Dict[str, Any]:
         """Get spending trends data with configurable time and group ranges."""
         if self.processed_df is None:
