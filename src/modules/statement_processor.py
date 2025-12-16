@@ -27,8 +27,9 @@ from src.config.paths import (
 class StatementProcessor:
     """Handles the processing and analysis of bank statement transactions."""
     
-    def __init__(self, base_path=None):
+    def __init__(self, base_path=None, bank_name=None):
         self.base_path = base_path
+        self.bank_name = bank_name
         self.databank_path = DATABANK_PATH
         self.uncategorized_path = UNCATEGORIZED_MERCHANTS_PATH
     
@@ -247,14 +248,24 @@ class StatementProcessor:
             print(f"Error saving uncategorized merchants: {str(e)}")
     
     def recalibrate_amounts(self, df_in: pd.DataFrame) -> pd.DataFrame:
-        """Adjusts amounts based on account type."""
+        """Adjusts amounts based on account type.
+        - For Wells Fargo: Keep amounts as-is from CSV (already have correct sign)
+        - For Chequing/Savings: Use balance changes to determine amount sign
+        - For Credit: Force all amounts to be negative
+        """
         print(f"Recalibrating amounts in bank statements.")
 
         df = df_in.copy()
+
+        # For Wells Fargo, amounts already have the correct sign from CSV - skip recalibration
+        if self.bank_name and self.bank_name.lower() == 'wellsfargo':
+            print("Wells Fargo detected - keeping amounts as-is from CSV")
+            return df
+
         for account_type in df['Account Type'].unique():
             mask = df['Account Type'] == account_type
             account_df = df[mask].copy()
-            
+
             if account_type == 'Credit':
                 # For credit accounts, ensure all amounts are negative
                 df.loc[mask, 'Amount'] = -abs(df.loc[mask, 'Amount'])
@@ -268,24 +279,38 @@ class StatementProcessor:
                 account_df = account_df.drop(columns=['__orig_index'])
 
                 # Update amount signs based on balance differences
-                account_df['Amount'] = account_df.apply(
-                    lambda row: (
-                        # If balance decreased, amount should be negative
-                        -abs(row['Amount']) if row['balance_diff'] is not None and row['balance_diff'] < 0
-                        # If balance increased, amount should be positive
-                        else abs(row['Amount']) if row['balance_diff'] is not None and row['balance_diff'] > 0
-                        # If no balance difference (first row), keep original sign
-                        else row['Amount']
-                    ),
-                    axis=1
-                )
-                
+                def determine_amount_sign(row):
+                    # Check for special deposit types that should always be positive
+                    details_lower = str(row.get('Details', '')).lower()
+                    transaction_type_lower = str(row.get('Transaction Type', '')).lower()
+
+                    # Payroll deposits and other deposits should always be positive
+                    if any(deposit_type in transaction_type_lower for deposit_type in ['payroll dep', 'deposit']):
+                        return abs(row['Amount'])
+
+                    # Government payments should be positive
+                    if any(payment in details_lower for payment in ['gst', 'climate action incentive', 'provincial payment']):
+                        return abs(row['Amount'])
+
+                    # Use balance difference to determine sign
+                    if row['balance_diff'] is not None and row['balance_diff'] < 0:
+                        # Balance decreased, amount should be negative
+                        return -abs(row['Amount'])
+                    elif row['balance_diff'] is not None and row['balance_diff'] > 0:
+                        # Balance increased, amount should be positive
+                        return abs(row['Amount'])
+                    else:
+                        # No balance difference (first row), keep original sign
+                        return row['Amount']
+
+                account_df['Amount'] = account_df.apply(determine_amount_sign, axis=1)
+
                 # Drop temporary column
                 account_df.drop(columns=['balance_diff'], inplace=True)
-                
+
                 # Update the main dataframe
                 df.loc[mask] = account_df
-            
+
         return df
     
     def combine_balances_across_accounts(self, df_in: pd.DataFrame) -> pd.DataFrame:
