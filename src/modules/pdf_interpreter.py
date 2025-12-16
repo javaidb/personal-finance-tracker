@@ -597,44 +597,68 @@ class PDFReader(GeneralHelperFns):
     
     def clear_pdf_cache(self):
         """Clear all cached PDF data"""
+        import shutil
+        import traceback
+
         try:
-            # Clear the PDF cache directory
+            print("\n[DEBUG] Starting cache clear operation...")
+
+            # Get the cache directory path
             cache_dir = paths.pdf_cache
+            print(f"[DEBUG] Cache directory path: {cache_dir}")
+            print(f"[DEBUG] Cache directory exists: {os.path.exists(cache_dir)}")
+
             if os.path.exists(cache_dir):
-                # Get list of cached files before deleting
-                cached_files = [f for f in os.listdir(cache_dir) if f.endswith('.json')]
-                
-                # Print summary of what will be deleted
-                print(f"\nClearing PDF cache:")
-                print(f"Found {len(cached_files)} cached files:")
-                for file in cached_files:
-                    try:
-                        with open(os.path.join(cache_dir, file), 'r') as f:
-                            cache_data = json.load(f)
-                            metadata = cache_data.get('metadata', {})
-                            print(f"- {file}: {metadata.get('account_type', 'Unknown')} statement for "
-                                  f"{metadata.get('statement_month', 'Unknown')} {metadata.get('statement_year', 'Unknown')}")
-                    except Exception as e:
-                        print(f"- {file}: Could not read metadata ({str(e)})")
-                
-                # Delete the cache directory
-                import shutil
-                shutil.rmtree(cache_dir)
+                try:
+                    # Get list of cached files before deleting
+                    cached_files = [f for f in os.listdir(cache_dir) if f.endswith('.json')]
+
+                    # Print summary of what will be deleted
+                    print(f"\nClearing PDF cache:")
+                    print(f"Found {len(cached_files)} cached files:")
+                    for file in cached_files:
+                        try:
+                            with open(os.path.join(cache_dir, file), 'r') as f:
+                                cache_data = json.load(f)
+                                metadata = cache_data.get('metadata', {})
+                                print(f"- {file}: {metadata.get('account_type', 'Unknown')} statement for "
+                                      f"{metadata.get('statement_month', 'Unknown')} {metadata.get('statement_year', 'Unknown')}")
+                        except Exception as e:
+                            print(f"- {file}: Could not read metadata ({str(e)})")
+
+                    # Delete the cache directory
+                    print(f"[DEBUG] Attempting to delete cache directory: {cache_dir}")
+                    shutil.rmtree(cache_dir)
+                    print(f"[DEBUG] Cache directory deleted successfully")
+                except PermissionError as pe:
+                    print(f"[ERROR] Permission denied when trying to delete cache: {str(pe)}")
+                    print(f"[ERROR] Traceback: {traceback.format_exc()}")
+                    raise
+                except Exception as e:
+                    print(f"[ERROR] Error during cache deletion: {str(e)}")
+                    print(f"[ERROR] Traceback: {traceback.format_exc()}")
+                    raise
+            else:
+                print(f"[DEBUG] Cache directory does not exist, nothing to clear")
+
+            # Recreate the cache directory
+            print(f"[DEBUG] Recreating cache directory...")
             os.makedirs(cache_dir, exist_ok=True)
-            
+            print(f"[DEBUG] Cache directory recreated")
+
             # Reset instance variables
+            print(f"[DEBUG] Resetting instance variables...")
             self.cached_pdfs_count = 0
             self.df_raw = None
             if hasattr(self, 'filtered_df'):
                 self.filtered_df = None
-            
-            # Force a new data load
-            self.df_raw = self.generate_fin_df()
-            
-            print(f"\nPDF cache cleared successfully and data reloaded")
+            print(f"[DEBUG] Instance variables reset")
+
+            print(f"\nPDF cache cleared successfully")
             return True
         except Exception as e:
-            print(f"Error clearing PDF cache: {str(e)}")
+            print(f"[ERROR] Error clearing PDF cache: {str(e)}")
+            print(f"[ERROR] Full traceback: {traceback.format_exc()}")
             return False
 
     def get_cache_info(self):
