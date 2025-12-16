@@ -153,8 +153,18 @@ def get_monthly_trends():
     service = init_transaction_service()
     if service is None or service.processed_df is None:
         return jsonify({"error": "No data has been processed yet"}), 404
-    
+
     trends_data = service.get_monthly_trends_data()
+    return jsonify(trends_data)
+
+@api_bp.route('/weekly-trends')
+def get_weekly_trends():
+    """Get weekly trends data."""
+    service = init_transaction_service()
+    if service is None or service.processed_df is None:
+        return jsonify({"error": "No data has been processed yet"}), 404
+
+    trends_data = service.get_weekly_trends_data()
     return jsonify(trends_data)
 
 @api_bp.route('/merchants')
