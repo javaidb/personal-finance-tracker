@@ -674,17 +674,31 @@ class CSVParser(StatementParser):
 
             # Convert date to expected format - include year for full date parsing
             formatted_date = row['parsed_date'].strftime('%d %b %Y')
-            
+
             # Get amount and convert to float
             amount_str = str(row.get(amount_field, 0))
             try:
                 amount = float(amount_str)
             except ValueError:
                 amount = 0.0
-            
-            # Update running balance
-            running_balance += amount
-            
+
+            # Check if there's an actual balance value in the balance column
+            balance_from_csv = None
+            balance_str = str(row.get(balance_field, ''))
+            if balance_str and balance_str.strip() and balance_str.strip() not in ['', 'nan', '0', '0.0', '0.00']:
+                try:
+                    balance_from_csv = float(balance_str)
+                except (ValueError, TypeError):
+                    pass
+
+            # If balance is provided in CSV, use it; otherwise calculate running balance
+            if balance_from_csv is not None:
+                running_balance = balance_from_csv
+                print(f"[DEBUG] Using CSV balance: {running_balance} for transaction on {formatted_date}")
+            else:
+                # Calculate running balance from amount
+                running_balance += amount
+
             transaction = {
                 'Transaction Date': formatted_date,
                 'Details': str(row.get(description_field, '')),
@@ -694,12 +708,12 @@ class CSVParser(StatementParser):
                 'Reference #': str(row.get(reference_field, '')),
                 'Balance': str(running_balance),
             }
-            
+
             # Apply category mapping
             original_category = transaction['Transaction Type']
             if original_category in category_mapping:
                 transaction['Transaction Type'] = category_mapping[original_category]
-            
+
             transactions.append(transaction)
         
         return transactions
@@ -1129,6 +1143,72 @@ class StatementInterpreter(GeneralHelperFns):
             
             with open(log_file, 'a', encoding='utf-8') as f:
                 f.write(f"[{timestamp}] {warning_msg} (Path: {file_path})\n")
-                
+
         except Exception as e:
-            print(f"Failed to write to zero transactions log: {e}") 
+            print(f"Failed to write to zero transactions log: {e}")
+
+    def clear_pdf_cache(self):
+        """Clear all cached statement data"""
+        import shutil
+        import traceback
+
+        try:
+            print("\n[DEBUG] Starting cache clear operation...")
+
+            # Get the cache directory path
+            cache_dir = paths.pdf_cache
+            print(f"[DEBUG] Cache directory path: {cache_dir}")
+            print(f"[DEBUG] Cache directory exists: {os.path.exists(cache_dir)}")
+
+            if os.path.exists(cache_dir):
+                try:
+                    # Get list of cached files before deleting
+                    cached_files = [f for f in os.listdir(cache_dir) if f.endswith('.json')]
+
+                    # Print summary of what will be deleted
+                    print(f"\nClearing statement cache:")
+                    print(f"Found {len(cached_files)} cached files:")
+                    for file in cached_files:
+                        try:
+                            with open(os.path.join(cache_dir, file), 'r') as f:
+                                cache_data = json.load(f)
+                                metadata = cache_data.get('metadata', {})
+                                print(f"- {file}: {metadata.get('account_type', 'Unknown')} statement for "
+                                      f"{metadata.get('statement_month', 'Unknown')} {metadata.get('statement_year', 'Unknown')}")
+                        except Exception as e:
+                            print(f"- {file}: Could not read metadata ({str(e)})")
+
+                    # Delete the cache directory
+                    print(f"[DEBUG] Attempting to delete cache directory: {cache_dir}")
+                    shutil.rmtree(cache_dir)
+                    print(f"[DEBUG] Cache directory deleted successfully")
+                except PermissionError as pe:
+                    print(f"[ERROR] Permission denied when trying to delete cache: {str(pe)}")
+                    print(f"[ERROR] Traceback: {traceback.format_exc()}")
+                    raise
+                except Exception as e:
+                    print(f"[ERROR] Error during cache deletion: {str(e)}")
+                    print(f"[ERROR] Traceback: {traceback.format_exc()}")
+                    raise
+            else:
+                print(f"[DEBUG] Cache directory does not exist, nothing to clear")
+
+            # Recreate the cache directory
+            print(f"[DEBUG] Recreating cache directory...")
+            os.makedirs(cache_dir, exist_ok=True)
+            print(f"[DEBUG] Cache directory recreated")
+
+            # Reset instance variables
+            print(f"[DEBUG] Resetting instance variables...")
+            self.cached_files_count = 0
+            self.df_raw = None
+            if hasattr(self, 'filtered_df'):
+                self.filtered_df = None
+            print(f"[DEBUG] Instance variables reset")
+
+            print(f"\nStatement cache cleared successfully")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Error clearing statement cache: {str(e)}")
+            print(f"[ERROR] Full traceback: {traceback.format_exc()}")
+            return False 
