@@ -613,8 +613,16 @@ class CSVParser(StatementParser):
         """Parse CSV with balance calculations (supports multiple banks)."""
         transactions = []
 
-        # Try multiple date formats
-        date_formats = ['%d/%m/%Y', '%m/%d/%Y']  # Barclays and Wells Fargo formats
+        # Try multiple date formats based on bank
+        bank_name = config.get('bank_name', '').lower()
+
+        # For Wells Fargo, use MM/DD/YYYY format only
+        if bank_name == 'wellsfargo':
+            date_formats = ['%m/%d/%Y']
+        else:
+            # For other banks, try DD/MM/YYYY first (Barclays), then MM/DD/YYYY
+            date_formats = ['%d/%m/%Y', '%m/%d/%Y']
+
         df['parsed_date'] = None
 
         for date_format in date_formats:
@@ -1100,7 +1108,7 @@ class StatementInterpreter(GeneralHelperFns):
         
         # Initialize processor
         from src.modules.statement_processor import StatementProcessor
-        self.processor = StatementProcessor(base_path)
+        self.processor = StatementProcessor(base_path, bank_name=self.bank_name)
     
     def df_preprocessing(self, df_in):
         """Preprocess the DataFrame by cleaning and converting data types."""
