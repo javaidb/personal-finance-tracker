@@ -900,8 +900,6 @@ class TransactionService:
                 uncategorized_df = df[uncategorized_mask].copy()
                 uncategorized_df = self.__identify_rent_payments(uncategorized_df, [])
                 df.loc[uncategorized_mask, 'Classification'] = uncategorized_df['Classification']
-            
-        df = self.__apply_custom_conditinos(df)
 
         # Only filter out opening/closing balance entries
         substring_exclusion_list = ['opening balance', 'closing balance']
