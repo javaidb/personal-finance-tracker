@@ -4,6 +4,7 @@ import os
 import json
 from ..services.transaction_service import TransactionService
 from ..services.merchant_service import MerchantService
+from ..services.goal_service import GoalService
 import pandas as pd
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -337,7 +338,7 @@ def clear_cache():
     service = init_transaction_service()
     if service is None:
         return jsonify({"error": "No statement reader initialized"}), 400
-    
+
     try:
         success = service.clear_cache()
         if success:
@@ -351,9 +352,13 @@ def clear_cache():
                 service.process_statements()
             return jsonify({"success": True, "message": "PDF cache cleared successfully and data reloaded"})
         else:
-            return jsonify({"error": "Failed to clear cache"}), 500
+            return jsonify({"success": False, "error": "Failed to clear cache. Check server logs for details."}), 500
     except Exception as e:
-        return jsonify({"error": f"Failed to clear cache: {str(e)}"}), 500
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error in clear_cache endpoint: {str(e)}")
+        print(f"Traceback: {error_details}")
+        return jsonify({"success": False, "error": f"Failed to clear cache: {str(e)}"}), 500
 
 @api_bp.route('/merchants/categories')
 def get_merchant_categories():
@@ -536,12 +541,217 @@ def get_spending_trends():
     service = init_transaction_service()
     if service is None or service.processed_df is None:
         return jsonify({"error": "No data has been processed yet"}), 404
-    
+
     # Get parameters
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     group_range = request.args.get('group_range', 'month')  # month, quarter, year
     categories = request.args.getlist('categories')  # Get list of selected categories
-    
+
     trends_data = service.get_spending_trends_data(start_date, end_date, group_range, categories)
-    return jsonify(trends_data) 
+    return jsonify(trends_data)
+
+@api_bp.route('/goals')
+def get_goals():
+    """Get all goals (custom if available, otherwise predefined)."""
+    try:
+        base_path = Path(current_app.root_path).parent.parent
+        goal_service = GoalService(base_path=base_path)
+        goals = goal_service.get_all_goals()
+        has_custom = goal_service.has_custom_goals()
+
+        return jsonify({
+            "success": True,
+            "goals": goals,
+            "has_custom_goals": has_custom
+        })
+    except Exception as e:
+        print(f"Error in get_goals: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@api_bp.route('/goals/milestones')
+def get_milestone_amounts():
+    """Get milestone amounts as a sorted list."""
+    try:
+        base_path = Path(current_app.root_path).parent.parent
+        goal_service = GoalService(base_path=base_path)
+        amounts = goal_service.get_milestone_amounts()
+
+        return jsonify({
+            "success": True,
+            "milestones": amounts
+        })
+    except Exception as e:
+        print(f"Error in get_milestone_amounts: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@api_bp.route('/goals', methods=['POST'])
+def add_goal():
+    """Add a new custom goal."""
+    try:
+        from datetime import datetime
+        data = request.get_json()
+        if not data or 'name' not in data or 'amount' not in data:
+            return jsonify({
+                "success": False,
+                "error": "Missing required fields: name and amount"
+            }), 400
+
+        # Validate amount
+        try:
+            amount = float(data['amount'])
+            if amount <= 0:
+                return jsonify({
+                    "success": False,
+                    "error": "Amount must be greater than 0"
+                }), 400
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "error": "Amount must be a valid number"
+            }), 400
+
+        # Parse target_date if provided
+        target_date = None
+        if 'target_date' in data and data['target_date']:
+            try:
+                target_date = datetime.fromisoformat(data['target_date'].replace('Z', '+00:00'))
+                # Validate target date is in the future
+                if target_date < datetime.now():
+                    return jsonify({
+                        "success": False,
+                        "error": "Target date must be in the future"
+                    }), 400
+            except (ValueError, AttributeError):
+                return jsonify({
+                    "success": False,
+                    "error": "Invalid date format"
+                }), 400
+
+        base_path = Path(current_app.root_path).parent.parent
+        goal_service = GoalService(base_path=base_path)
+        icon = data.get('icon', 'piggy-bank')
+        goal = goal_service.add_goal(data['name'], amount, target_date, icon)
+
+        if goal:
+            return jsonify({
+                "success": True,
+                "message": "Goal added successfully",
+                "goal": goal
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to add goal"
+            }), 500
+    except Exception as e:
+        print(f"Error in add_goal: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@api_bp.route('/goals/<goal_id>', methods=['PUT'])
+def update_goal(goal_id):
+    """Update a custom goal."""
+    try:
+        from datetime import datetime
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "No data provided"
+            }), 400
+
+        # Validate amount if provided
+        amount = None
+        if 'amount' in data:
+            try:
+                amount = float(data['amount'])
+                if amount <= 0:
+                    return jsonify({
+                        "success": False,
+                        "error": "Amount must be greater than 0"
+                    }), 400
+            except ValueError:
+                return jsonify({
+                    "success": False,
+                    "error": "Amount must be a valid number"
+                }), 400
+
+        # Parse target_date if provided
+        target_date = None
+        if 'target_date' in data:
+            if data['target_date']:
+                try:
+                    target_date = datetime.fromisoformat(data['target_date'].replace('Z', '+00:00'))
+                    # Validate target date is in the future
+                    if target_date < datetime.now():
+                        return jsonify({
+                            "success": False,
+                            "error": "Target date must be in the future"
+                        }), 400
+                except (ValueError, AttributeError):
+                    return jsonify({
+                        "success": False,
+                        "error": "Invalid date format"
+                    }), 400
+            else:
+                # Allow clearing the target date
+                target_date = None
+
+        base_path = Path(current_app.root_path).parent.parent
+        goal_service = GoalService(base_path=base_path)
+
+        name = data.get('name')
+        icon = data.get('icon')
+        updated_goal = goal_service.update_goal(goal_id, name=name, amount=amount, target_date=target_date, icon=icon)
+
+        if updated_goal:
+            return jsonify({
+                "success": True,
+                "message": "Goal updated successfully",
+                "goal": updated_goal
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Goal not found"
+            }), 404
+    except Exception as e:
+        print(f"Error in update_goal: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@api_bp.route('/goals/<goal_id>', methods=['DELETE'])
+def delete_goal(goal_id):
+    """Delete a custom goal."""
+    try:
+        base_path = Path(current_app.root_path).parent.parent
+        goal_service = GoalService(base_path=base_path)
+        success = goal_service.delete_goal(goal_id)
+
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Goal deleted successfully"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Goal not found"
+            }), 404
+    except Exception as e:
+        print(f"Error in delete_goal: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500 
