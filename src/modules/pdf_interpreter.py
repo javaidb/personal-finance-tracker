@@ -1016,12 +1016,19 @@ class PDFReader(GeneralHelperFns):
     def recalibrate_amounts(self, df_in):
         """
         Adjusts amounts based on account type:
+        - For Wells Fargo: Keep amounts as-is from CSV (already have correct sign)
         - For Chequing/Savings: Use balance changes to determine amount sign
         - For Credit: Force all amounts to be negative
         """
         print(f"Recalibrating amounts in bank statements.")
 
         df = df_in.copy()
+
+        # For Wells Fargo, amounts already have the correct sign from CSV - skip recalibration
+        if self.bank_name and self.bank_name.lower() == 'wellsfargo':
+            print("Wells Fargo detected - keeping amounts as-is from CSV")
+            return df
+
         for account_type in df['Account Type'].unique():
             mask = df['Account Type'] == account_type
             account_df = df[mask].copy()
@@ -1045,17 +1052,31 @@ class PDFReader(GeneralHelperFns):
                     print(debug_rows[['DateTime', 'Account Name', 'Balance', 'Amount', 'balance_diff']])
                 
                 # Update amount signs based on balance differences
-                account_df['Amount'] = account_df.apply(
-                    lambda row: (
-                        # If balance decreased, amount should be negative
-                        -abs(row['Amount']) if row['balance_diff'] is not None and row['balance_diff'] < 0
-                        # If balance increased, amount should be positive
-                        else abs(row['Amount']) if row['balance_diff'] is not None and row['balance_diff'] > 0
-                        # If no balance difference (first row), keep original sign
-                        else row['Amount']
-                    ),
-                    axis=1
-                )
+                def determine_amount_sign(row):
+                    # Check for special deposit types that should always be positive
+                    details_lower = str(row.get('Details', '')).lower()
+                    transaction_type_lower = str(row.get('Transaction Type', '')).lower()
+
+                    # Payroll deposits and other deposits should always be positive
+                    if any(deposit_type in transaction_type_lower for deposit_type in ['payroll dep', 'deposit']):
+                        return abs(row['Amount'])
+
+                    # Government payments should be positive
+                    if any(payment in details_lower for payment in ['gst', 'climate action incentive', 'provincial payment']):
+                        return abs(row['Amount'])
+
+                    # Use balance difference to determine sign
+                    if row['balance_diff'] is not None and row['balance_diff'] < 0:
+                        # Balance decreased, amount should be negative
+                        return -abs(row['Amount'])
+                    elif row['balance_diff'] is not None and row['balance_diff'] > 0:
+                        # Balance increased, amount should be positive
+                        return abs(row['Amount'])
+                    else:
+                        # No balance difference (first row), keep original sign
+                        return row['Amount']
+
+                account_df['Amount'] = account_df.apply(determine_amount_sign, axis=1)
                 
                 # Drop temporary column
                 account_df.drop(columns=['balance_diff'], inplace=True)
@@ -1442,15 +1463,20 @@ class PDFReader(GeneralHelperFns):
     def __apply_custom_conditions(self, df):
         """
         Adjusts the 'Amount' column in the DataFrame based on the transaction details and type.
-        
+
         Parameters:
         df (pd.DataFrame): Input DataFrame with transaction details.
-        
+
         Returns:
         pd.DataFrame: Modified DataFrame with adjusted Amounts.
         """
         df = df.copy()
-        
+
+        # For Wells Fargo, amounts already have the correct sign from CSV - skip custom conditions
+        if self.bank_name and self.bank_name.lower() == 'wellsfargo':
+            print("Wells Fargo detected - skipping custom amount conditions")
+            return df
+
         def determine_amount_sign(row):
             details_lower = str(row['Details']).lower()
             transaction_type_lower = str(row['Transaction Type']).lower()
