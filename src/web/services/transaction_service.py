@@ -811,7 +811,9 @@ class TransactionService:
                 self.process_statements()
             return success
         except Exception as e:
-            print(f"Error clearing cache: {str(e)}")
+            import traceback
+            print(f"Error clearing cache in TransactionService: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
             return False
 
     def df_preprocessing(self, df_in):
