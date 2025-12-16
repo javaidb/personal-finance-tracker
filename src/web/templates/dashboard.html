@@ -3011,109 +3011,21 @@
 
             // Function to handle timeline dragging
             const setupTimelineDragging = () => {
-                const timelineTrack = document.querySelector('.timeline-track');
-                const timelineMarker = document.querySelector('.timeline-marker');
-                const progressBar = document.querySelector('.timeline-progress');
-                
-                if (!timelineTrack || !timelineMarker || !progressBar) return;
-                
-                let isDragging = false;
-                let startX, startLeft;
-                
-                const startDrag = (e) => {
-                    isDragging = true;
-                    startX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
-                    startLeft = parseFloat(timelineMarker.style.left) || 0;
-                    
-                    timelineMarker.style.cursor = 'grabbing';
-                    timelineTrack.style.cursor = 'grabbing';
-                    
-                    // Add dragging class for visual feedback
-                    timelineMarker.classList.add('dragging');
-                };
-                
-                const doDrag = (e) => {
-                    if (!isDragging) return;
-                    
-                    e.preventDefault();
-                    const clientX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
-                    const deltaX = clientX - startX;
-                    const timelineRect = timelineTrack.getBoundingClientRect();
-                    const timelineWidth = timelineRect.width;
-                    
-                    // Calculate new position as percentage
-                    const newLeftPercent = Math.max(0, Math.min(100, startLeft + (deltaX / timelineWidth) * 100));
-                    
-                    // Update marker position
-                    timelineMarker.style.left = `${newLeftPercent}%`;
-                    progressBar.style.width = `${newLeftPercent}%`;
-                    
-                    // Calculate and update balance
-                    const newBalance = calculateBalanceFromProgress(newLeftPercent, currentBalance);
-                    const currentBalanceValue = document.querySelector('.current-balance-value');
-                    if (currentBalanceValue) {
-                        currentBalanceValue.textContent = new Intl.NumberFormat('en-US', { 
-                            style: 'currency', 
-                            currency: 'USD', 
-                            maximumFractionDigits: 0 
-                        }).format(newBalance);
-                    }
-                    
-                    // Update milestone calculations
-                    updateMilestoneCalculations(newBalance);
-                };
-                
-                const stopDrag = () => {
-                    if (!isDragging) return;
-                    
-                    isDragging = false;
-                    timelineMarker.style.cursor = 'grab';
-                    timelineTrack.style.cursor = 'grab';
-                    timelineMarker.classList.remove('dragging');
-                };
-                
-                // Mouse events
-                timelineMarker.addEventListener('mousedown', startDrag);
-                document.addEventListener('mousemove', doDrag);
-                document.addEventListener('mouseup', stopDrag);
-                
-                // Touch events for mobile
-                timelineMarker.addEventListener('touchstart', startDrag);
-                document.addEventListener('touchmove', doDrag);
-                document.addEventListener('touchend', stopDrag);
-                
-                // Click on timeline to jump to position
-                timelineTrack.addEventListener('click', (e) => {
-                    const rect = timelineTrack.getBoundingClientRect();
-                    const clickX = e.clientX - rect.left;
-                    const clickPercent = (clickX / rect.width) * 100;
-                    const clampedPercent = Math.max(0, Math.min(100, clickPercent));
-                    
-                    timelineMarker.style.left = `${clampedPercent}%`;
-                    progressBar.style.width = `${clampedPercent}%`;
-                    
-                    const newBalance = calculateBalanceFromProgress(clampedPercent, currentBalance);
-                    const currentBalanceValue = document.querySelector('.current-balance-value');
-                    if (currentBalanceValue) {
-                        currentBalanceValue.textContent = new Intl.NumberFormat('en-US', { 
-                            style: 'currency', 
-                            currency: 'USD', 
-                            maximumFractionDigits: 0 
-                        }).format(newBalance);
-                    }
-                    
-                    updateMilestoneCalculations(newBalance);
-                });
+                // Drag functionality removed - marker stays at actual current balance
+                // No manual dragging allowed
             };
             
-            // Fetch goals to calculate target-based savings rate and get icons
+            // Fetch both goals and PELT analysis data in parallel
             let targetBasedRate = 0;
             let nextGoalWithDate = null;
             let goalsMap = new Map(); // Map milestone amounts to goal objects
 
-            fetch('/api/goals')
-                .then(response => response.json())
-                .then(goalsData => {
+            Promise.all([
+                fetch('/api/goals').then(response => response.json()),
+                fetch('/api/pelt-analysis').then(response => response.json())
+            ])
+                .then(([goalsData, peltData]) => {
+                    // Process goals data
                     if (goalsData.success && goalsData.goals) {
                         // Create a map of milestone amounts to goals
                         goalsData.goals.forEach(goal => {
@@ -3134,13 +3046,8 @@
                             targetBasedRate = amountNeeded / monthsRemaining;
                         }
                     }
-                })
-                .catch(err => console.error('Error fetching goals:', err));
 
-            // Fetch PELT analysis data for trend calculation
-            fetch('/api/pelt-analysis')
-                .then(response => response.json())
-                .then(peltData => {
+                    // Process PELT data
                     // Get the most recent rate of change (PELT is weekly, convert to monthly)
                     let peltTrend = 0;
                     if (peltData && peltData.rateOfChange && peltData.rateOfChange.data) {
@@ -3156,6 +3063,118 @@
 
                     // Use target-based rate if available, otherwise use PELT (both are now monthly)
                     let defaultTrend = targetBasedRate > 0 ? targetBasedRate : peltTrend;
+
+                    // Calculate max goal amount and generate milestone markers for all goals
+                    const allGoals = goalsData && goalsData.success && goalsData.goals ? goalsData.goals : [];
+                    const sortedGoals = [...allGoals].sort((a, b) => a.amount - b.amount);
+                    const maxGoalAmount = sortedGoals.length > 0 ? sortedGoals[sortedGoals.length - 1].amount : currentBalance * 2;
+                    const minAmount = 0;
+
+                    // Find next milestone (next goal after current balance)
+                    const nextMilestone = sortedGoals.find(g => g.amount > currentBalance)?.amount || maxGoalAmount;
+
+                    // Calculate progress based on the full range from 0 to max goal
+                    const progress = ((currentBalance - minAmount) / (maxGoalAmount - minAmount)) * 100;
+
+                    // Generate milestone markers HTML for all goals
+                    const milestoneMarkersHTML = sortedGoals.map(goal => {
+                        const goalProgress = ((goal.amount - minAmount) / (maxGoalAmount - minAmount)) * 100;
+
+                        // Format target date if available
+                        let targetDateFormatted = '';
+                        if (goal.target_date) {
+                            const targetDate = new Date(goal.target_date);
+                            targetDateFormatted = targetDate.toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                            });
+                        }
+
+                        return `
+                            <div class="milestone-marker" style="left: ${goalProgress}%">
+                                <div class="milestone-value">
+                                    <i class="fas fa-${goal.icon}" style="margin-right: 5px; color: #8b5cf6;"></i>
+                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(goal.amount)}
+                                    ${targetDateFormatted ? `<div class="milestone-date">${targetDateFormatted}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    // Redefine calculateBalanceFromProgress to use full range (0 to maxGoalAmount)
+                    window.calculateBalanceFromProgress = (progressPercent, _currentBalance) => {
+                        // Calculate balance based on full range from minAmount to maxGoalAmount
+                        // Note: _currentBalance parameter kept for compatibility but not used
+                        return minAmount + ((maxGoalAmount - minAmount) * progressPercent / 100);
+                    };
+
+                    // Redefine updateMilestoneCalculations to work with full range
+                    window.updateMilestoneCalculations = (newBalance) => {
+                        // Calculate progress based on full range (0 to maxGoalAmount)
+                        const newProgress = ((newBalance - minAmount) / (maxGoalAmount - minAmount)) * 100;
+
+                        // Update progress bar
+                        const progressBar = document.querySelector('.timeline-progress');
+                        if (progressBar) {
+                            progressBar.style.width = `${newProgress}%`;
+                        }
+
+                        // Update current balance marker position
+                        const currentBalanceMarker = document.querySelector('.timeline-marker');
+                        if (currentBalanceMarker) {
+                            currentBalanceMarker.style.left = `${newProgress}%`;
+                        }
+
+                        // Update current balance display
+                        const currentBalanceValue = document.querySelector('.current-balance-value');
+                        if (currentBalanceValue) {
+                            currentBalanceValue.textContent = new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                maximumFractionDigits: 0
+                            }).format(newBalance);
+                        }
+
+                        // Note: Milestone markers (goal markers) stay fixed - they don't move
+                        // Only the current balance marker moves along the slider
+
+                        // Update time estimate
+                        const timeEstimateElement = document.getElementById('time-estimate-value');
+                        const rateInput = document.getElementById('weekly-rate-input');
+                        if (timeEstimateElement && rateInput) {
+                            const currentRate = parseFloat(rateInput.value) || 0;
+                            const nextGoal = sortedGoals.find(g => g.amount > newBalance);
+                            if (nextGoal && currentRate > 0) {
+                                const remainingAmount = nextGoal.amount - newBalance;
+                                const monthsToGoal = Math.ceil(remainingAmount / currentRate);
+                                const years = Math.floor(monthsToGoal / 12);
+                                const months = monthsToGoal % 12;
+
+                                if (monthsToGoal <= 0 || currentRate <= 0) {
+                                    timeEstimateElement.textContent = 'Trend is negative';
+                                } else if (monthsToGoal > 36) {
+                                    timeEstimateElement.textContent = 'Over 3 years';
+                                } else if (years === 0) {
+                                    timeEstimateElement.textContent = `${months} month${months !== 1 ? 's' : ''}`;
+                                } else if (months === 0) {
+                                    timeEstimateElement.textContent = `${years} year${years !== 1 ? 's' : ''}`;
+                                } else {
+                                    timeEstimateElement.textContent = `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
+                                }
+                            }
+                        }
+
+                        // Update remaining amount
+                        const remainingAmountElement = document.getElementById('remaining-amount');
+                        if (remainingAmountElement) {
+                            const nextGoal = sortedGoals.find(g => g.amount > newBalance);
+                            if (nextGoal) {
+                                const remaining = nextGoal.amount - newBalance;
+                                remainingAmountElement.innerHTML = `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(remaining)} more to reach ${nextGoal.name}`;
+                            }
+                        }
+                    };
 
                     // Create the milestone visualization
                     const milestoneInfo = document.createElement('div');
@@ -3193,19 +3212,9 @@
                                 transform: translate(-50%, -50%);
                                 transition: left 1s ease-in-out;
                                 box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-                                cursor: grab;
+                                cursor: default;
                                 user-select: none;
                                 z-index: 20;
-                            }
-                            .timeline-marker:hover {
-                                transform: translate(-50%, -50%) scale(1.1);
-                                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                            }
-                            .timeline-marker.dragging {
-                                cursor: grabbing;
-                                transform: translate(-50%, -50%) scale(1.2);
-                                box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-                                transition: none;
                             }
                             .timeline-track {
                                 height: 8px;
@@ -3213,10 +3222,6 @@
                                 border-radius: 4px;
                                 position: relative;
                                 margin: 40px 0;
-                                cursor: pointer;
-                            }
-                            .timeline-track:hover {
-                                background: #e2e8f0;
                             }
                             .milestone-marker {
                                 position: absolute;
@@ -3238,6 +3243,12 @@
                                 font-weight: 600;
                                 color: #1a73e8;
                                 font-size: 0.9rem;
+                            }
+                            .milestone-date {
+                                font-size: 0.75rem;
+                                color: #64748b;
+                                font-weight: 400;
+                                margin-top: 4px;
                             }
                             .current-balance {
                                 position: absolute;
@@ -3428,16 +3439,7 @@
                                 </div>
                             </div>
                             <div class="original-balance-indicator" style="left: ${progress}%"></div>
-                            <div class="milestone-marker" style="left: 0%">
-                                <div class="milestone-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(previousMilestone)}
-                                </div>
-                            </div>
-                            <div class="milestone-marker" style="left: 100%">
-                                <div class="milestone-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone)}
-                                </div>
-                            </div>
+                            ${milestoneMarkersHTML}
                         </div>
                         <div class="milestone-stats">
                             <div class="stat-card">
@@ -3589,7 +3591,7 @@
                     setupTimelineDragging();
                 })
                 .catch(error => {
-                    console.error('Error fetching PELT analysis:', error);
+                    console.error('Error fetching goals or PELT analysis:', error);
                     // Fallback to simple trend calculation if PELT analysis fails
                     let defaultTrend = 0;
                     if (balanceData && balanceData.datasets && balanceData.datasets[0]) {
@@ -3600,7 +3602,44 @@
                             defaultTrend = recentChange / numMonths;
                         }
                     }
-                    
+
+                    // Calculate max goal amount and generate milestone markers (fallback with empty goals)
+                    const sortedGoals = [];
+                    const maxGoalAmount = currentBalance * 2;
+                    const minAmount = 0;
+                    const nextMilestone = maxGoalAmount;
+                    const progress = ((currentBalance - minAmount) / (maxGoalAmount - minAmount)) * 100;
+                    const milestoneMarkersHTML = ''; // No goals in fallback
+
+                    // Redefine calculateBalanceFromProgress to use full range (fallback version)
+                    window.calculateBalanceFromProgress = (progressPercent, _currentBalance) => {
+                        return minAmount + ((maxGoalAmount - minAmount) * progressPercent / 100);
+                    };
+
+                    // Redefine updateMilestoneCalculations to work with full range (fallback version)
+                    window.updateMilestoneCalculations = (newBalance) => {
+                        const newProgress = ((newBalance - minAmount) / (maxGoalAmount - minAmount)) * 100;
+
+                        const progressBar = document.querySelector('.timeline-progress');
+                        if (progressBar) {
+                            progressBar.style.width = `${newProgress}%`;
+                        }
+
+                        const currentBalanceMarker = document.querySelector('.timeline-marker');
+                        if (currentBalanceMarker) {
+                            currentBalanceMarker.style.left = `${newProgress}%`;
+                        }
+
+                        const currentBalanceValue = document.querySelector('.current-balance-value');
+                        if (currentBalanceValue) {
+                            currentBalanceValue.textContent = new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                maximumFractionDigits: 0
+                            }).format(newBalance);
+                        }
+                    };
+
                     // Create the milestone visualization with fallback trend
                     const milestoneInfo = document.createElement('div');
                     milestoneInfo.className = 'milestone-timeline-container';
@@ -3637,19 +3676,9 @@
                                 transform: translate(-50%, -50%);
                                 transition: left 1s ease-in-out;
                                 box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-                                cursor: grab;
+                                cursor: default;
                                 user-select: none;
                                 z-index: 20;
-                            }
-                            .timeline-marker:hover {
-                                transform: translate(-50%, -50%) scale(1.1);
-                                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                            }
-                            .timeline-marker.dragging {
-                                cursor: grabbing;
-                                transform: translate(-50%, -50%) scale(1.2);
-                                box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-                                transition: none;
                             }
                             .timeline-track {
                                 height: 8px;
@@ -3657,10 +3686,6 @@
                                 border-radius: 4px;
                                 position: relative;
                                 margin: 40px 0;
-                                cursor: pointer;
-                            }
-                            .timeline-track:hover {
-                                background: #e2e8f0;
                             }
                             .milestone-marker {
                                 position: absolute;
@@ -3682,6 +3707,12 @@
                                 font-weight: 600;
                                 color: #1a73e8;
                                 font-size: 0.9rem;
+                            }
+                            .milestone-date {
+                                font-size: 0.75rem;
+                                color: #64748b;
+                                font-weight: 400;
+                                margin-top: 4px;
                             }
                             .current-balance {
                                 position: absolute;
@@ -3860,16 +3891,7 @@
                                 </div>
                             </div>
                             <div class="original-balance-indicator" style="left: ${progress}%"></div>
-                            <div class="milestone-marker" style="left: 0%">
-                                <div class="milestone-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(previousMilestone)}
-                                </div>
-                            </div>
-                            <div class="milestone-marker" style="left: 100%">
-                                <div class="milestone-value">
-                                    ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone)}
-                                </div>
-                            </div>
+                            ${milestoneMarkersHTML}
                         </div>
                         <div class="balance-slider-container">
                             <div class="balance-slider-label">
