@@ -5,6 +5,9 @@ echo ====================================================
 echo    Personal Finance Tracker Web Application
 echo ====================================================
 echo.
+echo Pulling latest changes from git repository...
+git pull
+echo.
 echo Place your bank statements in the following directory structure:
 echo bank_statements/[bank_name]/[account_type]/[account_name]/statements.pdf or .csv
 echo.
