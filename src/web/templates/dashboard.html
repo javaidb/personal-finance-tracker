@@ -2579,7 +2579,7 @@
                         y: {
                             title: {
                                 display: true,
-                                text: 'Monthly Savings Rate ($)'
+                                text: 'Weekly Savings Rate ($)'
                             },
                             grid: {
                                 color: function(context) {
@@ -2864,30 +2864,7 @@
             return previousMilestone + (milestoneRange * progressPercent / 100);
         };
 
-        // Global function to calculate time estimate
-        const calculateTimeEstimate = (trend) => {
-            const remainingAmount = nextMilestone - currentBalance;
-            const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
-            
-            // Convert weeks to months and years for display
-            const totalMonths = Math.ceil(weeksToMilestone / 4.33); // Average weeks per month
-            const years = Math.floor(totalMonths / 12);
-            const months = totalMonths % 12;
-
-            if (trend <= 0) {
-                return 'Trend is negative';
-            }
-            if (totalMonths > 36) {
-                return 'Over 3 years';
-            }
-            if (years === 0) {
-                return `${months} month${months !== 1 ? 's' : ''}`;
-            }
-            if (months === 0) {
-                return `${years} year${years !== 1 ? 's' : ''}`;
-            }
-            return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
-        };
+        // This function is deprecated - inline calculation is used instead in the Promise.all section
 
         // Global function to update time estimate display
         const updateTimeEstimate = (trend, currentBalance) => {
@@ -2906,25 +2883,28 @@
             const remainingAmount = nextMilestone - currentDraggedBalance;
             
             if (timeEstimateElement) {
-                // Calculate time estimate for the dragged balance
+                // Calculate time estimate for the dragged balance (trend is now weekly)
                 const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
-                const totalMonths = Math.ceil(weeksToMilestone / 4.33);
-                const years = Math.floor(totalMonths / 12);
-                const months = totalMonths % 12;
+                const years = Math.floor(weeksToMilestone / 52);
+                const remainingWeeks = weeksToMilestone % 52;
+                const months = Math.floor(remainingWeeks / 4.345);
+                const weeks = Math.round(remainingWeeks % 4.345);
 
                 let timeEstimate;
                 if (trend <= 0) {
                     timeEstimate = 'Trend is negative';
-                } else if (totalMonths > 36) {
+                } else if (weeksToMilestone > 156) {
                     timeEstimate = 'Over 3 years';
+                } else if (years === 0 && months === 0) {
+                    timeEstimate = `${weeks} week${weeks !== 1 ? 's' : ''}`;
                 } else if (years === 0) {
-                    timeEstimate = `${months} month${months !== 1 ? 's' : ''}`;
+                    timeEstimate = `${months} month${months !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
                 } else if (months === 0) {
-                    timeEstimate = `${years} year${years !== 1 ? 's' : ''}`;
+                    timeEstimate = `${years} year${years !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
                 } else {
                     timeEstimate = `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
                 }
-                
+
                 timeEstimateElement.textContent = timeEstimate;
             }
             if (remainingAmountElement) {
@@ -2948,27 +2928,31 @@
             // Calculate progress percentage between current milestones
             const progress = ((currentBalance - previousMilestone) / (nextMilestone - previousMilestone)) * 100;
             
-            // Function to calculate time estimate based on trend
+            // Function to calculate time estimate based on trend (trend is now weekly)
             const calculateTimeEstimate = (trend) => {
                     const remainingAmount = nextMilestone - currentBalance;
                     const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
-                    
-                    // Convert weeks to months and years for display
-                    const totalMonths = Math.ceil(weeksToMilestone / 4.33); // Average weeks per month
-                    const years = Math.floor(totalMonths / 12);
-                    const months = totalMonths % 12;
+
+                    // Convert weeks to years, months, and weeks for display
+                    const years = Math.floor(weeksToMilestone / 52);
+                    const remainingWeeks = weeksToMilestone % 52;
+                    const months = Math.floor(remainingWeeks / 4.345);
+                    const weeks = Math.round(remainingWeeks % 4.345);
 
                         if (trend <= 0) {
                             return 'Trend is negative';
                         }
-                        if (totalMonths > 36) {
+                        if (weeksToMilestone > 156) {
                             return 'Over 3 years';
                         }
+                        if (years === 0 && months === 0) {
+                            return `${weeks} week${weeks !== 1 ? 's' : ''}`;
+                        }
                         if (years === 0) {
-                            return `${months} month${months !== 1 ? 's' : ''}`;
+                            return `${months} month${months !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
                         }
                         if (months === 0) {
-                            return `${years} year${years !== 1 ? 's' : ''}`;
+                            return `${years} year${years !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
                         }
                         return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
                     };
@@ -2990,25 +2974,28 @@
                 const remainingAmount = nextMilestone - currentDraggedBalance;
                 
                 if (timeEstimateElement) {
-                    // Calculate time estimate for the dragged balance
+                    // Calculate time estimate for the dragged balance (trend is now weekly)
                     const weeksToMilestone = trend > 0 ? Math.ceil(remainingAmount / trend) : Infinity;
-                    const totalMonths = Math.ceil(weeksToMilestone / 4.33);
-                    const years = Math.floor(totalMonths / 12);
-                    const months = totalMonths % 12;
+                    const years = Math.floor(weeksToMilestone / 52);
+                    const remainingWeeks = weeksToMilestone % 52;
+                    const months = Math.floor(remainingWeeks / 4.345);
+                    const weeks = Math.round(remainingWeeks % 4.345);
 
                     let timeEstimate;
                     if (trend <= 0) {
                         timeEstimate = 'Trend is negative';
-                    } else if (totalMonths > 36) {
+                    } else if (weeksToMilestone > 156) {
                         timeEstimate = 'Over 3 years';
+                    } else if (years === 0 && months === 0) {
+                        timeEstimate = `${weeks} week${weeks !== 1 ? 's' : ''}`;
                     } else if (years === 0) {
-                        timeEstimate = `${months} month${months !== 1 ? 's' : ''}`;
+                        timeEstimate = `${months} month${months !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
                     } else if (months === 0) {
-                        timeEstimate = `${years} year${years !== 1 ? 's' : ''}`;
+                        timeEstimate = `${years} year${years !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
                     } else {
                         timeEstimate = `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
                     }
-                    
+
                     timeEstimateElement.textContent = timeEstimate;
                 }
                 if (remainingAmountElement) {
@@ -3071,7 +3058,7 @@
                             goalsMap.set(goal.amount, goal);
                         });
 
-                        // Find the next goal with a target date (sorted by date, most recent first)
+                        // Find the next goal with a target date (sorted by date, earliest first)
                         const goalsWithTargets = goalsData.goals
                             .filter(g => g.target_date && g.amount > currentBalance)
                             .sort((a, b) => new Date(a.target_date) - new Date(b.target_date));
@@ -3080,27 +3067,32 @@
                             nextGoalWithDate = goalsWithTargets[0];
                             const targetDate = new Date(nextGoalWithDate.target_date);
                             const today = new Date();
-                            const monthsRemaining = Math.max(1, (targetDate - today) / (1000 * 60 * 60 * 24 * 30.44));
-                            const amountNeeded = nextGoalWithDate.amount - currentBalance;
-                            targetBasedRate = amountNeeded / monthsRemaining;
+                            const daysRemaining = (targetDate - today) / (1000 * 60 * 60 * 24);
+
+                            // Only use target-based rate if the target date is in the future
+                            if (daysRemaining > 0) {
+                                const weeksRemaining = Math.max(1, daysRemaining / 7);
+                                const amountNeeded = nextGoalWithDate.amount - currentBalance;
+                                targetBasedRate = amountNeeded / weeksRemaining;
+                            }
                         }
                     }
 
                     // Process PELT data
-                    // Get the most recent rate of change (PELT is weekly, convert to monthly)
+                    // Get the most recent rate of change (PELT is already weekly, keep as is)
                     let peltTrend = 0;
                     if (peltData && peltData.rateOfChange && peltData.rateOfChange.data) {
                         const rateData = peltData.rateOfChange.data;
                         // Get the last non-null value from the rate of change data
                         for (let i = rateData.length - 1; i >= 0; i--) {
                             if (rateData[i] !== null) {
-                                peltTrend = rateData[i] * 4.33; // Convert weekly to monthly
+                                peltTrend = rateData[i]; // Keep as weekly rate
                                 break;
                             }
                         }
                     }
 
-                    // Use target-based rate if available, otherwise use PELT (both are now monthly)
+                    // Use target-based rate if available, otherwise use PELT (both are now weekly)
                     let defaultTrend = targetBasedRate > 0 ? targetBasedRate : peltTrend;
 
                     // Calculate actual 2-month average savings rate - simpler approach
@@ -3220,18 +3212,22 @@
                             const nextGoal = sortedGoals.find(g => g.amount > newBalance);
                             if (nextGoal && currentRate > 0) {
                                 const remainingAmount = nextGoal.amount - newBalance;
-                                const monthsToGoal = Math.ceil(remainingAmount / currentRate);
-                                const years = Math.floor(monthsToGoal / 12);
-                                const months = monthsToGoal % 12;
+                                const weeksToGoal = Math.ceil(remainingAmount / currentRate);
+                                const years = Math.floor(weeksToGoal / 52);
+                                const remainingWeeks = weeksToGoal % 52;
+                                const months = Math.floor(remainingWeeks / 4.345);
+                                const weeks = Math.round(remainingWeeks % 4.345);
 
-                                if (monthsToGoal <= 0 || currentRate <= 0) {
+                                if (weeksToGoal <= 0 || currentRate <= 0) {
                                     timeEstimateElement.textContent = 'Trend is negative';
-                                } else if (monthsToGoal > 36) {
+                                } else if (weeksToGoal > 156) {
                                     timeEstimateElement.textContent = 'Over 3 years';
+                                } else if (years === 0 && months === 0) {
+                                    timeEstimateElement.textContent = `${weeks} week${weeks !== 1 ? 's' : ''}`;
                                 } else if (years === 0) {
-                                    timeEstimateElement.textContent = `${months} month${months !== 1 ? 's' : ''}`;
+                                    timeEstimateElement.textContent = `${months} month${months !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
                                 } else if (months === 0) {
-                                    timeEstimateElement.textContent = `${years} year${years !== 1 ? 's' : ''}`;
+                                    timeEstimateElement.textContent = `${years} year${years !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
                                 } else {
                                     timeEstimateElement.textContent = `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
                                 }
@@ -3741,7 +3737,39 @@
                                 grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
                                 gap: 16px;
                                 margin-bottom: 20px;
+                                max-height: 600px;
+                                overflow-y: auto;
+                                padding-right: 10px;
+                                padding-bottom: 20px;
                             }
+
+                            /* Scrollbar styling for goals container */
+                            .goals-container::-webkit-scrollbar {
+                                width: 8px;
+                            }
+
+                            .goals-container::-webkit-scrollbar-track {
+                                background: #f1f1f1;
+                                border-radius: 4px;
+                            }
+
+                            .goals-container::-webkit-scrollbar-thumb {
+                                background: #888;
+                                border-radius: 4px;
+                            }
+
+                            .goals-container::-webkit-scrollbar-thumb:hover {
+                                background: #555;
+                            }
+
+                            /* Add margin to last goal card to prevent cropping */
+                            .goals-container::after {
+                                content: '';
+                                display: block;
+                                height: 20px;
+                                grid-column: 1 / -1;
+                            }
+
                             .goal-card {
                                 background: white;
                                 border-radius: 12px;
@@ -3952,9 +3980,9 @@
                             </div>
                             <div class="stat-card-compact">
                                 <div class="stat-card-label" style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                                    <span>Monthly Savings Rate</span>
+                                    <span>Weekly Savings Rate</span>
                                     <span style="font-size: 0.85em; font-weight: 600; color: #4b5563;">
-                                        Actual: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(twoMonthAvgRate)}/mo
+                                        Actual: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(twoMonthAvgRate / 4.345)}/wk
                                     </span>
                                 </div>
                                 <div class="stat-card-value" id="trend-display">
@@ -3966,9 +3994,9 @@
                                            id="weekly-rate-input"
                                            class="rate-input-inline"
                                            value="${defaultTrend.toFixed(0)}"
-                                           step="100"
+                                           step="25"
                                            placeholder="Rate">
-                                    <span class="rate-unit-inline">/mo</span>
+                                    <span class="rate-unit-inline">/wk</span>
                                     <button class="reset-btn-inline" id="reset-rate-btn">
                                         <i class="fas fa-undo"></i>
                                     </button>
@@ -4024,7 +4052,7 @@
 
                                 if (goal && currentBalance < goal.amount && newRate > 0) {
                                     const remaining = goal.amount - currentBalance;
-                                    const monthsToGoal = remaining / newRate;
+                                    const weeksToGoal = remaining / newRate;
 
                                     // Find both time estimate elements
                                     const timeEstimates = card.querySelectorAll('.goal-time-estimate');
@@ -4034,15 +4062,24 @@
                                     // Update regular time to goal
                                     if (regularTimeEstimate) {
                                         let timeText = '';
-                                        if (monthsToGoal < 12) {
-                                            timeText = `${monthsToGoal.toFixed(1)} month${monthsToGoal !== 1 ? 's' : ''}`;
+                                        if (weeksToGoal < 52) {
+                                            const months = Math.floor(weeksToGoal / 4.345);
+                                            const weeks = Math.round(weeksToGoal % 4.345);
+                                            if (months === 0) {
+                                                timeText = `${weeks} week${weeks !== 1 ? 's' : ''}`;
+                                            } else if (weeks === 0) {
+                                                timeText = `${months} month${months !== 1 ? 's' : ''}`;
+                                            } else {
+                                                timeText = `${months}mo ${weeks}w`;
+                                            }
                                         } else {
-                                            const years = Math.floor(monthsToGoal / 12);
-                                            const remainingMonths = monthsToGoal % 12;
-                                            if (remainingMonths < 0.1) {
+                                            const years = Math.floor(weeksToGoal / 52);
+                                            const remainingWeeks = Math.round(weeksToGoal % 52);
+                                            const months = Math.floor(remainingWeeks / 4.345);
+                                            if (months < 1) {
                                                 timeText = `${years} year${years !== 1 ? 's' : ''}`;
                                             } else {
-                                                timeText = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                                timeText = `${years}y ${months}mo`;
                                             }
                                         }
 
@@ -4053,9 +4090,9 @@
                                             const today = new Date();
                                             const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
                                             if (daysRemaining > 0) {
-                                                const monthsRemaining = daysRemaining / 30.44;
-                                                // Add tolerance of 0.5 months to account for rounding
-                                                if (monthsToGoal <= monthsRemaining + 0.5) {
+                                                const weeksRemaining = daysRemaining / 7;
+                                                // Add tolerance of 2 weeks to account for rounding
+                                                if (weeksToGoal <= weeksRemaining + 2) {
                                                     regularTimeEstimate.classList.add('on-track');
                                                 } else {
                                                     regularTimeEstimate.classList.add('off-track');
@@ -4073,18 +4110,27 @@
                                         const cumulativeRemaining = Math.max(0, totalTargetWithPrior - currentBalance);
 
                                         if (cumulativeRemaining > 0) {
-                                            const cumulativeMonths = cumulativeRemaining / newRate;
+                                            const cumulativeWeeks = cumulativeRemaining / newRate;
                                             let cumulativeText = '';
 
-                                            if (cumulativeMonths < 12) {
-                                                cumulativeText = `${cumulativeMonths.toFixed(1)} month${cumulativeMonths !== 1 ? 's' : ''}`;
+                                            if (cumulativeWeeks < 52) {
+                                                const months = Math.floor(cumulativeWeeks / 4.345);
+                                                const weeks = Math.round(cumulativeWeeks % 4.345);
+                                                if (months === 0) {
+                                                    cumulativeText = `${weeks} week${weeks !== 1 ? 's' : ''}`;
+                                                } else if (weeks === 0) {
+                                                    cumulativeText = `${months} month${months !== 1 ? 's' : ''}`;
+                                                } else {
+                                                    cumulativeText = `${months}mo ${weeks}w`;
+                                                }
                                             } else {
-                                                const years = Math.floor(cumulativeMonths / 12);
-                                                const remainingMonths = cumulativeMonths % 12;
-                                                if (remainingMonths < 0.1) {
+                                                const years = Math.floor(cumulativeWeeks / 52);
+                                                const remainingWeeks = Math.round(cumulativeWeeks % 52);
+                                                const months = Math.floor(remainingWeeks / 4.345);
+                                                if (months < 1) {
                                                     cumulativeText = `${years} year${years !== 1 ? 's' : ''}`;
                                                 } else {
-                                                    cumulativeText = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                                    cumulativeText = `${years}y ${months}mo`;
                                                 }
                                             }
 
@@ -4095,9 +4141,9 @@
                                                 const today = new Date();
                                                 const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
                                                 if (daysRemaining > 0) {
-                                                    const monthsRemaining = daysRemaining / 30.44;
-                                                    // Add tolerance of 0.5 months to account for rounding
-                                                    if (cumulativeMonths <= monthsRemaining + 0.5) {
+                                                    const weeksRemaining = daysRemaining / 7;
+                                                    // Add tolerance of 2 weeks to account for rounding
+                                                    if (cumulativeWeeks <= weeksRemaining + 2) {
                                                         cumulativeTimeEstimate.classList.add('on-track');
                                                     } else {
                                                         cumulativeTimeEstimate.classList.add('off-track');
@@ -4500,9 +4546,9 @@
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label" style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span>Monthly Savings Rate</span>
+                                    <span>Weekly Savings Rate</span>
                                     <span style="font-size: 0.85em; font-weight: 600; color: #4b5563;">
-                                        Actual: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(twoMonthAvgRate)}/mo
+                                        Actual: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(twoMonthAvgRate / 4.345)}/wk
                                     </span>
                                 </div>
                                 <div class="stat-value">
@@ -4510,7 +4556,7 @@
                                         ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(defaultTrend)}
                                     </span>
                                     <span class="trend-indicator ${defaultTrend >= 0 ? 'trend-positive' : 'trend-negative'}">
-                                        ${defaultTrend >= 0 ? '↗' : '↘'} per month
+                                        ${defaultTrend >= 0 ? '↗' : '↘'} per week
                                     </span>
                                 </div>
                                 <div class="rate-input-container">
@@ -4518,22 +4564,66 @@
                                            id="weekly-rate-input"
                                            class="rate-input"
                                            value="${defaultTrend.toFixed(0)}"
-                                           step="100"
+                                           step="25"
                                            placeholder="Enter rate">
-                                    <span class="rate-unit">$/month</span>
+                                    <span class="rate-unit">$/week</span>
                                     <button class="reset-button" id="reset-rate-btn">Reset to PELT</button>
                                 </div>
                                 <div class="small text-muted mt-2">
-                                    Based on PELT analysis
+                                    ${targetBasedRate > 0 ? `Rate to reach ${nextGoalWithDate.name} by ${new Date(nextGoalWithDate.target_date).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}` : 'Based on PELT analysis'}
                                 </div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">Estimated Time to Next Milestone</div>
                                 <div class="stat-value" id="time-estimate-value">
-                                    ${calculateTimeEstimate(defaultTrend)}
+                                    ${(() => {
+                                        const nextGoal = sortedGoals.find(g => g.amount > currentBalance);
+                                        if (!nextGoal) return 'No goals set';
+
+                                        const remainingAmount = nextGoal.amount - currentBalance;
+                                        const weeksToMilestone = defaultTrend > 0 ? Math.ceil(remainingAmount / defaultTrend) : Infinity;
+
+                                        // Debug logging
+                                        console.log('Time Estimate Calculation:', {
+                                            currentBalance,
+                                            nextGoalAmount: nextGoal.amount,
+                                            remainingAmount,
+                                            defaultTrend,
+                                            weeksToMilestone
+                                        });
+
+                                        const years = Math.floor(weeksToMilestone / 52);
+                                        const remainingWeeks = weeksToMilestone % 52;
+                                        const months = Math.floor(remainingWeeks / 4.345);
+                                        const weeks = Math.round(remainingWeeks % 4.345);
+
+                                        if (defaultTrend <= 0) {
+                                            return 'Trend is negative';
+                                        }
+                                        if (weeksToMilestone > 156) {
+                                            return 'Over 3 years';
+                                        }
+                                        if (years === 0 && months === 0) {
+                                            return `${weeks} week${weeks !== 1 ? 's' : ''}`;
+                                        }
+                                        if (years === 0) {
+                                            return `${months} month${months !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
+                                        }
+                                        if (months === 0) {
+                                            return `${years} year${years !== 1 ? 's' : ''}${weeks > 0 ? ` ${weeks} week${weeks !== 1 ? 's' : ''}` : ''}`;
+                                        }
+                                        return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`;
+                                    })()}
                                 </div>
                                 <div class="small text-muted mt-2" id="remaining-amount">
-                                    ${defaultTrend > 0 ? `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(nextMilestone - currentBalance)} more` : ''}
+                                    ${(() => {
+                                        const nextGoal = sortedGoals.find(g => g.amount > currentBalance);
+                                        if (nextGoal && defaultTrend > 0) {
+                                            const remaining = nextGoal.amount - currentBalance;
+                                            return `Need ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(remaining)} more to reach ${nextGoal.name}`;
+                                        }
+                                        return '';
+                                    })()}
                                 </div>
                             </div>
                         </div>
@@ -4578,7 +4668,7 @@
 
                                 if (goal && currentBalance < goal.amount && newRate > 0) {
                                     const remaining = goal.amount - currentBalance;
-                                    const monthsToGoal = remaining / newRate;
+                                    const weeksToGoal = remaining / newRate;
 
                                     // Find both time estimate elements
                                     const timeEstimates = card.querySelectorAll('.goal-time-estimate');
@@ -4588,15 +4678,24 @@
                                     // Update regular time to goal
                                     if (regularTimeEstimate) {
                                         let timeText = '';
-                                        if (monthsToGoal < 12) {
-                                            timeText = `${monthsToGoal.toFixed(1)} month${monthsToGoal !== 1 ? 's' : ''}`;
+                                        if (weeksToGoal < 52) {
+                                            const months = Math.floor(weeksToGoal / 4.345);
+                                            const weeks = Math.round(weeksToGoal % 4.345);
+                                            if (months === 0) {
+                                                timeText = `${weeks} week${weeks !== 1 ? 's' : ''}`;
+                                            } else if (weeks === 0) {
+                                                timeText = `${months} month${months !== 1 ? 's' : ''}`;
+                                            } else {
+                                                timeText = `${months}mo ${weeks}w`;
+                                            }
                                         } else {
-                                            const years = Math.floor(monthsToGoal / 12);
-                                            const remainingMonths = monthsToGoal % 12;
-                                            if (remainingMonths < 0.1) {
+                                            const years = Math.floor(weeksToGoal / 52);
+                                            const remainingWeeks = Math.round(weeksToGoal % 52);
+                                            const months = Math.floor(remainingWeeks / 4.345);
+                                            if (months < 1) {
                                                 timeText = `${years} year${years !== 1 ? 's' : ''}`;
                                             } else {
-                                                timeText = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                                timeText = `${years}y ${months}mo`;
                                             }
                                         }
 
@@ -4607,9 +4706,9 @@
                                             const today = new Date();
                                             const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
                                             if (daysRemaining > 0) {
-                                                const monthsRemaining = daysRemaining / 30.44;
-                                                // Add tolerance of 0.5 months to account for rounding
-                                                if (monthsToGoal <= monthsRemaining + 0.5) {
+                                                const weeksRemaining = daysRemaining / 7;
+                                                // Add tolerance of 2 weeks to account for rounding
+                                                if (weeksToGoal <= weeksRemaining + 2) {
                                                     regularTimeEstimate.classList.add('on-track');
                                                 } else {
                                                     regularTimeEstimate.classList.add('off-track');
@@ -4627,18 +4726,27 @@
                                         const cumulativeRemaining = Math.max(0, totalTargetWithPrior - currentBalance);
 
                                         if (cumulativeRemaining > 0) {
-                                            const cumulativeMonths = cumulativeRemaining / newRate;
+                                            const cumulativeWeeks = cumulativeRemaining / newRate;
                                             let cumulativeText = '';
 
-                                            if (cumulativeMonths < 12) {
-                                                cumulativeText = `${cumulativeMonths.toFixed(1)} month${cumulativeMonths !== 1 ? 's' : ''}`;
+                                            if (cumulativeWeeks < 52) {
+                                                const months = Math.floor(cumulativeWeeks / 4.345);
+                                                const weeks = Math.round(cumulativeWeeks % 4.345);
+                                                if (months === 0) {
+                                                    cumulativeText = `${weeks} week${weeks !== 1 ? 's' : ''}`;
+                                                } else if (weeks === 0) {
+                                                    cumulativeText = `${months} month${months !== 1 ? 's' : ''}`;
+                                                } else {
+                                                    cumulativeText = `${months}mo ${weeks}w`;
+                                                }
                                             } else {
-                                                const years = Math.floor(cumulativeMonths / 12);
-                                                const remainingMonths = cumulativeMonths % 12;
-                                                if (remainingMonths < 0.1) {
+                                                const years = Math.floor(cumulativeWeeks / 52);
+                                                const remainingWeeks = Math.round(cumulativeWeeks % 52);
+                                                const months = Math.floor(remainingWeeks / 4.345);
+                                                if (months < 1) {
                                                     cumulativeText = `${years} year${years !== 1 ? 's' : ''}`;
                                                 } else {
-                                                    cumulativeText = `${years}y ${remainingMonths.toFixed(1)}m`;
+                                                    cumulativeText = `${years}y ${months}mo`;
                                                 }
                                             }
 
@@ -4649,9 +4757,9 @@
                                                 const today = new Date();
                                                 const daysRemaining = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
                                                 if (daysRemaining > 0) {
-                                                    const monthsRemaining = daysRemaining / 30.44;
-                                                    // Add tolerance of 0.5 months to account for rounding
-                                                    if (cumulativeMonths <= monthsRemaining + 0.5) {
+                                                    const weeksRemaining = daysRemaining / 7;
+                                                    // Add tolerance of 2 weeks to account for rounding
+                                                    if (cumulativeWeeks <= weeksRemaining + 2) {
                                                         cumulativeTimeEstimate.classList.add('on-track');
                                                     } else {
                                                         cumulativeTimeEstimate.classList.add('off-track');
