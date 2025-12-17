@@ -3387,7 +3387,7 @@
                                     ${daysRemaining > 0 && !isAchieved ? `
                                         <div class="goal-stat">
                                             <span class="stat-label">Time Left</span>
-                                            <span class="stat-value ${daysRemaining < 30 ? 'urgent' : ''}">${
+                                            <span class="stat-value">${
                                                 daysRemaining < 30 ? `${daysRemaining} days` :
                                                 daysRemaining < 365 ? `${Math.ceil(daysRemaining / 30)} months` :
                                                 `${Math.floor(daysRemaining / 365)}y ${Math.ceil((daysRemaining % 365) / 30)}m`
@@ -3734,7 +3734,7 @@
 
                             .goals-container {
                                 display: grid;
-                                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                                grid-template-columns: 1fr;
                                 gap: 16px;
                                 margin-bottom: 20px;
                                 max-height: 600px;
@@ -3766,19 +3766,19 @@
                             .goals-container::after {
                                 content: '';
                                 display: block;
-                                height: 20px;
+                                height: 200px;
                                 grid-column: 1 / -1;
                             }
 
                             .goal-card {
                                 background: white;
                                 border-radius: 12px;
-                                padding: 20px;
+                                padding: 16px 20px;
                                 border: 2px solid #e5e7eb;
                                 transition: all 0.3s ease;
                                 position: relative;
                                 overflow: hidden;
-                                min-height: 280px;
+                                min-height: auto;
                                 display: flex;
                                 flex-direction: column;
                             }
@@ -3815,20 +3815,20 @@
                             .goal-card-header {
                                 display: flex;
                                 align-items: center;
-                                gap: 14px;
-                                margin-bottom: 16px;
+                                gap: 12px;
+                                margin-bottom: 12px;
                                 position: relative;
                             }
                             .goal-icon-wrapper {
-                                width: 56px;
-                                height: 56px;
-                                border-radius: 14px;
+                                width: 44px;
+                                height: 44px;
+                                border-radius: 12px;
                                 background: linear-gradient(135deg, #8b5cf6, #6366f1);
                                 display: flex;
                                 align-items: center;
                                 justify-content: center;
                                 color: white;
-                                font-size: 1.5rem;
+                                font-size: 1.2rem;
                                 flex-shrink: 0;
                                 box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
                             }
@@ -3840,13 +3840,13 @@
                                 flex: 1;
                             }
                             .goal-name {
-                                font-size: 1.05rem;
+                                font-size: 1rem;
                                 font-weight: 600;
                                 color: #1f2937;
-                                margin: 0 0 4px 0;
+                                margin: 0 0 2px 0;
                             }
                             .goal-amount {
-                                font-size: 1.4rem;
+                                font-size: 1.2rem;
                                 font-weight: 700;
                                 background: linear-gradient(135deg, #8b5cf6, #6366f1);
                                 -webkit-background-clip: text;
@@ -3887,11 +3887,11 @@
                                 50% { transform: scale(1.2); }
                             }
                             .goal-progress-bar {
-                                height: 8px;
+                                height: 6px;
                                 background: #e5e7eb;
-                                border-radius: 8px;
+                                border-radius: 6px;
                                 overflow: hidden;
-                                margin-bottom: 16px;
+                                margin-bottom: 10px;
                             }
                             .goal-progress-fill {
                                 height: 100%;
@@ -3919,24 +3919,24 @@
                             }
                             .goal-details {
                                 display: grid;
-                                grid-template-columns: 1fr 1fr;
-                                gap: 12px;
+                                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                                gap: 16px 20px;
                                 flex: 1;
                             }
                             .goal-stat {
                                 display: flex;
                                 flex-direction: column;
-                                gap: 4px;
+                                gap: 2px;
                             }
                             .stat-label {
-                                font-size: 0.7rem;
+                                font-size: 0.65rem;
                                 color: #6b7280;
                                 font-weight: 600;
                                 text-transform: uppercase;
                                 letter-spacing: 0.05em;
                             }
                             .stat-value {
-                                font-size: 0.9rem;
+                                font-size: 0.85rem;
                                 color: #1f2937;
                                 font-weight: 600;
                             }
