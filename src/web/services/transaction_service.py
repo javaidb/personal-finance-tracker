@@ -465,16 +465,16 @@ class TransactionService:
             df['DateTime'] = pd.to_datetime(df['DateTime'])
             df = df.sort_values('DateTime')
             
-            # Group by date to get daily balances using running_balance
+            # Group by date to get daily balances using running_balance_plus_investments
             daily_df = df.groupby('DateTime').agg({
-                'running_balance': 'last'  # Take the last balance for each day
+                'running_balance_plus_investments': 'last'  # Take the last balance including investments for each day
             }).reset_index()
-            
-            # Ensure running_balance is numeric
-            daily_df['running_balance'] = pd.to_numeric(daily_df['running_balance'], errors='coerce')
-            
-            # Drop any rows where running_balance is NaN after conversion
-            daily_df = daily_df.dropna(subset=['running_balance'])
+
+            # Ensure running_balance_plus_investments is numeric
+            daily_df['running_balance_plus_investments'] = pd.to_numeric(daily_df['running_balance_plus_investments'], errors='coerce')
+
+            # Drop any rows where running_balance_plus_investments is NaN after conversion
+            daily_df = daily_df.dropna(subset=['running_balance_plus_investments'])
             
             if len(daily_df) < 2:
                 return {
@@ -498,7 +498,7 @@ class TransactionService:
             
             from ruptures import Pelt
             model = Pelt(model=segment_settings['model'], min_size=segment_settings['min_size'], jump=segment_settings['jump'])
-            model.fit(daily_df['running_balance'].values.reshape(-1, 1))
+            model.fit(daily_df['running_balance_plus_investments'].values.reshape(-1, 1))
             change_points = model.predict(pen=segment_settings['penalty'])
             
             # Ensure first and last points are included
@@ -514,7 +514,7 @@ class TransactionService:
                 start_idx = change_points[i]
                 end_idx = change_points[i + 1]
                 segment_time = daily_df['numeric_time'].iloc[start_idx:end_idx].values
-                segment_balance = daily_df['running_balance'].iloc[start_idx:end_idx].values
+                segment_balance = daily_df['running_balance_plus_investments'].iloc[start_idx:end_idx].values
                 if len(segment_time) >= 2:
                     coeffs = np.polyfit(segment_time, segment_balance, 1)
                     segment_gradients.append(coeffs[0])
@@ -559,7 +559,7 @@ class TransactionService:
                 start_idx = change_points[i]
                 end_idx = change_points[i + 1]
                 segment_time = daily_df['numeric_time'].iloc[start_idx:end_idx].values
-                segment_balance = daily_df['running_balance'].iloc[start_idx:end_idx].values
+                segment_balance = daily_df['running_balance_plus_investments'].iloc[start_idx:end_idx].values
                 if len(segment_time) >= 2:
                     coeffs = np.polyfit(segment_time, segment_balance, 1)
                     segment_y_values = np.polyval(coeffs, segment_time)
@@ -572,7 +572,7 @@ class TransactionService:
                         this_segment_end = segment_balance[-5:] if len(segment_balance) >= 5 else segment_balance
                         next_segment_start_idx = change_points[i+1]
                         next_segment_end_idx = change_points[i+2] if i+2 < len(change_points) else len(daily_df)
-                        next_segment_balance = daily_df['running_balance'].iloc[next_segment_start_idx:next_segment_end_idx].values
+                        next_segment_balance = daily_df['running_balance_plus_investments'].iloc[next_segment_start_idx:next_segment_end_idx].values
                         next_segment_start = next_segment_balance[:5] if len(next_segment_balance) >= 5 else next_segment_balance
                         
                         # Calculate averages
@@ -595,7 +595,7 @@ class TransactionService:
                             this_segment_end = segment_balance[-min(5, len(segment_balance)):]
                             next_segment_start_idx = change_points[i+1]
                             next_segment_end_idx = change_points[i+2] if i+2 < len(change_points) else len(daily_df)
-                            next_segment_balance = daily_df['running_balance'].iloc[next_segment_start_idx:next_segment_end_idx].values
+                            next_segment_balance = daily_df['running_balance_plus_investments'].iloc[next_segment_start_idx:next_segment_end_idx].values
                             next_segment_start = next_segment_balance[:min(5, len(next_segment_balance))]
                             
                             # Calculate averages
@@ -611,17 +611,17 @@ class TransactionService:
             trend_values = [None if np.isnan(x) else float(x) for x in trend_values]
             rate_of_change = [None if np.isnan(x) else float(x) for x in rate_of_change]
             
-            # Convert running_balance to float for JSON serialization
-            balance_data = [float(x) for x in daily_df['running_balance'].tolist()]
-            
+            # Convert running_balance_plus_investments to float for JSON serialization
+            balance_data = [float(x) for x in daily_df['running_balance_plus_investments'].tolist()]
+
             # Prepare data for chart.js
             chart_data = {
                 "labels": daily_df['DateTime'].dt.strftime('%Y-%m-%d').tolist(),
                 "datasets": [
                     {
-                        "label": "Balance",
+                        "label": "Balance + Investments",
                         "data": balance_data,
-                        "borderColor": "#5D6D7E",
+                        "borderColor": "#4CAF50",
                         "pointRadius": 2,
                         "fill": False,
                         "yAxisID": "y"
