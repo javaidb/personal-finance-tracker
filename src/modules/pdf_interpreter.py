@@ -572,6 +572,15 @@ class PDFReader(GeneralHelperFns):
 
         def filter_df(df, column, substrings):
             def check_row(row):
+                row_text = ' '.join(str(s) for s in row).lower()
+
+                # Keep IO Transfer and BR Transfer transactions (exception to filtering)
+                if 'io' in row_text and 'transfer' in row_text:
+                    return False
+                if 'br' in row_text and 'transfer' in row_text:
+                    return False
+
+                # Filter out other transfers
                 for item in substrings:
                     if isinstance(item, tuple):
                         if all(any(sub.lower() in s.lower() for s in row) for sub in item):
@@ -579,9 +588,9 @@ class PDFReader(GeneralHelperFns):
                     elif any(item.lower() in s.lower() for s in row):
                         return True
                 return False
-            
+
             return df[~df[column].apply(check_row)]
-        
+
         substrings = ['MB-', ('payment', 'from')]
         df = filter_df(df, 'Processed Details', substrings)
 
@@ -624,9 +633,16 @@ class PDFReader(GeneralHelperFns):
 
         def categorize_strings(row, categories=imported_json):
             nonlocal merchant_matches, pattern_matches, uncategorized, uncategorized_merchants
-            
+
             processed_details = row['Processed Details']
-            
+
+            # Check for IO Transfer or BR Transfer first (before merchant categorization)
+            details_text = ' '.join(processed_details).lower()
+            if 'io' in details_text and 'transfer' in details_text:
+                return pd.Series(['Investment', 'IO Transfer'])
+            if 'br' in details_text and 'transfer' in details_text:
+                return pd.Series(['Investment', 'BR Transfer'])
+
             # Try merchant-based categorization first
             category, merchant = merchant_categorizer.categorize_transaction(processed_details)
             
@@ -1027,7 +1043,13 @@ class PDFReader(GeneralHelperFns):
         def is_transfer(row):
             details_lower = str(row['Details']).lower()
             transaction_type_lower = str(row['Transaction Type']).lower()
-            
+
+            # Keep IO Transfer and BR Transfer (exceptions to filtering)
+            if 'io transfer' in details_lower or ('io' in details_lower and 'transfer' in details_lower):
+                return False
+            if 'br transfer' in details_lower or ('br' in details_lower and 'transfer' in details_lower):
+                return False
+
             # Check for various types of transfers
             transfer_indicators = [
                 'mb-transfer',
@@ -1042,7 +1064,7 @@ class PDFReader(GeneralHelperFns):
                 'mb credit card payment to',  # Outgoing credit card payment
                 'mb credit card/loc pay to'  # Another outgoing format
             ]
-            
+
             return any(indicator in details_lower for indicator in transfer_indicators)
         
         # Create a non-transfer version of the DataFrame
