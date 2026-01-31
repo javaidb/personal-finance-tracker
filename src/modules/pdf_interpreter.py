@@ -580,6 +580,26 @@ class PDFReader(GeneralHelperFns):
                 if 'br' in row_text and 'transfer' in row_text:
                     return False
 
+                # Special handling for MB- transfers
+                if 'mb-' in row_text or 'mb ' in row_text:
+                    # Always filter out MB-TRANSFER FROM (incoming transfers)
+                    if 'from' in row_text:
+                        return True
+
+                    credit_card_keywords = [
+                        'credit card',
+                        'loc pay',
+                        'visa',
+                        'mastercard',
+                        'amex',
+                        'american express'
+                    ]
+                    # If it's an MB-transfer to a credit card, filter it out
+                    if any(keyword in row_text for keyword in credit_card_keywords):
+                        return True
+                    # Otherwise, keep the MB-transfer (e.g., to account number)
+                    return False
+
                 # Filter out other transfers
                 for item in substrings:
                     if isinstance(item, tuple):
@@ -591,7 +611,7 @@ class PDFReader(GeneralHelperFns):
 
             return df[~df[column].apply(check_row)]
 
-        substrings = ['MB-', ('payment', 'from')]
+        substrings = [('payment', 'from')]  # Removed 'MB-' from blanket filtering
         df = filter_df(df, 'Processed Details', substrings)
 
         return df
@@ -1050,9 +1070,29 @@ class PDFReader(GeneralHelperFns):
             if 'br transfer' in details_lower or ('br' in details_lower and 'transfer' in details_lower):
                 return False
 
-            # Check for various types of transfers
+            # Special handling for MB-TRANSFER
+            if 'mb-transfer' in details_lower or 'mb transfer' in details_lower:
+                # Always filter out MB-TRANSFER FROM (incoming transfers)
+                if 'from' in details_lower:
+                    return True
+
+                # Filter out if it's to a credit card
+                credit_card_keywords = [
+                    'credit card',
+                    'loc pay',
+                    'visa',
+                    'mastercard',
+                    'amex',
+                    'american express'
+                ]
+                # If it's an MB-transfer to a credit card, filter it out
+                if any(keyword in details_lower for keyword in credit_card_keywords):
+                    return True
+                # Otherwise, keep the MB-transfer (e.g., to account number)
+                return False
+
+            # Check for other types of transfers to filter out
             transfer_indicators = [
-                'mb-transfer',
                 'transfer to',
                 'transfer from',
                 'mb-credit card/loc pay',
@@ -1107,7 +1147,36 @@ class PDFReader(GeneralHelperFns):
             
             # Drop the temporary column
             df_no_transfers = df_no_transfers.drop(columns=['balance_diff'])
-        
+
+        # Apply savings transfer offset adjustment
+        # Identify savings transfer transactions (case-insensitive)
+        savings_transfer_mask = df_no_transfers['Classification'].str.lower() == 'savings transfer'
+
+        # Apply savings transfer offset if any savings transfers exist
+        if savings_transfer_mask.any():
+            # Ensure sorted by DateTime for chronological processing
+            df_no_transfers = df_no_transfers.sort_values('DateTime')
+
+            # Initialize the savings transfer offset
+            savings_offset = 0
+
+            # Process each row in chronological order
+            for idx in df_no_transfers.index:
+                # If this is a savings transfer transaction, update the offset
+                if savings_transfer_mask[idx]:
+                    # Subtract the amount to apply inverse offset
+                    # If amount is -10000 (withdrawal), offset increases by +10000
+                    # If amount is +500 (deposit), offset decreases by 500
+                    savings_offset -= df_no_transfers.loc[idx, 'Amount']
+
+                # Apply the cumulative savings offset to both balance columns
+                df_no_transfers.loc[idx, 'running_balance'] = (
+                    df_no_transfers.loc[idx, 'running_balance'] + savings_offset
+                )
+                df_no_transfers.loc[idx, 'running_balance_plus_investments'] = (
+                    df_no_transfers.loc[idx, 'running_balance_plus_investments'] + savings_offset
+                )
+
         return df_no_transfers  # Return version without transfers
 
     def __identify_rent_payments(self, df_in, rent_ranges):
