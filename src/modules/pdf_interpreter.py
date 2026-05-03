@@ -317,6 +317,153 @@ class PDFReader(GeneralHelperFns):
             print(f"Error calculating transaction year: {str(e)}")
             return row['Statement Year']  # fallback to statement year
 
+    # -------------------------------------------------------------------------
+    # CSV parsing helpers
+    # -------------------------------------------------------------------------
+
+    def __read_csv_file(self, csv_file_path):
+        """Read a Scotiabank CSV export and return (DataFrame, has_filter_col).
+
+        Handles the UTF-8 BOM present in some exports, strips column-name
+        whitespace, and drops entirely blank rows.
+        """
+        df = pd.read_csv(csv_file_path, encoding='utf-8-sig', dtype=str)
+        df.columns = df.columns.str.strip()
+        df.dropna(how='all', inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        has_filter_col = 'Filter' in df.columns
+        return df, has_filter_col
+
+    def normalize_csv_to_transactions(self, csv_df, account_type, has_filter_col):
+        """Convert a CSV DataFrame to the same list-of-dicts schema that
+        process_transactions_from_lines() produces for PDFs.
+
+        Deposit accounts (Chequing/Savings) output:
+            Transaction Date, Transaction Type, Amount, Balance, Details
+
+        Credit accounts output:
+            Reference #, Transaction Date, Post Date, Details, Amount, Balance, Transaction Type
+        """
+        df = csv_df.copy()
+
+        # Drop metadata/filter column
+        if has_filter_col and 'Filter' in df.columns:
+            df.drop(columns=['Filter'], inplace=True)
+
+        # Drop rows with no Date (trailing blank rows, header-only rows)
+        if 'Date' in df.columns:
+            df = df[df['Date'].notna() & (df['Date'].astype(str).str.strip() != '')]
+        df.reset_index(drop=True, inplace=True)
+
+        if df.empty:
+            return []
+
+        # Strip whitespace from string columns
+        for col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+
+        def _clean_amount(val):
+            """Strip quotes, return as string so df_preprocessing .str.replace() works correctly."""
+            return str(val).replace('"', '').replace("'", '').strip()
+
+        # Build Details from Description + Sub-description
+        desc_col = 'Description' if 'Description' in df.columns else None
+        sub_col = 'Sub-description' if 'Sub-description' in df.columns else None
+
+        def _build_details(row):
+            desc = row[desc_col].strip() if desc_col else ''
+            sub = row[sub_col].strip() if sub_col and row[sub_col] not in ('', 'nan', 'None') else ''
+            return f"{desc} - {sub}" if sub else desc
+
+        is_credit = account_type.lower() == 'credit'
+
+        transactions = []
+        for _, row in df.iterrows():
+            details = _build_details(row)
+            amount = _clean_amount(row.get('Amount', '0'))
+            date_val = row.get('Date', '')
+
+            if is_credit:
+                # Drop Status col — always "posted", not in PDF schema
+                transactions.append({
+                    'Reference #': '',
+                    'Transaction Date': date_val,
+                    'Post Date': '',
+                    'Details': details,
+                    'Amount': amount,
+                    'Balance': '0',
+                    'Transaction Type': '',
+                })
+            else:
+                balance = _clean_amount(row.get('Balance', '0'))
+                txn_type = row.get('Type of Transaction', '')
+                transactions.append({
+                    'Transaction Date': date_val,
+                    'Transaction Type': txn_type,
+                    'Amount': amount,
+                    'Balance': balance,
+                    'Details': details,
+                })
+
+        return transactions
+
+    # -------------------------------------------------------------------------
+    # CSV cache helpers (mirror the PDF cache methods)
+    # -------------------------------------------------------------------------
+
+    def __get_csv_hash(self, csv_file_path):
+        """MD5 hash of a CSV file for cache invalidation."""
+        with open(csv_file_path, 'rb') as f:
+            return hashlib.md5(f.read()).hexdigest()
+
+    def __get_csv_cache_path(self, csv_hash, metadata):
+        """Return cache path for a CSV, using _csv suffix to avoid collisions
+        with PDF cache entries for the same account/month/year."""
+        cache_dir = paths.ensure_pdf_cache_exists()
+        filename = (
+            f"{metadata['account_type']}_{metadata['account_name']}"
+            f"_{metadata['month']}_{metadata['year']}_csv.json"
+        )
+        filename = re.sub(r'[^\w\-_.]', '_', filename)
+        return os.path.join(cache_dir, filename)
+
+    def __is_csv_cached(self, csv_hash, metadata):
+        cache_path = self.__get_csv_cache_path(csv_hash, metadata)
+        if not os.path.exists(cache_path):
+            return False
+        # Verify the stored hash still matches the file
+        try:
+            with open(cache_path, 'r') as f:
+                cached = json.load(f)
+            return cached.get('metadata', {}).get('csv_hash') == csv_hash
+        except Exception:
+            return False
+
+    def __save_csv_to_cache(self, csv_hash, transactions, metadata):
+        cache_data = {
+            "metadata": {
+                "account_type": metadata['account_type'],
+                "account_name": metadata['account_name'],
+                "statement_month": metadata['month'],
+                "statement_year": metadata['year'],
+                "csv_file": metadata['csv_file'],
+                "cached_date": datetime.now().isoformat(),
+                "csv_hash": csv_hash,
+            },
+            "transactions": transactions,
+        }
+        cache_path = self.__get_csv_cache_path(csv_hash, metadata)
+        with open(cache_path, 'w') as f:
+            json.dump(cache_data, f, indent=4, sort_keys=True)
+
+    def __load_csv_from_cache(self, csv_hash, metadata):
+        cache_path = self.__get_csv_cache_path(csv_hash, metadata)
+        with open(cache_path, 'r') as f:
+            cache_data = json.load(f)
+        return cache_data["transactions"], cache_data["metadata"]
+
+    # -------------------------------------------------------------------------
+
     def __get_pdf_hash(self, pdf_file_path):
         """Generate a hash for the PDF file to use as cache identifier"""
         with open(pdf_file_path, 'rb') as f:
@@ -420,6 +567,26 @@ class PDFReader(GeneralHelperFns):
             print(f"Error clearing PDF cache: {str(e)}")
             return False
 
+    def clear_csv_cache(self):
+        """Delete only the CSV-derived cache entries (*_csv.json).
+        PDF cache and all source files are untouched.
+        Call this then re-run process_raw_df() to pick up the fix.
+        """
+        cache_dir = paths.pdf_cache
+        if not os.path.exists(cache_dir):
+            print("No cache directory found — nothing to clear.")
+            return
+
+        csv_cache_files = [f for f in os.listdir(cache_dir) if f.endswith('_csv.json')]
+        if not csv_cache_files:
+            print("No CSV cache files found.")
+            return
+
+        for f in csv_cache_files:
+            os.remove(os.path.join(cache_dir, f))
+        print(f"Cleared {len(csv_cache_files)} CSV cache file(s): {csv_cache_files}")
+        print("Re-run process_raw_df() to reprocess from the CSV source files.")
+
     def get_cache_info(self):
         """Get information about cached PDFs"""
         cache_dir = paths.pdf_cache
@@ -494,11 +661,53 @@ class PDFReader(GeneralHelperFns):
                     temp_df['Account Name'] = metadata['account_name']
                     overall_df = pd.concat([temp_df, overall_df], ignore_index=True)
 
-        print(f"\nPDF processing summary:")
-        print(f"- {cached_pdfs} PDFs loaded from cache")
-        print(f"- {processed_pdfs} PDFs newly processed")
+                # --- CSV processing block ---
+                csv_files = self.read_all_csv_files(account_type, account_name)
+                if csv_files:
+                    print(f"\nProcessing {len(csv_files)} CSV(s) from {self.bank_name}/{account_type}/{account_name}")
+
+                for csv_file in tqdm(csv_files, desc=f"Reading CSVs from '{account_name}'"):
+                    csv_file_path = os.path.join(
+                        self.base_path, "bank_statements", self.bank_name,
+                        account_type, account_name, csv_file
+                    ) if self.base_path else self.process_import_path(csv_file, account_type, account_name)
+
+                    csv_df, has_filter_col = self.__read_csv_file(csv_file_path)
+                    csv_attrs = self.grab_csv_name_attributes(csv_df)
+                    csv_metadata = {
+                        "year": csv_attrs['year'],
+                        "month": csv_attrs['month'],
+                        "account_type": account_type,
+                        "account_name": account_name,
+                        "csv_file": csv_file,
+                    }
+
+                    csv_hash = self.__get_csv_hash(csv_file_path)
+                    if self.__is_csv_cached(csv_hash, csv_metadata):
+                        transactions, _ = self.__load_csv_from_cache(csv_hash, csv_metadata)
+                        cached_pdfs += 1
+                    else:
+                        print(f"\nProcessing {csv_file}")
+                        transactions = self.normalize_csv_to_transactions(csv_df, account_type, has_filter_col)
+                        self.__save_csv_to_cache(csv_hash, transactions, csv_metadata)
+                        processed_pdfs += 1
+
+                    temp_df = pd.DataFrame(transactions)
+                    pdf_row_counts[csv_file] = len(temp_df)
+                    if temp_df.empty:
+                        continue
+
+                    temp_df['Statement Year'] = csv_metadata['year']
+                    temp_df['Statement Month'] = csv_metadata['month']
+                    temp_df['Account Type'] = csv_metadata['account_type']
+                    temp_df['Account Name'] = csv_metadata['account_name']
+                    overall_df = pd.concat([temp_df, overall_df], ignore_index=True)
+
+        print(f"\nStatement processing summary:")
+        print(f"- {cached_pdfs} statements loaded from cache")
+        print(f"- {processed_pdfs} statements newly processed")
         print(f"- {len(overall_df)} total transactions found")
-        print("\nRows extracted per PDF:")
+        print("\nRows extracted per file:")
         for pdf_file, row_count in sorted(pdf_row_counts.items()):
             print(f"- {pdf_file}: {row_count} rows")
         
@@ -508,23 +717,47 @@ class PDFReader(GeneralHelperFns):
             overall_df['Statement Year'] = pd.to_numeric(overall_df['Statement Year'], errors='coerce')
             overall_df['Statement Month'] = overall_df['Statement Month'].astype(str)
             overall_df['Transaction Date'] = overall_df['Transaction Date'].astype(str)
-            
-            # Calculate Transaction Year using vectorized operations
-            month_str = overall_df['Transaction Date'].str.split().str[0].str.lower()
-            statement_month = overall_df['Statement Month'].str.lower()
-            is_prev_year = (month_str.isin(['nov', 'dec'])) & (statement_month == 'january')
-            overall_df['Transaction Year'] = overall_df['Statement Year'].where(~is_prev_year, overall_df['Statement Year'] - 1)
-            
-            # Create DateTime column
-            overall_df['DateTime'] = overall_df['Transaction Date'] + ' ' + overall_df['Transaction Year'].astype(str)
-            overall_df['DateTime'] = pd.to_datetime(overall_df['DateTime'])
+            overall_df['Transaction Year'] = overall_df['Statement Year'].copy()
+            overall_df['DateTime'] = pd.NaT
+
+            # ISO dates from CSVs (YYYY-MM-DD): parse directly
+            iso_mask = overall_df['Transaction Date'].str.match(r'^\d{4}-\d{2}-\d{2}$', na=False)
+            if iso_mask.any():
+                parsed = pd.to_datetime(overall_df.loc[iso_mask, 'Transaction Date'], errors='coerce')
+                overall_df.loc[iso_mask, 'DateTime'] = parsed
+                overall_df.loc[iso_mask, 'Transaction Year'] = parsed.dt.year
+
+            # Non-ISO dates from PDFs (Mon DD): reconstruct using statement year
+            non_iso = ~iso_mask
+            if non_iso.any():
+                month_str = overall_df.loc[non_iso, 'Transaction Date'].str.split().str[0].str.lower()
+                statement_month = overall_df.loc[non_iso, 'Statement Month'].str.lower()
+                is_prev_year = month_str.isin(['nov', 'dec']) & (statement_month == 'january')
+                overall_df.loc[non_iso, 'Transaction Year'] = overall_df.loc[non_iso, 'Statement Year'].where(
+                    ~is_prev_year, overall_df.loc[non_iso, 'Statement Year'] - 1
+                )
+                overall_df.loc[non_iso, 'DateTime'] = pd.to_datetime(
+                    overall_df.loc[non_iso, 'Transaction Date'] + ' ' +
+                    overall_df.loc[non_iso, 'Transaction Year'].astype(str),
+                    errors='coerce'
+                )
         except Exception as e:
             print(f"Error processing dates: {str(e)}")
             print("Falling back to row-by-row processing...")
             # Fallback to row-by-row processing if vectorized operations fail
             overall_df['Transaction Year'] = overall_df.apply(self.__calculate_transaction_year, axis=1)
-            overall_df['DateTime'] = overall_df['Transaction Date'] + ' ' + overall_df['Transaction Year'].astype(str)
-            overall_df['DateTime'] = pd.to_datetime(overall_df['DateTime'])
+            # For ISO dates in fallback, parse directly; for others, concatenate year
+            iso_mask = overall_df['Transaction Date'].str.match(r'^\d{4}-\d{2}-\d{2}$', na=False)
+            overall_df.loc[iso_mask, 'DateTime'] = pd.to_datetime(
+                overall_df.loc[iso_mask, 'Transaction Date'], errors='coerce'
+            )
+            non_iso = ~iso_mask
+            if non_iso.any():
+                overall_df.loc[non_iso, 'DateTime'] = pd.to_datetime(
+                    overall_df.loc[non_iso, 'Transaction Date'] + ' ' +
+                    overall_df.loc[non_iso, 'Transaction Year'].astype(str),
+                    errors='coerce'
+                )
             
         return overall_df
 
@@ -815,18 +1048,19 @@ class PDFReader(GeneralHelperFns):
                     print('\nDEBUG: recalibrate_amounts rows for Chequing/Ultimate Package 2025-01-15 to 2025-01-17:')
                     print(debug_rows[['DateTime', 'Account Name', 'Balance', 'Amount', 'balance_diff']])
                 
-                # Update amount signs based on balance differences
-                account_df['Amount'] = account_df.apply(
-                    lambda row: (
-                        # If balance decreased, amount should be negative
-                        -abs(row['Amount']) if row['balance_diff'] is not None and row['balance_diff'] < 0
-                        # If balance increased, amount should be positive
-                        else abs(row['Amount']) if row['balance_diff'] is not None and row['balance_diff'] > 0
-                        # If no balance difference (first row), keep original sign
-                        else row['Amount']
-                    ),
-                    axis=1
-                )
+                # CSV rows have Transaction Type 'Credit' or 'Debit' (PDF rows never do).
+                # CSV amounts are already correctly signed — only recalibrate PDF rows.
+                csv_mask = account_df['Transaction Type'].isin(['Credit', 'Debit'])
+                pdf_mask = ~csv_mask
+                valid_diff = account_df['balance_diff'].notna()
+
+                # PDF rows where balance dropped → force negative
+                account_df.loc[pdf_mask & valid_diff & (account_df['balance_diff'] < 0), 'Amount'] = \
+                    -account_df.loc[pdf_mask & valid_diff & (account_df['balance_diff'] < 0), 'Amount'].abs()
+                # PDF rows where balance rose → force positive
+                account_df.loc[pdf_mask & valid_diff & (account_df['balance_diff'] > 0), 'Amount'] = \
+                    account_df.loc[pdf_mask & valid_diff & (account_df['balance_diff'] > 0), 'Amount'].abs()
+                # CSV rows and first PDF row (NaN diff): untouched
                 
                 # Drop temporary column
                 account_df.drop(columns=['balance_diff'], inplace=True)
@@ -1169,7 +1403,9 @@ class PDFReader(GeneralHelperFns):
                     # If amount is +500 (deposit), offset decreases by 500
                     savings_offset -= df_no_transfers.loc[idx, 'Amount']
 
-                # Apply the cumulative savings offset to both balance columns
+                # Apply the cumulative savings offset to both balance columns.
+                # running_balance_plus_investments was built from pre-offset running_balance,
+                # so it also needs the savings correction applied.
                 df_no_transfers.loc[idx, 'running_balance'] = (
                     df_no_transfers.loc[idx, 'running_balance'] + savings_offset
                 )
@@ -1288,11 +1524,11 @@ class PDFReader(GeneralHelperFns):
             
             # Handle transfers
             if 'transfer' in details_lower or 'mb-transfer' in details_lower:
-                # If it's a transfer to another account, it should be negative
-                if 'to' in details_lower:
+                # Use word-boundary checks to avoid false matches like 'customer' containing 'to'
+                words = set(re.split(r'\W+', details_lower))
+                if 'to' in words:
                     return -abs(amount)
-                # If it's a transfer from another account, it should be positive
-                elif 'from' in details_lower:
+                elif 'from' in words:
                     return abs(amount)
             
             # Handle withdrawals
