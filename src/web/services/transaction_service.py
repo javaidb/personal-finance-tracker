@@ -77,22 +77,26 @@ class TransactionService:
         if not description or not self.category_patterns:
             return 'uncategorized'
         
+        # Reload patterns from file to avoid stale in-memory data
+        self.load_categories()
+
         description = description.lower()
         best_match = None
         highest_match_count = 0
-        
+
         for category, data in self.category_patterns.items():
             for pattern in data.get('patterns', []):
                 terms = pattern.get('terms', [])
                 if not terms:
                     continue
-                
-                # Count how many terms from the pattern appear in the description
-                match_count = sum(1 for term in terms if term.lower() in description)
-                if match_count > highest_match_count:
-                    highest_match_count = match_count
-                    best_match = category
-        
+
+                # Require ALL terms to match (consistent with pdf_interpreter categorization)
+                if all(term.lower() in description for term in terms):
+                    match_count = len(terms)
+                    if match_count > highest_match_count:
+                        highest_match_count = match_count
+                        best_match = category
+
         return best_match if best_match else 'uncategorized'
 
     def set_manual_category(self, transaction_id: str, category: str) -> bool:
@@ -812,6 +816,19 @@ class TransactionService:
             return success
         except Exception as e:
             print(f"Error clearing cache: {str(e)}")
+            return False
+
+    def clear_csv_cache(self) -> bool:
+        """Clear only the CSV-derived cache entries and reprocess statements."""
+        try:
+            self.pdf_reader.clear_csv_cache()
+            self.processed_df = None
+            self.pdf_reader.filtered_df = None
+            self.pdf_reader.df_raw = self.pdf_reader.generate_fin_df()
+            self.process_statements()
+            return True
+        except Exception as e:
+            print(f"Error clearing CSV cache: {str(e)}")
             return False
 
     def reprocess_balances(self) -> bool:
