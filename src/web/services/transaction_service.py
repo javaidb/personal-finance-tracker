@@ -814,6 +814,23 @@ class TransactionService:
             print(f"Error clearing cache: {str(e)}")
             return False
 
+    def reprocess_balances(self) -> bool:
+        """Reprocess the balance/investment pipeline.
+
+        Reloads df_raw from cache (re-parses any files whose cache was cleared),
+        then reruns the full processing pipeline. Use after reclassifying transactions
+        or after a code fix that affects how raw data is parsed.
+        """
+        try:
+            self.processed_df = None
+            self.pdf_reader.filtered_df = None
+            self.pdf_reader.df_raw = self.pdf_reader.generate_fin_df()
+            self.process_statements()
+            return True
+        except Exception as e:
+            print(f"Error reprocessing balances: {str(e)}")
+            return False
+
     def df_preprocessing(self, df_in):
         """Preprocess the DataFrame by cleaning and converting data types."""
         print(f"DEBUG: Starting preprocessing with {len(df_in)} rows")
