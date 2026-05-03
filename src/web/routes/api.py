@@ -371,6 +371,21 @@ def clear_cache():
     except Exception as e:
         return jsonify({"error": f"Failed to clear cache: {str(e)}"}), 500
 
+@api_bp.route('/clear_csv_cache', methods=['POST'])
+def clear_csv_cache():
+    """Clear only the CSV-derived cache entries and reprocess."""
+    service = init_transaction_service()
+    if service is None:
+        return jsonify({"error": "No statement reader initialized"}), 400
+    try:
+        success = service.clear_csv_cache()
+        if success:
+            return jsonify({"success": True, "message": "CSV cache cleared and data reloaded"})
+        else:
+            return jsonify({"error": "Failed to clear CSV cache"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Failed to clear CSV cache: {str(e)}"}), 500
+
 @api_bp.route('/merchants/categories')
 def get_merchant_categories():
     """Get all available merchant categories."""
