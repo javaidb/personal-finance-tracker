@@ -419,6 +419,7 @@
                     <div class="p-3">
                         <a href="/merchants" class="btn btn-bank-primary btn-sm w-100 mb-2">Merchant Management</a>
                         <a href="/" class="btn btn-outline-secondary btn-sm w-100 mb-2">Back to Home</a>
+                        <button id="reprocess-btn" class="btn btn-outline-warning btn-sm w-100 mb-2">Reprocess Balance</button>
                         <button id="clear-cache-btn" class="btn btn-outline-danger btn-sm w-100">Clear PDF Cache</button>
                     </div>
                 </div>
@@ -971,6 +972,12 @@
                 });
             }
 
+            // Event listener for balance reprocessing
+            const reprocessBtn = document.getElementById('reprocess-btn');
+            if (reprocessBtn) reprocessBtn.addEventListener('click', function() {
+                reprocessBalances();
+            });
+
             // Event listener for cache clearing
             const clearCacheBtn = document.getElementById('clear-cache-btn');
             if (clearCacheBtn) clearCacheBtn.addEventListener('click', function() {
@@ -1516,6 +1523,26 @@
             nextBtn.disabled = currentPage === maxPages || maxPages === 0;
         }
         
+        function reprocessBalances() {
+            const btn = document.getElementById('reprocess-btn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Reprocessing...'; }
+            fetch('/api/reprocess', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = window.location.href;
+                    } else {
+                        alert('Error: ' + data.error);
+                        if (btn) { btn.disabled = false; btn.textContent = 'Reprocess Balance'; }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error reprocessing balances:', error);
+                    alert('Error reprocessing. See console for details.');
+                    if (btn) { btn.disabled = false; btn.textContent = 'Reprocess Balance'; }
+                });
+        }
+
         function clearPDFCache() {
             if (!confirm('Are you sure you want to clear the PDF cache? You will need to reprocess all PDFs next time.')) {
                 return;
@@ -3924,8 +3951,8 @@
                     throw new Error('Invalid balance data format');
                 }
                 
-                // Extract the last balance value from the datasets
-                const lastDataset = data.datasets[0];
+                // Extract the last balance+investments value for milestones
+                const lastDataset = data.datasets[1] || data.datasets[0];
                 const lastBalance = lastDataset.data[lastDataset.data.length - 1] || 0;
                 
                 // Create a simplified data object for the milestone chart
