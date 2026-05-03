@@ -1322,9 +1322,6 @@ class PDFReader(GeneralHelperFns):
                 # If it's an MB-transfer to a credit card, filter it out
                 if any(keyword in details_lower for keyword in credit_card_keywords):
                     return True
-                # Filter out MB-Transfer paired with "Customer Transfer CR." (not DR. or Investment)
-                if 'customer transfer cr.' in details_lower:
-                    return True
                 # Otherwise, keep the MB-transfer (e.g., to account number)
                 return False
 
