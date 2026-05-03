@@ -57,7 +57,7 @@ class GeneralHelperFns:
     def grab_pdf_name_attributes(self, pdf_name):
         pdf_name = pdf_name.replace('.pdf', '')
         str_atts = re.split(r'[ _]', pdf_name)\
-        
+
         result = {}
         for str_attribute in str_atts:
             month_extracted = self.__extract_month(str_attribute)
@@ -67,6 +67,52 @@ class GeneralHelperFns:
                 result['year'] = str_attribute
 
         return result
+
+    def grab_csv_name_attributes(self, csv_df):
+        """Extract date range attributes from a CSV DataFrame.
+
+        Checks for a Filter column first (newer format), then falls back to
+        scanning the Date column min/max. Returns month/year based on the
+        end date, consistent with PDF statement naming convention.
+        """
+        from datetime import datetime as dt
+        import calendar
+
+        start_date = None
+        end_date = None
+
+        # Try to extract date range from Filter column
+        if 'Filter' in csv_df.columns:
+            filter_values = csv_df['Filter'].dropna().astype(str)
+            for val in filter_values:
+                match = re.search(
+                    r'From date=(\d{4}-\d{2}-\d{2})(?:.*?To date=(\d{4}-\d{2}-\d{2}))?',
+                    val
+                )
+                if match:
+                    start_date = dt.strptime(match.group(1), '%Y-%m-%d')
+                    if match.group(2):
+                        end_date = dt.strptime(match.group(2), '%Y-%m-%d')
+                    break
+
+        # Fallback: derive from Date column
+        if 'Date' in csv_df.columns:
+            dates = pd.to_datetime(csv_df['Date'].dropna(), errors='coerce').dropna()
+            if not dates.empty:
+                if start_date is None:
+                    start_date = dates.min().to_pydatetime()
+                if end_date is None:
+                    end_date = dates.max().to_pydatetime()
+
+        if end_date is None:
+            end_date = start_date
+
+        return {
+            'start_date': start_date,
+            'end_date': end_date,
+            'month': calendar.month_name[end_date.month],
+            'year': str(end_date.year),
+        }
 
     def __process_export_cache_path(self, pdf_file, parent_account_name):
         pdf_atts = self.grab_pdf_name_attributes(pdf_file)
@@ -134,20 +180,38 @@ class GeneralHelperFns:
         """Read all PDF files for a specific account."""
         if bank_name is None:
             bank_name = self.bank_name
-        
+
         if not bank_name:
             print("Error: bank_name is required and cannot be None or empty")
             return []
-        
+
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
         directory = os.path.join(project_root, "bank_statements", bank_name, account_type, account_name)
-        
+
         if not os.path.exists(directory):
             print(f"Warning: Account directory not found: {directory}")
             return []
-        
+
         pdf_files = os.listdir(directory)
         return [f for f in pdf_files if f.endswith('.pdf')]
+
+    def read_all_csv_files(self, account_type, account_name, bank_name=None):
+        """Read all CSV files for a specific account."""
+        if bank_name is None:
+            bank_name = self.bank_name
+
+        if not bank_name:
+            print("Error: bank_name is required and cannot be None or empty")
+            return []
+
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        directory = os.path.join(project_root, "bank_statements", bank_name, account_type, account_name)
+
+        if not os.path.exists(directory):
+            print(f"Warning: Account directory not found: {directory}")
+            return []
+
+        return [f for f in os.listdir(directory) if f.endswith('.csv')]
 
     def sort_df(self, df):
         df = df.sort_values(by='DateTime')
