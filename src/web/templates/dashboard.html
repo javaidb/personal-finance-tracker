@@ -508,8 +508,8 @@
                     </div>
 
                     <div class="row mt-4">
-                        <div class="col-md-6">
-                            <div class="card">
+                        <div class="col-md-4">
+                            <div class="card h-100">
                                 <div class="card-header">
                                     <h5>Spending by Category</h5>
                                 </div>
@@ -523,8 +523,8 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="card">
+                        <div class="col-md-4">
+                            <div class="card h-100">
                                 <div class="card-header">
                                     <h5>Income by Category</h5>
                                 </div>
@@ -534,6 +534,22 @@
                                             <div class="loading-spinner"></div>
                                         </div>
                                         <canvas id="incomeChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h5>Investments &amp; Savings Transfers</h5>
+                                </div>
+                                <div class="card-body d-flex flex-column">
+                                    <div id="transferSummary" class="mb-3"></div>
+                                    <div class="chart-container" style="height: 220px;">
+                                        <div id="transferChartLoader" class="loading-chart">
+                                            <div class="loading-spinner"></div>
+                                        </div>
+                                        <canvas id="transferChart"></canvas>
                                     </div>
                                 </div>
                             </div>
@@ -1799,9 +1815,21 @@
                 // Render the categories list
                 renderCategories(categories.counts || {}, categories.colors || {});
                 
-                // Render both spending and income charts
-                renderCategoryChart('categoryChart', categories.spending || {}, categories.colors || {}, 'Spending');
-                renderCategoryChart('incomeChart', categories.income || {}, categories.colors || {}, 'Income');
+                // Isolate Investment and Savings Transfer into their own section
+                const ISOLATED_CATS = ['Investment', 'Savings Transfer'];
+                const filteredSpending = Object.fromEntries(
+                    Object.entries(categories.spending || {}).filter(([k]) => !ISOLATED_CATS.includes(k))
+                );
+                const filteredIncome = Object.fromEntries(
+                    Object.entries(categories.income || {}).filter(([k]) => !ISOLATED_CATS.includes(k))
+                );
+
+                // Render both spending and income charts (excluding isolated categories)
+                renderCategoryChart('categoryChart', filteredSpending, categories.colors || {}, 'Spending');
+                renderCategoryChart('incomeChart', filteredIncome, categories.colors || {}, 'Income');
+
+                // Render the investments & savings transfers panel
+                renderTransferChart(categories.spending || {}, categories.income || {}, categories.colors || {});
                 
                 // Show messages if there's no data
                 if (categories.has_spending_data === false) {
@@ -1832,6 +1860,7 @@
                     '<div class="alert alert-danger w-100">Failed to load categories: ' + error.message + '</div>';
                 renderCategoryChart('categoryChart', null); // Ensure spending chart shows the "no data" state
                 renderCategoryChart('incomeChart', null); // Ensure income chart shows the "no data" state
+                renderTransferChart({}, {}, {}); // Ensure transfer panel shows no-data state
                 return false;
             }
         }
@@ -2073,6 +2102,110 @@
             });
         }
         
+        function renderTransferChart(spendingData, incomeData, categoryColors) {
+            const TRANSFER_CATS = ['Investment', 'Savings Transfer'];
+            const fmt = v => new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD', maximumFractionDigits: 0
+            }).format(v);
+
+            const transferData = TRANSFER_CATS.map(cat => ({
+                name: cat,
+                out: spendingData[cat] || 0,
+                in: incomeData[cat] || 0,
+                net: (spendingData[cat] || 0) - (incomeData[cat] || 0),
+                color: categoryColors[cat] || '#607D8B'
+            }));
+
+            // Render summary stats
+            const summaryEl = document.getElementById('transferSummary');
+            if (summaryEl) {
+                summaryEl.innerHTML = transferData.map(d => {
+                    const netPositive = d.net >= 0;
+                    const netColor = netPositive ? '#2e7d32' : '#c62828';
+                    const netSign = netPositive ? '+' : '';
+                    const r = parseInt(d.color.slice(1, 3), 16);
+                    const g = parseInt(d.color.slice(3, 5), 16);
+                    const b = parseInt(d.color.slice(5, 7), 16);
+                    return `
+                        <div class="p-2 rounded mb-2" style="background: rgba(${r},${g},${b},0.08); border-left: 3px solid ${d.color};">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <span style="font-weight:600; font-size:13px; color:#333;">${d.name}</span>
+                                <span style="color:${netColor}; font-weight:700; font-size:14px;">Net: ${netSign}${fmt(d.net)}</span>
+                            </div>
+                            <div class="d-flex gap-3" style="font-size:12px; color:#666;">
+                                <span>&#8595; In: <strong style="color:#2e7d32;">${fmt(d.in)}</strong></span>
+                                <span>&#8593; Out: <strong style="color:#c62828;">${fmt(d.out)}</strong></span>
+                            </div>
+                        </div>`;
+                }).join('');
+            }
+
+            // Render grouped horizontal bar chart
+            const ctx = document.getElementById('transferChart').getContext('2d');
+            const existingChart = Chart.getChart(ctx.canvas);
+            if (existingChart) existingChart.destroy();
+
+            const hasData = transferData.some(d => d.in > 0 || d.out > 0);
+            if (!hasData) {
+                document.getElementById('transferChartLoader').classList.add('hidden');
+                return;
+            }
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: transferData.map(d => d.name),
+                    datasets: [{
+                        label: 'Net',
+                        data: transferData.map(d => d.net),
+                        backgroundColor: transferData.map(d => {
+                            const r = parseInt(d.color.slice(1,3),16);
+                            const g = parseInt(d.color.slice(3,5),16);
+                            const b = parseInt(d.color.slice(5,7),16);
+                            return `rgba(${r},${g},${b},0.75)`;
+                        }),
+                        borderColor: transferData.map(d => d.color),
+                        borderWidth: 1.5,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Net: ${fmt(context.raw)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            ticks: {
+                                font: { family: 'Inter', size: 11 },
+                                callback: v => '$' + new Intl.NumberFormat('en-US', { notation: 'compact' }).format(v)
+                            }
+                        },
+                        y: {
+                            ticks: { font: { family: 'Inter', size: 12 } }
+                        }
+                    },
+                    animation: {
+                        duration: 800,
+                        easing: 'easeOutQuart',
+                        onComplete: function() {
+                            document.getElementById('transferChartLoader').classList.add('hidden');
+                        }
+                    }
+                }
+            });
+        }
+
         function renderTrendsChart(data = null) {
             const ctx = document.getElementById('trendsChart').getContext('2d');
             
