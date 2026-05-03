@@ -330,6 +330,22 @@ def has_uncategorized_merchants():
     has_uncategorized = merchant_service.has_uncategorized_merchants()
     return jsonify({"has_uncategorized": has_uncategorized})
 
+@api_bp.route('/reprocess', methods=['POST'])
+def reprocess_balances():
+    """Reprocess balance/investment calculations without re-parsing any files.
+    Use after reclassifying transactions to update running balances."""
+    service = init_transaction_service()
+    if service is None:
+        return jsonify({"error": "No statement reader initialized"}), 400
+    try:
+        success = service.reprocess_balances()
+        if success:
+            return jsonify({"success": True, "message": "Balances reprocessed successfully"})
+        else:
+            return jsonify({"error": "Failed to reprocess balances"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Failed to reprocess: {str(e)}"}), 500
+
 @api_bp.route('/clear_cache', methods=['POST'])
 def clear_cache():
     """Clear the PDF cache."""
